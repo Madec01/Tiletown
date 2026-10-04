@@ -80,7 +80,7 @@ Fonctions pures attendues :
 
 - `grid.js` : `index(world, x, y)`, `inBounds(world, x, y)`, `neighbors4(world, x, y)`, `neighbors8(...)`, `edgeH(world, x, y)`, `edgeV(world, x, y)` (indices), `edgesOfTile(world, x, y)` → `{ n, s, e, w }` (indices + orientation).
 - `worldgen.js` : `generateWorld({ seed, cols, rows, map: 'valley' })` → `world`. Rivière continue d'un bord à l'autre avec `flow`, 1 à 2 lacs, massifs de forêt, prairies, champs, collines ; la mairie est posée au centre sur de l'herbe, raccordée à rien (c'est le point de départ du réseau).
-- `roads.js` : `rebuildRoads(world)` → nouveau `world` : une rue (2) sur chaque arête entre deux cases bâties ; un chemin (1) entre bâti et nature ; rien entre deux natures. `connectTile(world, x, y)` → `{ ok, path: [edgeRefs], cost }` : plus court chemin sur le treillis d'arêtes jusqu'au réseau existant avec coûts (prairie 1, champ 1, forêt 3, rivière 5 → pont, lac et zone humide interdits). `computeTraffic(world)` : trajets quartier → emploi/commerce le plus proche, somme par arête.
+- `roads.js` : `rebuildRoads(world)` → nouveau `world` : une rue (2) sur chaque arête d'une case bâtie (partagée entre voisins, de ceinture face à la nature) ; un chemin (1) autour d'une nature plantée ; rien entre deux natures. `connectTile(world, x, y)` → `{ ok, path: [edgeRefs], cost }` : plus court chemin sur le treillis d'arêtes jusqu'au réseau existant avec coûts (prairie 1, champ 1, forêt 3, rivière 5 → pont, lac et zone humide interdits). `computeTraffic(world)` : trajets quartier → emploi/commerce le plus proche, somme par arête.
 
 ## 4. Catalogue (`src/data/tiles.js`)
 
@@ -129,3 +129,75 @@ Modèles absents du manifeste : boîte colorée de remplacement, jamais une erre
 ## 7. Critères du prototype (étape 1, carte statique)
 
 Mesurés par `tools/measure.mjs` (Playwright, Chromium SwiftShader, viewport 412 × 915, DPR 2,625) : ≤ 60 appels de dessin, ≤ 150 000 triangles pour 500 îlots, image rendue en moins de 16 ms sur GPU réel (indicatif sous SwiftShader), précache < 6 Mo, capture d'écran enregistrée dans `tools/measure-out/`.
+
+## 8. Acteurs et animations (étape 2 : vallée animée)
+
+### 8.1 État des acteurs (`src/core/actors.js`, pur)
+
+Les acteurs vivent **à côté** du monde (ils ne sont pas sauvegardés) : `actors = createActors(world, rng)` puis `updateActors(actors, world, dt)` à chaque image (mutation en place autorisée pour ce chemin chaud, mais déterministe à graine égale : toute décision aléatoire passe par `actors.rng`).
+
+```js
+actors = {
+  rng,                       // createRng(seed ^ 0xA11CE)
+  list: [ {
+    id: 7, kind: 'habitant' | 'deer' | 'fox' | 'duck' | 'heron' | 'otter' | 'bee' | 'swallow' | 'owl' | 'car' | 'truck' | 'bus' | 'tram',
+    model: 'character-a' | 'deer' | ... ,   // identifiant du manifeste
+    x, z,                    // position monde continue (unités ; la case (i, j) couvre [i, i+1] × [j, j+1])
+    y,                       // hauteur (0 au sol ; oiseaux en vol > 0)
+    yaw,                     // radians, 0 = face +Z (sud), sens horaire vu de dessus
+    speed,                   // unités / s
+    state: 'idle' | 'walk' | 'run' | 'fly' | 'swim' | 'hover' | 'drive',
+    phase,                   // 0..1, phase d'animation (boucle)
+    path: [ { x, z }, ... ], // points à atteindre (centres d'arêtes pour la rue, points d'habitat pour la faune)
+    home: { x, y } | null,   // case d'origine (habitants, véhicules)
+    ttl                      // secondes avant disparition / nouvelle intention (optionnel)
+  } ],
+  caps: { habitant: 60, vehicle: 20, animal: 24 }
+}
+```
+
+Règles :
+- **Habitants** : 2 par quartier de niveau 1 (4 au niveau 2, 6 au niveau 3), plafond 60 ; ils marchent sur les **arêtes de rue** (ligne de l'arête décalée de 0,12 u vers le trottoir droit) entre leur maison et l'emploi ou le commerce le plus proche (`shortestTrip` de `roads.js`), s'arrêtent 2 à 6 s à destination, repartent. Vitesse 0,6 u/s.
+- **Véhicules** : sur les arêtes où `traffic > 0`, à droite (décalage 0,07 u), vitesse 1,2 u/s, plafond 20 ; `car-a`/`car-b` partout, `truck` entre usines et commerces, `bus` sur le trajet le plus long. Ils ralentissent derrière un autre véhicule (distance 0,4 u) et s'arrêtent 1 s aux nœuds à 3 ou 4 branches.
+- **Faune**, selon l'habitat (recalculé à `setWorld`) : `deer` dans les massifs de forêt ≥ 4 cases (marche lente, pauses, 1 par massif, 2 si ≥ 8) ; `fox` en lisière de forêt et prairie ; `duck` sur lac et rivière (nage) ; `heron` sur les berges de zone humide ou de rivière (idle long, quelques pas, envol court de 3 à 5 s) ; `otter` dans la rivière (nage dans le sens de `flow`, plonge) ; `bee` au-dessus des prairies fleuries et des champs (vol en boucles à y ≈ 0,4) ; `swallow` au-dessus de la ville (vol en grandes boucles à y ≈ 1,5 à 2,5) ; `owl` perchée en lisière (idle). Plafond 24 au total, répartition proportionnelle aux habitats.
+- Aucun acteur ne traverse un bâtiment : les piétons et véhicules restent sur les arêtes, la faune reste dans ses cases d'habitat (et l'eau pour les nageurs).
+
+### 8.2 Modèles animés (extension du manifeste §5)
+
+```json
+"deer": { "file": "deer.glb", "kit": "quaternius-ultimate-animated-animals", "license": "CC0",
+          "animated": true, "rig": "skinned", "clips": { "idle": "Idle", "walk": "Walk", "run": "Gallop" },
+          "scale": 0.3, "yaw": 0, "footprint": [0.4, 0.8] }
+"duck": { "file": "duck.glb", "kit": "gobkit-animal-pack-a", "animated": true, "rig": "skinned",
+          "clipRanges": { "idle": [0, 29], "attack": [30, 59], "dead": [60, 89], "walk": [90, 119] }, "fps": 24 }
+"heron": { "file": "heron.glb", "kit": "tiletown", "license": "CC0", "animated": true, "rig": "puppet",
+           "parts": { "body": "Body", "neck": "Neck", "head": "Head", "legL": "LegL", "legR": "LegR", "wingL": "WingL", "wingR": "WingR" } }
+"character-a": { "file": "character-a.glb", "kit": "kenney-mini-characters", "animated": true, "rig": "skinned",
+                 "clips": { "idle": "idle", "walk": "walk", "run": "sprint" } }
+```
+
+- `rig: "skinned"` : squelette et clips dans le GLB ; le rendu clone le squelette (`SkeletonUtils.clone`) et joue le clip de `state`. Nombre d'instances **plafonné** (budget d'appels de dessin) : 12 animaux et 0 habitant en skinned ; au-delà, repli en pantin.
+- `rig: "puppet"` : hiérarchie de nœuds rigides nommés (`parts`) sans squelette ; le rendu anime les nœuds par procédure (balancement des pattes, battement des ailes, hochement de tête, roulis) et dessine toutes les instances d'une même espèce par **`InstancedMesh` par pièce** (quelques appels pour toute l'espèce). Les habitants sont des pantins (corps, tête, 2 bras, 2 jambes) dérivés des Mini Characters ou construits en primitives.
+- Modèles maison (héron, loutre, hirondelle, cycliste, chouette) : construits par `tools/build-fauna.js` à partir de primitives (boîtes, cônes, sphères aplaties) aux couleurs de la palette, exportés en GLB avec `parts`, licence CC0 Tiletown.
+
+### 8.3 API du rendu
+
+```js
+// src/render3d/actors.js
+const layer = createActorsLayer(models, { maxSkinned: 12 });
+layer.setWorld(world);           // pré-calcule les lignes d'arêtes et les hauteurs du sol
+layer.update(dt, actors);        // place et anime ; appelé avant render()
+scene.add(layer.group);  layer.stats() → { skinned, puppets, calls }  layer.dispose()
+
+// src/render3d/effects.js
+const fx = createEffects(models, { palette });
+fx.setWorld(world);              // fumée aux cheminées (usines, centrale), pales des éoliennes, plans d'eau
+fx.update(dt, time);             // particules de fumée instanciées (≤ 2 appels), rotation des pales, écoulement de l'eau (shader : direction `flow`, vaguelettes, écume aux berges)
+scene.add(fx.group);  fx.dispose()
+```
+
+`renderer.js` les intègre : `render(dt)` appelle `fx.update` et `actors.update` puis dessine ; `setAnimating(true)` tant qu'il y a des acteurs. La boucle de `main.js` tourne à 60 i/s en interaction, **30 i/s au repos** même si ça bouge, et s'arrête quand l'onglet est caché.
+
+### 8.4 Critères du prototype (étape 2)
+
+Mesurés par `tools/measure.mjs` (scénario « vallée animée », 60 habitants + 20 véhicules + 24 animaux + fumée) : ≤ 60 appels de dessin, ≤ 200 000 triangles, mise à jour CPU (`updateActors` + `layer.update` + `fx.update`) < 4 ms par image (indicatif sous SwiftShader), précache < 6 Mo, aucune erreur, et une vérification que les acteurs bougent (positions différentes entre deux captures à 2 s d'écart).

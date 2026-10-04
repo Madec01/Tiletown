@@ -32,12 +32,12 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/tiletown/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = 'ddd1a3fc9ef7';
+const VERSION = '588f328e3ad3';
 // 64 fichiers, 1.70 Mo ; installés d'emblée (core) : 64 fichiers, 1.70 Mo
 const PRECACHE = [
-  ["index.html", '42663d20fd97eda1', 29128, 'core'],
+  ["index.html", '1a2a47621f494cb6', 29128, 'core'],
   ["manifest.webmanifest", 'd781b7f56357c6a9', 1194, 'core'],
-  ["dist/game.f15a9b737b.js", '9563d73400b8bb41', 748588, 'core'],
+  ["dist/game.e2dfed548d.js", '11ae539b2f6bb4e4', 749077, 'core'],
   ["dist/game.b8ae07dec7.css", 'b8ae07dec7b5ff95', 16354, 'core'],
   ["assets/fonts/Nunito-latin-ext.woff2", '2c8d792869818ecb', 35588, 'core'],
   ["assets/fonts/Nunito-latin.woff2", 'ba344451eab25b21', 39128, 'core'],

@@ -20,30 +20,30 @@ function interiorEdges(world) {
   return out.map((ref) => ({ ref, tiles: edgeTiles(world, ref).map((p) => (p ? tileAt(world, p.x, p.y) : null)) }));
 }
 
-test('roads : rue entre deux îlots, chemin entre îlot et nature, rien entre natures ni au bord', () => {
+test('roads : rue sur chaque côté d’un îlot (partagée ou de ceinture), rien entre natures ni au bord', () => {
   const w = place(place(makeWorld(6, 6), 2, 2, 'townhall'), 3, 2, 'house');
   const r = rebuildRoads(w);
   assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).e), EDGE.STREET, 'arête partagée = rue');
   assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).w), EDGE.STREET);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).n), EDGE.PATH);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).s), EDGE.PATH);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).w), EDGE.PATH);
-  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).e), EDGE.PATH);
+  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).n), EDGE.STREET, 'rue de ceinture face à la nature');
+  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).s), EDGE.STREET);
+  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).w), EDGE.STREET);
+  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).e), EDGE.STREET);
   for (const { ref, tiles } of interiorEdges(r)) {
     const built = tiles.filter((t) => t && t.building).length;
     if (built === 0) assert.equal(edgeValue(r, ref), EDGE.NONE, 'aucune rue entre deux natures');
     if (tiles.includes(null)) assert.equal(edgeValue(r, ref), EDGE.NONE, 'rien au bord de la carte');
   }
-  assert.deepEqual(countEdges(r), { path: 6, street: 1, bridge: 0, total: 1 });
+  assert.deepEqual(countEdges(r), { path: 0, street: 7, bridge: 0, total: 7 });
   // Pureté : le monde d'origine n'a pas changé.
   assert.ok(w.edges.h.every((v) => v === 0) && w.edges.v.every((v) => v === 0));
 });
 
-test('roads : une nature plantée n’est pas un îlot (chemin, pas rue) ; les tracés existants sont gardés', () => {
+test('roads : une nature plantée n’est pas un îlot (chemin autour, rue seulement côté îlot) ; les tracés existants sont gardés', () => {
   const w = place(place(makeWorld(6, 6), 2, 2, 'house'), 3, 2, 'park');
   const r = rebuildRoads(w);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).e), EDGE.PATH, 'maison | parc → chemin');
-  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).e), EDGE.NONE, 'parc | herbe → rien');
+  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).e), EDGE.STREET, 'maison | parc → rue (côté maison)');
+  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).e), EDGE.PATH, 'parc | herbe → chemin');
   // Un tracé de raccordement posé à travers l'herbe survit au recalcul.
   const ref = edgesOfTile(w, 4, 4).n;
   w.edges.h[ref.index] = EDGE.STREET;
@@ -192,16 +192,18 @@ test('roads : orientation vers la rue la plus importante', () => {
   assert.equal(faceTowardRoad(alone, 2, 2, { x: 0, y: 2 }), 270);
 });
 
-test('roads : sur une vallée générée, rues partout entre îlots voisins, jamais entre natures', () => {
+test('roads : sur une vallée générée, rues autour de chaque îlot, chemins autour des champs, rien entre natures', () => {
   const w = generateWorld({ seed: 7, starterTown: true });
   for (const { ref, tiles } of interiorEdges(w)) {
     const [a, b] = tiles;
     const builtA = Boolean(a && a.building && a.building.type !== 'field');
     const builtB = Boolean(b && b.building && b.building.type !== 'field');
+    const plantedA = Boolean(a && a.building && !builtA);
+    const plantedB = Boolean(b && b.building && !builtB);
     const v = edgeValue(w, ref);
-    if (builtA && builtB) assert.equal(v, EDGE.STREET);
-    else if (!a || !b) assert.equal(v, EDGE.NONE);
-    else if (builtA || builtB) assert.equal(v, EDGE.PATH);
+    if (!a || !b) assert.equal(v, EDGE.NONE);
+    else if (builtA || builtB) assert.equal(v, EDGE.STREET, 'rue sur chaque côté d’un îlot');
+    else if (plantedA || plantedB) assert.equal(v, EDGE.PATH, 'chemin autour d’une nature plantée (champ)');
     else assert.equal(v, EDGE.NONE);
   }
   assert.ok(networkConnected(w));

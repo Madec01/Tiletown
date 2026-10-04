@@ -313,7 +313,13 @@ async function main() {
   });
 
   // Première image (vue de jeu centrée sur la mairie, ou vue d'ensemble avec ?view=all), puis la page de chargement s'efface.
-  if (new URLSearchParams(location.search).get('view') === 'all') fitView(); else homeView();
+  {
+    const q = new URLSearchParams(location.search);
+    const z = Number(q.get('zoom'));
+    if (q.get('view') === 'all') fitView();
+    else if (Number.isFinite(z) && z > 0) { const { top, bottom } = app.hud.insets(); const c = centerOf(world); r.camera.lookAt(c.x, c.y, z, { insets: { top, bottom, left: 0, right: 0 } }); }
+    else homeView();
+  }
   r.render(0);
   app.stats.update(r.stats());
   start();

@@ -15,6 +15,14 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-04 (suite) — Rues visibles, lancement de l'étape 2
+
+- Retour de l'utilisateur : « je n'ai pas vu les rues et routes ». Cause : îlots à 0,85 u et rues de 0,15 u d'écart masquées en vue 3/4, chemins de terre seulement autour de la ville.
+- **Règle changée** (`src/core/roads.js`, conception §4.1) : chaque îlot bâti est entouré de rues sur ses quatre côtés (partagée entre voisins, de ceinture face à la nature, quai le long de l'eau) ; chemin autour d'une nature plantée ; rien entre natures. Les tracés de raccordement sont conservés même le long du bord. Orientation des bâtiments : la rue partagée avec un autre îlot l'emporte sur la rue de ceinture. Trajets : à coût égal, la rue commune aux deux îlots est préférée.
+- **Rendu** : rues procédurales continues (asphalte 0,36 u, trottoirs 0,5 u, un trait central par segment, nœuds aux carrefours) ; les pièces GLB `road-edge-*` (0,3 u, fermées aux bouts, qui segmentaient les rues) restent en option `useEdgeModels`. Bâtiments ramenés à ≈ 0,7 u d'emprise (`BUILDING_SCALE`). Vue de jeu par défaut sur la mairie, `?zoom=` et `?view=all` pour le débogage, `tools/shot.mjs` pour capturer une adresse.
+- Tests adaptés (75 passent) ; capture `docs/captures/prototype-rues-412.png`.
+- Sauvegarde avant l'étape 2 : branche `backup/avant-etape2-2026-10-04`. Contrat des acteurs et effets ajouté à `docs/ARCHITECTURE.md` §8.
+
 ## 2026-10-04 (suite) — Dépôt créé, prototype de rendu lancé
 
 - Dépôt `Madec01/tiletown` créé par l'utilisateur (vide) ; premier commit « graine » préparé en local. La poussée est refusée (403) tant que l'application GitHub Claude n'est pas installée sur le dépôt ; liens transmis à l'utilisateur.

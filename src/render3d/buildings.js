@@ -39,6 +39,9 @@ function pickModel(list, u) {
  * du pied du modèle en unités monde, `tile` = index de la case).
  * `modelFor(building)` → identifiant de modèle (défaut : catalogue `src/data/tiles.js`).
  */
+/** Les îlots bâtis sont modélisés à 0,85 u d'emprise ; on les ramène à ≈ 0,7 u pour laisser la rue (0,36 u + trottoirs) bien visible. */
+export const BUILDING_SCALE = 0.82;
+
 export function collectPlacements(world, options = {}) {
   const modelFor = options.modelFor || modelOfBuilding;
   const seed = world.seed | 0;
@@ -94,7 +97,7 @@ export function collectPlacements(world, options = {}) {
             });
           }
         } else {
-          out.push({ id, x: cx, y: ground, z: cz, yaw, scale: 1, tile: i });
+          out.push({ id, x: cx, y: ground, z: cz, yaw, scale: BUILDING_SCALE, tile: i });
         }
         continue;
       }

@@ -118,11 +118,11 @@ test('worldgen : la mairie est au centre, sur de l’herbe, loin de la rivière'
         assert.notEqual(tileAt(w, c.x + dx, c.y + dy).terrain, 'river', `graine ${seed} : rivière contre la mairie`);
       }
     }
-    // Sans ville : la mairie seule, entourée de quatre chemins, aucune rue.
+    // Sans ville : la mairie seule, entourée de ses quatre rues de ceinture, rien d'autre.
     const edges = edgesOfTile(w, c.x, c.y);
-    for (const ref of Object.values(edges)) assert.equal(edgeValue(w, ref), 1);
+    for (const ref of Object.values(edges)) assert.equal(edgeValue(w, ref), 2);
     assert.equal(w.tiles.filter((t) => t.building).length, 1);
-    assert.equal(countEdges(w).street, 0);
+    assert.equal(countEdges(w).street, 4);
   }
 });
 

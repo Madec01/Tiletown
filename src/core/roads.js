@@ -73,17 +73,22 @@ function automaticValue(world, ref) {
   const builtA = isBuiltTile(ta);
   const builtB = isBuiltTile(tb);
   const existing = edgeValue(world, ref);
-  if (builtA && builtB) return EDGE.STREET;
-  // Les rues et ponts tracés par raccordement sont conservés (et normalisés : pont ⇔ rivière des deux côtés).
+  // Les rues et ponts tracés par raccordement sont conservés (et normalisés : pont ⇔ rivière des deux
+  // côtés), y compris le long du bord de la carte.
   if (existing >= EDGE.STREET) return isRiver(ta) && isRiver(tb) ? EDGE.BRIDGE : EDGE.STREET;
-  if (!ta || !tb) return EDGE.NONE; // bord de la carte : rien
-  if (builtA || builtB) return EDGE.PATH;
+  if (!ta || !tb) return EDGE.NONE; // bord de la carte : rien d'automatique
+  // Un îlot bâti est entouré de rues sur ses quatre côtés (rue partagée entre deux îlots voisins,
+  // rue de ceinture face à la nature ou à l'eau : un quai).
+  if (builtA || builtB) return EDGE.STREET;
+  // Une nature plantée (parc, forêt plantée, haie…) n'est pas un îlot : un simple chemin la borde.
+  if ((ta.building && !builtA) || (tb.building && !builtB)) return EDGE.PATH;
   return EDGE.NONE;
 }
 
 /**
- * Recalcule les rues automatiques : rue (2) entre deux îlots bâtis, chemin (1) entre un îlot et une
- * nature, rien (0) entre deux natures. Les rues et ponts de raccordement existants sont gardés.
+ * Recalcule les rues automatiques : rue (2) sur chaque côté d'un îlot bâti (partagée entre voisins,
+ * de ceinture face à la nature), chemin (1) autour d'une nature plantée, rien (0) entre deux natures.
+ * Les rues et ponts de raccordement existants sont gardés.
  * @returns {object} un nouveau monde
  */
 export function rebuildRoads(world) {
@@ -316,6 +321,9 @@ export function faceTowardRoad(world, x, y, towards = null) {
     const v = edgeValue(world, refByDir[dir]);
     const weight = v === EDGE.BRIDGE ? EDGE.STREET : v;
     let score = weight * 10;
+    // Une rue partagée avec un autre îlot (la vraie rue du quartier) l'emporte sur une rue de ceinture.
+    const other = edgeTiles(world, refByDir[dir]).find((p) => p && !(p.x === x && p.y === y));
+    if (v >= EDGE.STREET && other && isBuiltTile(tileAt(world, other.x, other.y))) score += 5;
     if (towards) {
       const d = DIRS4.find((e) => e.dir === dir);
       const dx = towards.x - x;
@@ -372,6 +380,8 @@ function tripToTargets(world, x, y, targets) {
     isSource[i] = 1;
     heap.push(0, i);
   }
+  const sourceEdges = new Uint8Array(world.edges.h.length + world.edges.v.length);
+  for (const ref of Object.values(edgesOfTile(world, x, y))) sourceEdges[edgeId(world, ref)] = 1;
   let best = { cost: Infinity, node: -1, extra: null };
   while (heap.size) {
     const { cost, node } = heap.pop();
@@ -384,7 +394,11 @@ function tripToTargets(world, x, y, targets) {
       const tc = travelCost(edgeValue(world, ref));
       if (tc === null) continue;
       const nd = cost + tc;
-      if (targets.edges[edgeId(world, ref)] && nd < best.cost) best = { cost: nd, node, extra: ref };
+      if (targets.edges[edgeId(world, ref)]) {
+        // Arête bordant une cible : trajet terminé. À coût égal, la rue commune aux deux îlots gagne.
+        const score = nd - (sourceEdges[edgeId(world, ref)] ? 0.001 : 0);
+        if (score < best.cost) best = { cost: score, node, extra: ref };
+      }
       const j = cornerIndex(world, to.cx, to.cy);
       if (nd < dist[j]) {
         dist[j] = nd;

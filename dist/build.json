@@ -1,7 +1,7 @@
 {
-  "id": "ddd1a3fc9ef7",
+  "id": "588f328e3ad3",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.f15a9b737b.js",
+  "js": "dist/game.e2dfed548d.js",
   "css": "dist/game.b8ae07dec7.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -71,22 +71,22 @@
     "package-lock.json": "66cc44e0cd0d4a8b",
     "src/core/grid.js": "29df44c5235c731b",
     "src/core/rng.js": "6fbad2721b18a2ac",
-    "src/core/roads.js": "e34b2b9294c363cb",
+    "src/core/roads.js": "524fb3d4d1689cec",
     "src/core/worldgen.js": "a6dbae38af8ac32d",
     "src/data/palette.js": "230ea69456d864db",
     "src/data/terrain.js": "ca766200de222040",
     "src/data/tiles.js": "bec6e2d1092fa4f2",
     "src/index.template.html": "88e683afe2ef18c1",
     "src/loader.js": "782328b4f797e591",
-    "src/main.js": "da40ea030ed6beab",
+    "src/main.js": "75592ffef4c9d14f",
     "src/pwa.js": "4600989641d122c6",
-    "src/render3d/buildings.js": "4e631e72a2bc4bd4",
+    "src/render3d/buildings.js": "2fbe725fbcf8bf9c",
     "src/render3d/camera.js": "da87199cdecbd096",
     "src/render3d/ground.js": "9f966bc80c909625",
     "src/render3d/layers.js": "b38a0195b34ee0fe",
     "src/render3d/models.js": "9d43bc8123e4d357",
     "src/render3d/renderer.js": "12aefcf1f2e65a53",
-    "src/render3d/roads.js": "9e614efac07cf0cf",
+    "src/render3d/roads.js": "57de71f88ef6b40f",
     "src/render3d/util.js": "e37eba65381cb4a0",
     "src/ui/a11y.js": "d0792e98751893bd",
     "src/ui/dom.js": "2e71c51a2abfaafd",
@@ -100,6 +100,30 @@
   },
   "history": [
     {
+      "id": "588f328e3ad3",
+      "files": [
+        "dist/game.e2dfed548d.js",
+        "dist/game.e2dfed548d.js.map",
+        "dist/game.b8ae07dec7.css"
+      ]
+    },
+    {
+      "id": "a93df2a07813",
+      "files": [
+        "dist/game.6ccdb42116.js",
+        "dist/game.6ccdb42116.js.map",
+        "dist/game.b8ae07dec7.css"
+      ]
+    },
+    {
+      "id": "7cf4615c5405",
+      "files": [
+        "dist/game.30f321a295.js",
+        "dist/game.30f321a295.js.map",
+        "dist/game.b8ae07dec7.css"
+      ]
+    },
+    {
       "id": "ddd1a3fc9ef7",
       "files": [
         "dist/game.f15a9b737b.js",
@@ -112,14 +136,6 @@
       "files": [
         "dist/game.08b60f859e.js",
         "dist/game.08b60f859e.js.map",
-        "dist/game.b8ae07dec7.css"
-      ]
-    },
-    {
-      "id": "993e7e40e15f",
-      "files": [
-        "dist/game.83f5ab1ba2.js",
-        "dist/game.83f5ab1ba2.js.map",
         "dist/game.b8ae07dec7.css"
       ]
     }

@@ -17,9 +17,9 @@ export const EDGE_PATH = 1;
 export const EDGE_STREET = 2;
 export const EDGE_BRIDGE = 3;
 
-export const ROAD_WIDTH = 0.3;
+export const ROAD_WIDTH = 0.36;
 export const ROAD_THICKNESS = 0.02;
-export const SIDEWALK_WIDTH = 0.42;
+export const SIDEWALK_WIDTH = 0.5;
 export const SIDEWALK_THICKNESS = 0.012;
 export const PATH_WIDTH = 0.16;
 export const PATH_THICKNESS = 0.015;
@@ -124,11 +124,15 @@ function edgeModel(models, id) {
 }
 
 /**
- * Crée le rendu des rues. options : { markings = true }.
+ * Crée le rendu des rues. options : { markings = true, useEdgeModels = false }.
+ * Par défaut les rues sont des géométries procédurales continues (asphalte 0,36 u, trottoirs, un trait
+ * central par segment) : les pièces GLB « road-edge-* » du manifeste, plus étroites et fermées aux
+ * extrémités, segmentent visuellement les rues ; elles restent disponibles avec `useEdgeModels: true`.
  * API : { group, setWorld(world), stats, dispose() }.
  */
 export function createRoads(models, options = {}) {
   const markings = options.markings !== false;
+  const useEdgeModels = options.useEdgeModels === true;
   const group = new THREE.Group();
   group.name = 'roads';
   const stats = { streets: 0, paths: 0, bridges: 0, streetNodes: 0, pathNodes: 0, drawables: 0 };
@@ -143,9 +147,9 @@ export function createRoads(models, options = {}) {
   const red = new THREE.Color(PALETTE.roofRed);
 
   // Modèles du manifeste dédiés aux arêtes, s'ils existent (sinon géométries de remplacement).
-  const streetGlb = edgeModel(models, 'road-edge-straight');
-  const nodeGlb = edgeModel(models, 'road-edge-node');
-  const bridgeGlb = edgeModel(models, 'road-edge-bridge');
+  const streetGlb = useEdgeModels ? edgeModel(models, 'road-edge-straight') : null;
+  const nodeGlb = useEdgeModels ? edgeModel(models, 'road-edge-node') : null;
+  const bridgeGlb = useEdgeModels ? edgeModel(models, 'road-edge-bridge') : null;
 
   function clear() {
     for (const child of [...group.children]) {

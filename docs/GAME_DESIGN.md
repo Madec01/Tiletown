@@ -49,11 +49,11 @@ Principes :
 
 Chaque tuile bâtie est un **îlot**. Les rues courent **sur les arêtes** entre deux îlots : elles ne consomment aucune case, se dessinent toutes seules (raccords automatiques comme les allées de Seve) et donnent immédiatement un aspect de ville.
 
-- Deux tuiles bâties voisines → une rue sur l'arête commune.
-- Tuile bâtie à côté d'une nature → un simple chemin, pas de rue.
+- Chaque îlot bâti est **entouré de rues sur ses quatre côtés** : rue partagée entre deux îlots voisins, rue de ceinture face à la nature, quai le long de l'eau. La ville se lit immédiatement comme une ville.
+- Une nature plantée (parc, forêt plantée, haie) n'est pas un îlot : un simple chemin la borde.
 - Deux natures voisines → **aucune rue** : les corridors écologiques sont préservés par défaut.
 
-En 3D, chaque îlot est légèrement en retrait de sa case (≈ 0,85 unité) : l'espace laissé entre deux îlots bâtis reçoit une bande de rue (pièces droites du City Kit Roads, réduites en largeur) et les coins reçoivent les carrefours ; entre deux natures l'espace est de l'herbe. Les ponts utilisent les pièces de pont du même kit.
+En 3D, chaque îlot bâti est en retrait de sa case (≈ 0,7 unité d'emprise) : la bande de rue (0,36 unité d'asphalte, trottoirs clairs, ligne centrale) court sur l'arête, les coins reçoivent les carrefours ; entre deux natures l'espace est de l'herbe. Les ponts utilisent les pièces de pont du même kit.
 
 ### 4.2 Raccordement d'une tuile isolée
 
