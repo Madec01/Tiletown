@@ -159,7 +159,7 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	float along = dot( vWaterPos, vFlow );
 	float across = vWaterPos.x * vFlow.y - vWaterPos.y * vFlow.x;
 	float phase = ( along - uTime * ${FLOW_SPEED.toFixed(3)} ) * 12.566 + sin( across * 4.0 + uTime * 0.6 ) * 0.8;
-	float bands = smoothstep( 0.45, 0.95, sin( phase ) ) * 0.22 * vStyle.y;
+	float bands = smoothstep( 0.55, 0.98, sin( phase ) ) * 0.12 * vStyle.y; // bandes douces, lisibles sans dominer
 	// Scintillement : deux ondes croisées, lentes et gauchies l'une par l'autre (pas de grille régulière), sur toute eau.
 	float sx = sin( vWaterPos.x * 9.0 + uTime * 1.5 + sin( vWaterPos.y * 3.1 + uTime * 0.5 ) * 1.7 );
 	float sz = sin( vWaterPos.y * 7.0 - uTime * 1.1 + sin( vWaterPos.x * 2.3 - uTime * 0.4 ) * 1.9 );
@@ -172,7 +172,7 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	foam = max( foam, vBanks.z * ( 1.0 - smoothstep( 0.0, edge, 0.5 - vLocalPos.y ) ) );
 	foam = max( foam, vBanks.w * ( 1.0 - smoothstep( 0.0, edge, 0.5 + vLocalPos.x ) ) );
 	foam *= 0.75 + 0.25 * sin( uTime * 2.1 + along * 7.0 );
-	float light = clamp( bands + shimmer + foam * 0.6, 0.0, 0.85 );
+	float light = clamp( bands + shimmer + foam * 0.5, 0.0, 0.6 );
 	diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), light );
 }
 `;

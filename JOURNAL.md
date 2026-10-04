@@ -15,6 +15,16 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-04 (suite) — Étape 2 livrée : la vallée animée
+
+- **Modèles animés** (`tools/import-animated.js`, `tools/build-fauna.js`, `tools/preview-animated.mjs`) : cerf, renard, vache (Quaternius, squelettes 42-51 os, clips Idle/Walk/Gallop/Eating ; fichiers pris sur des miroirs GitHub octet-identiques, le Drive officiel étant saturé), canard, abeille, chouette (Gobkit, piste concaténée découpée en idle/attack/dead/walk) ; pantins maison en primitives : habitants (3 variantes), héron, loutre, hirondelle, cycliste. 13 modèles, 0,99 Mo. Pas de mouton (Farm Animals en FBX seulement). Licences : `LICENSE-quaternius.txt`, `LICENSE-gobkit.txt` (le champ copyright des GLB Gobkit est vide ; la CC0 est dans leur LICENSE.txt).
+- **Acteurs** (`src/core/actors.js` pur, `src/render3d/{rigs,puppet-pose,actors}.js`) : habitants 2/4/6 par niveau sur le trottoir de droite, pauses 1-3 s ; véhicules sur les arêtes à trafic > 0, voie de droite, suivi, arrêt aux carrefours ; faune par habitat (cerf, renard, canard, héron avec envols, loutre qui descend le courant, abeille, hirondelle, chouette perchée) ; **un seul BatchedMesh pour tous les pantins**, squelettes clonés plafonnés à 8, véhicules instanciés. 17 tests.
+- **Effets** (`src/render3d/effects.js`, `ground.js`, `models.js`) : fumée instanciée aux cheminées poussée par le vent, pales d'éoliennes en rotation (pièce `blades` exclue de la fusion), eau en shader (sens du courant, ondulation, écume aux berges, bandes adoucies). 13 tests.
+- **Intégration** : `renderer.setActors`, mise à jour des couches dans `render(dt)`, `updateActors` dans la boucle de `main.js` (vitesse 1 en attendant le bouton pause/vitesse), `?zoom=` ; scénario « vallée animée » dans `tools/measure.mjs` (acteurs comptés, déplacements à 2 s d'écart, CPU).
+- **Mesures** (SwiftShader, 412 × 915) : 26 appels de dessin, 145 000 triangles (seuil 200 000), mise à jour CPU 1 ms, précache 2,74 Mo, 110 tests, 0 erreur ; 52 acteurs (20 habitants, 8 véhicules, 24 animaux), 19 à 36 déplacés selon la fenêtre (pauses et perchoirs compris) ; critère porté à 35 %.
+- Limites / à faire : hirondelle trop grande en vol rapproché (échelle à revoir) ; `cow` et `cyclist` livrés mais pas encore utilisés par la simulation ; triangles sur grande carte (décor statique) toujours à simplifier ; bouton pause/vitesse pas encore relié à `simSpeed` ; pas de sons.
+- Captures : `docs/captures/prototype-etape2-412.png`, `docs/captures/modeles-animes-planche.png`. Sauvegarde : branche `backup/etape2-2026-10-04`.
+
 ## 2026-10-04 (suite) — Rues visibles, lancement de l'étape 2
 
 - Retour de l'utilisateur : « je n'ai pas vu les rues et routes ». Cause : îlots à 0,85 u et rues de 0,15 u d'écart masquées en vue 3/4, chemins de terre seulement autour de la ville.

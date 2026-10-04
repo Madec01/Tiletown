@@ -1,7 +1,7 @@
 {
-  "id": "67e4e08164b4",
+  "id": "4394becdf886",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.b5f556a01f.js",
+  "js": "dist/game.b46cb1a597.js",
   "css": "dist/game.b8ae07dec7.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -82,7 +82,7 @@
     "css/style.css": "493f66a1c253209f",
     "manifest.webmanifest": "d781b7f56357c6a9",
     "package-lock.json": "66cc44e0cd0d4a8b",
-    "src/core/actors.js": "d39e001cb391910a",
+    "src/core/actors.js": "5dde4b7fe9c5454c",
     "src/core/grid.js": "29df44c5235c731b",
     "src/core/rng.js": "6fbad2721b18a2ac",
     "src/core/roads.js": "524fb3d4d1689cec",
@@ -92,17 +92,17 @@
     "src/data/tiles.js": "bec6e2d1092fa4f2",
     "src/index.template.html": "88e683afe2ef18c1",
     "src/loader.js": "782328b4f797e591",
-    "src/main.js": "75592ffef4c9d14f",
+    "src/main.js": "218eb30e33f84bef",
     "src/pwa.js": "4600989641d122c6",
     "src/render3d/actors.js": "9d55b68069b8f6c0",
     "src/render3d/buildings.js": "2fbe725fbcf8bf9c",
     "src/render3d/camera.js": "da87199cdecbd096",
     "src/render3d/effects.js": "9829e81e430b42ab",
-    "src/render3d/ground.js": "8c10111a94018cfa",
+    "src/render3d/ground.js": "c6553a6be24da893",
     "src/render3d/layers.js": "b38a0195b34ee0fe",
     "src/render3d/models.js": "a5fcdb14b9757dbc",
-    "src/render3d/puppet-pose.js": "cb4dffd405a094b5",
-    "src/render3d/renderer.js": "36d74a4838ddd50d",
+    "src/render3d/puppet-pose.js": "27b68f8a88c21886",
+    "src/render3d/renderer.js": "58c6f80f749a1376",
     "src/render3d/rigs.js": "656b2f0e1a413fb8",
     "src/render3d/roads.js": "57de71f88ef6b40f",
     "src/render3d/util.js": "e37eba65381cb4a0",
@@ -117,6 +117,22 @@
     "sw.js": "60270efef15e5454"
   },
   "history": [
+    {
+      "id": "4394becdf886",
+      "files": [
+        "dist/game.b46cb1a597.js",
+        "dist/game.b46cb1a597.js.map",
+        "dist/game.b8ae07dec7.css"
+      ]
+    },
+    {
+      "id": "73dd3e85a8ee",
+      "files": [
+        "dist/game.78fc108259.js",
+        "dist/game.78fc108259.js.map",
+        "dist/game.b8ae07dec7.css"
+      ]
+    },
     {
       "id": "67e4e08164b4",
       "files": [
@@ -138,22 +154,6 @@
       "files": [
         "dist/game.e2dfed548d.js",
         "dist/game.e2dfed548d.js.map",
-        "dist/game.b8ae07dec7.css"
-      ]
-    },
-    {
-      "id": "a93df2a07813",
-      "files": [
-        "dist/game.6ccdb42116.js",
-        "dist/game.6ccdb42116.js.map",
-        "dist/game.b8ae07dec7.css"
-      ]
-    },
-    {
-      "id": "7cf4615c5405",
-      "files": [
-        "dist/game.30f321a295.js",
-        "dist/game.30f321a295.js.map",
         "dist/game.b8ae07dec7.css"
       ]
     }

@@ -19,6 +19,7 @@ import { createGround } from './ground.js';
 import { createBuildings } from './buildings.js';
 import { createRoads } from './roads.js';
 import { createEffects } from './effects.js';
+import { createActorsLayer } from './actors.js';
 import { layerColors } from './layers.js';
 
 /** Direction du soleil (du centre de la carte vers la lumière) : ouest-sud-ouest, haut. */
@@ -120,8 +121,12 @@ export async function createRenderer(canvas, options = {}) {
   const roads = createRoads(models, { markings });
   // Effets animés (étape 2) : fumée des cheminées, pales des éoliennes ; l'eau animée vit dans ground.
   const fx = createEffects(models, { palette: PALETTE, shadows });
-  scene.add(ground.group, buildings.group, roads.group, fx.group);
-  let elapsed = 0; // temps d'animation cumulé (s)
+  // Acteurs (habitants, véhicules, faune) : la simulation vit dans src/core/actors.js ; ici on l'affiche.
+  const actorsLayer = createActorsLayer(models, { maxSkinned: options.maxSkinned ?? 8, manifestUrl: options.manifestUrl });
+  scene.add(ground.group, buildings.group, roads.group, fx.group, actorsLayer.group);
+  let actors = null;   // état des acteurs fourni par setActors (lecture seule)
+  let elapsed = 0;     // temps d'animation cumulé (s)
+  const upd = { ms: 0 }; // temps CPU de la mise à jour des couches animées
 
   let layer = { kind: 'none', values: null };
 
@@ -208,7 +213,8 @@ export async function createRenderer(canvas, options = {}) {
     setWorld(nextWorld) {
       world = nextWorld;
       fx.setWorld(world);
-      animating = true; // vallée vivante : eau, fumée, pales (et acteurs via setActors)
+      actorsLayer.setWorld(world);
+      animating = true; // vallée vivante : eau, fumée, pales, acteurs
       ground.setWorld(world);
       buildings.setWorld(world);
       roads.setWorld(world);
@@ -248,6 +254,8 @@ export async function createRenderer(canvas, options = {}) {
 
     /** Demande explicitement une nouvelle image (après un changement externe). */
     invalidate() { dirty = true; },
+    /** Fournit l'état des acteurs à afficher (objet de src/core/actors.js, mis à jour par l'appelant). */
+    setActors(next) { actors = next || null; dirty = true; },
     /** Animation en cours : redessine à chaque appel de `render` (acteurs, étape 2). */
     setAnimating(flag) { animating = Boolean(flag); },
     get needsRender() { return dirty || animating; },
@@ -257,9 +265,12 @@ export async function createRenderer(canvas, options = {}) {
       if (!dirty && !animating) return false;
       const t0 = performance.now();
       if (animating && dt > 0) {
+        const tu = performance.now();
         elapsed += dt;
         fx.update(dt, elapsed);
         if (typeof ground.update === 'function') ground.update(dt);
+        if (actors) actorsLayer.update(dt, actors);
+        upd.ms = performance.now() - tu;
       }
       renderer.render(scene, threeCamera);
       last.frameMs = performance.now() - t0;
@@ -286,6 +297,8 @@ export async function createRenderer(canvas, options = {}) {
         roads: { ...roads.stats },
         ground: { ...ground.stats },
         effects: fx.stats ? fx.stats() : null,
+        actors: actorsLayer.stats ? actorsLayer.stats() : null,
+        layersUpdateMs: upd.ms,
         models: { loaded: models.ids.length, errors: models.errors.length },
       };
     },
@@ -295,6 +308,7 @@ export async function createRenderer(canvas, options = {}) {
       disposed = true;
       canvas.removeEventListener('webglcontextlost', onContextLost, false);
       canvas.removeEventListener('webglcontextrestored', onContextRestored, false);
+      actorsLayer.dispose();
       fx.dispose();
       buildings.dispose();
       roads.dispose();

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tiletown — fixture des acteurs animés</title>
+<!-- Page autonome pour tools/measure-actors.mjs : une vallée générée (src/core/worldgen.js), le rendu
+     statique existant (createRenderer, API §6, en lecture seule) et la couche des acteurs
+     (src/render3d/actors.js) ajoutée dans r.debug.scene ; une boucle anime à chaque image.
+     Paramètres : ?stats=1 (affichage), ?stress=1 (plafonds × 2, grande ville 24 × 24), ?seed=, ?cols=&rows=,
+     ?view=all (toute la carte) ou ?zoom= (largeur visible en unités), ?skinned= (plafond de squelettes),
+     ?shadows=0, ?speed= (facteur de temps). -->
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/examples/jsm/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe6; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; }
+  #stats { position: fixed; left: 8px; top: 8px; font: 12px/1.4 monospace; color: #333; background: rgba(255,255,255,.75); padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="stats"></div>
+<script type="module">
+import { createRenderer } from '../src/render3d/renderer.js';
+import { createActorsLayer } from '../src/render3d/actors.js';
+import { generateWorld, centerOf } from '../src/core/worldgen.js';
+import { rebuildRoads, computeTraffic, faceTowardRoad } from '../src/core/roads.js';
+import { createActors, updateActors, actorsStats, habitatSummary, CAPS } from '../src/core/actors.js';
+import { createRng } from '../src/core/rng.js';
+import { index, tileAt } from '../src/core/grid.js';
+import { isBuiltTile } from '../src/data/tiles.js';
+
+const params = new URLSearchParams(location.search);
+const stress = params.get('stress') === '1';
+const cols = Number(params.get('cols')) || (stress ? 24 : 12);
+const rows = Number(params.get('rows')) || (stress ? 24 : 16);
+const seed = Number(params.get('seed')) || 12345;
+const speed = Number(params.get('speed')) || 1;
+const showStats = params.get('stats') === '1';
+
+/** Agrandit la ville de départ : îlots posés en anneaux autour de la mairie sur les cases constructibles. */
+function growTown(world, count) {
+  const rng = createRng(world.seed, 'fixture-town');
+  const center = centerOf(world);
+  const types = ['house', 'house', 'house', 'house', 'shop', 'office', 'house', 'school', 'market', 'factory', 'clinic', 'park', 'solar', 'house', 'house', 'orchard', 'tree-planting', 'house', 'power-plant', 'house'];
+  const buildable = (t) => t && !t.building && ['grass', 'meadow', 'field'].includes(t.terrain);
+  let placed = 0;
+  for (let r = 1; r <= Math.max(cols, rows) && placed < count; r++) {
+    for (let y = center.y - r; y <= center.y + r && placed < count; y++) {
+      for (let x = center.x - r; x <= center.x + r && placed < count; x++) {
+        if (Math.max(Math.abs(x - center.x), Math.abs(y - center.y)) !== r) continue;
+        const t = tileAt(world, x, y);
+        if (!buildable(t) || rng.chance(0.12)) continue;
+        const type = rng.pick(types);
+        const level = type === 'house' ? (r <= 2 ? 3 : r <= 4 ? 2 : 1) : 1;
+        t.building = { type, level, variant: rng.int(0, 2), yaw: 0 };
+        t.native = false;
+        placed++;
+      }
+    }
+  }
+  const withRoads = rebuildRoads(world);
+  for (let y = 0; y < world.rows; y++) for (let x = 0; x < world.cols; x++) {
+    const t = tileAt(withRoads, x, y);
+    if (isBuiltTile(t)) t.building.yaw = faceTowardRoad(withRoads, x, y, center);
+  }
+  return computeTraffic(withRoads);
+}
+
+let world = generateWorld({ seed, cols, rows, starterTown: true });
+if (stress) world = growTown(world, 140);
+const caps = stress ? { habitant: CAPS.habitant * 2, vehicle: CAPS.vehicle * 2, animal: CAPS.animal * 2 } : undefined;
+const actors = createActors(world, seed, caps ? { caps } : {});
+
+const canvas = document.getElementById('map');
+const statsEl = document.getElementById('stats');
+if (showStats) statsEl.style.display = 'block';
+
+const timing = { updateMs: 0, layerMs: 0, frames: 0, updateMax: 0, layerMax: 0 };
+const tiletown = {
+  ready: false,
+  world, actors, renderer: null, layer: null, timing,
+  stats: () => (tiletown.renderer ? { ...tiletown.renderer.stats(), layer: tiletown.layer.stats(), actors: actorsStats(actors), timing: { ...timing } } : null),
+  /** Positions des acteurs (pour vérifier qu'ils bougent entre deux captures). */
+  snapshot: () => actors.list.map((a) => ({ id: a.id, kind: a.kind, x: +a.x.toFixed(3), y: +a.y.toFixed(3), z: +a.z.toFixed(3), state: a.state })),
+  resetTiming: () => { timing.updateMs = 0; timing.layerMs = 0; timing.frames = 0; timing.updateMax = 0; timing.layerMax = 0; },
+};
+window.__tiletown = tiletown;
+
+const renderer = await createRenderer(canvas, {
+  manifestUrl: '../assets/models/manifest.json',
+  pixelRatioMax: 2,
+  shadows: params.get('shadows') !== '0',
+});
+tiletown.renderer = renderer;
+renderer.setWorld(world);
+const layer = createActorsLayer(renderer.debug.models, {
+  maxSkinned: params.has('skinned') ? Number(params.get('skinned')) : 12,
+  manifestUrl: '../assets/models/manifest.json',
+  shadows: params.get('shadows') !== '0',
+});
+layer.setWorld(world);
+renderer.debug.scene.add(layer.group);
+tiletown.layer = layer;
+renderer.setAnimating(true);
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  renderer.resize(w, h, window.devicePixelRatio || 1);
+}
+resize();
+window.addEventListener('resize', resize);
+/** Point visé : ?look=x,y, ou un mot-clé (town, forest, water, meadow) → centre des cases concernées. */
+function lookTarget() {
+  const look = params.get('look') || 'town';
+  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(look);
+  if (m) return { x: Number(m[1]), y: Number(m[2]) };
+  const h = habitatSummary(world);
+  const tiles = look === 'forest' ? (h.massifs[0] ? h.massifs[0].tiles : []) : look === 'water' ? h.water : look === 'meadow' ? h.flowers : [];
+  if (!tiles.length) return centerOf(world);
+  const sx = tiles.reduce((s, i) => s + (i % cols), 0) / tiles.length;
+  const sy = tiles.reduce((s, i) => s + Math.floor(i / cols), 0) / tiles.length;
+  return { x: Math.round(sx), y: Math.round(sy) };
+}
+if (params.get('view') === 'all') renderer.camera.fitAll();
+else { const c = lookTarget(); renderer.camera.lookAt(c.x, c.y, Number(params.get('zoom')) || 7); }
+
+// Gestes minimaux : glisser, molette, double clic = tout voir.
+const pointers = new Map();
+canvas.addEventListener('pointerdown', (e) => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  if (pointers.size === 1) renderer.camera.pan(e.clientX - p.x, e.clientY - p.y);
+  p.x = e.clientX; p.y = e.clientY;
+});
+const up = (e) => pointers.delete(e.pointerId);
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); renderer.camera.zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
+canvas.addEventListener('dblclick', () => renderer.camera.fitAll());
+
+let lastT = performance.now();
+let frames = 0;
+function loop(t) {
+  const dt = Math.min(0.1, (t - lastT) / 1000) * speed; lastT = t;
+  const t0 = performance.now();
+  updateActors(actors, world, dt);
+  const t1 = performance.now();
+  layer.update(dt, actors);
+  const t2 = performance.now();
+  timing.updateMs += t1 - t0; timing.layerMs += t2 - t1; timing.frames++;
+  timing.updateMax = Math.max(timing.updateMax, t1 - t0); timing.layerMax = Math.max(timing.layerMax, t2 - t1);
+  const drew = renderer.render(dt);
+  if (drew) frames++;
+  if (frames >= 3 && !tiletown.ready) tiletown.ready = true;
+  if (drew && showStats) {
+    const s = renderer.stats();
+    const l = layer.stats();
+    const a = actorsStats(actors);
+    statsEl.textContent = `appels ${s.calls}  triangles ${s.triangles}  image ${s.frameMs.toFixed(1)} ms\n`
+      + `acteurs ${a.total} : habitants ${a.byGroup.habitant}  véhicules ${a.byGroup.vehicle}  faune ${a.byGroup.animal}\n`
+      + `pantins ${l.puppets}  squelettes ${l.skinned}/${l.maxSkinned}  véhicules ${l.vehicles}  dessinables ${l.drawables}  instances ${l.instances}\n`
+      + `rigs GLB ${l.rigs.loaded} chargés, ${l.rigs.failed} en repli, ${l.rigs.pending} en cours\n`
+      + `CPU moyen : updateActors ${(timing.updateMs / Math.max(1, timing.frames)).toFixed(2)} ms  layer.update ${(timing.layerMs / Math.max(1, timing.frames)).toFixed(2)} ms\n`
+      + `${cols}×${rows}  graine ${seed}${stress ? '  (charge ×2)' : ''}`;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

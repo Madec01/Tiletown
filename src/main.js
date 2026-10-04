@@ -13,6 +13,7 @@
 // Toute erreur de démarrage remonte à window.__bootFail (écran d'erreur lisible du chargeur).
 
 import { generateWorld, centerOf } from './core/worldgen.js';
+import { createActors, updateActors } from './core/actors.js';
 import { rebuildRoads } from './core/roads.js';
 import { TERRAINS } from './data/terrain.js';
 import { TILES, TILE_BY_ID, residentsOfTile } from './data/tiles.js';
@@ -185,6 +186,10 @@ async function main() {
   // ── 2. Monde ──────────────────────────────────────────────────────────────────
   const seed = seedFromSearch(location.search);
   let world = rebuildRoads(generateWorld({ seed, cols: WORLD_COLS, rows: WORLD_ROWS, map: 'valley', starterTown: true }));
+  // Acteurs : habitants, véhicules, faune (simulation pure, affichée par le rendu).
+  let actors = createActors(world, seed);
+  let simSpeed = 1; // vitesse du temps (0 = pause) ; reliée au bouton pause/vitesse du HUD quand il sera actif
+  let updateMs = 0;
   app.world = world;
   app.hud.setGauges(initialGauges(world));
   app.hud.setDate({ month: 2, year: 1 });
@@ -195,6 +200,7 @@ async function main() {
   app.renderer = r;
   boot.progress(0.8);
   r.setWorld(world);
+  r.setActors(actors);
   sizeKey = '';
   resizeScene();
   boot.progress(0.92);
@@ -274,8 +280,12 @@ async function main() {
     const interacting = app.gestures.active || now < interactUntil;
     if (!interacting && dtMs < 1000 / IDLE_FPS - 1) return; // repos : une image sur deux
     lastRender = now;
+    const dt = Math.min(0.1, dtMs / 1000);
+    const tu = performance.now();
+    if (simSpeed > 0) updateActors(actors, world, dt * simSpeed);
+    updateMs = performance.now() - tu;
     const t0 = performance.now();
-    r.render(Math.min(0.1, dtMs / 1000));
+    r.render(dt);
     app.stats.frame(performance.now() - t0);
     if (now - lastStats >= STATS_EVERY_MS) {
       lastStats = now;
@@ -340,13 +350,16 @@ async function main() {
     hud: app.hud,
     toasts: app.toasts,
     /** { calls, triangles, frameMs, fps } : valeurs fraîches du rendu + i/s de la dernière fenêtre. */
-    stats: () => ({ ...app.stats.snapshot(), ...r.stats() }),
+    stats: () => ({ ...app.stats.snapshot(), ...r.stats(), updateMs: updateMs + (r.stats().layersUpdateMs || 0) }),
+    get actors() { return actors; },
     /** Change de monde (graine) sans recharger : utile aux mesures. */
     regenerate(newSeed) {
       world = rebuildRoads(generateWorld({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, map: 'valley', starterTown: true }));
       app.world = world;
       window.__tiletown.world = world;
+      actors = createActors(world, newSeed);
       r.setWorld(world);
+      r.setActors(actors);
       homeView();
       app.hud.setGauges(initialGauges(world));
       poke();

@@ -200,4 +200,4 @@ scene.add(fx.group);  fx.dispose()
 
 ### 8.4 Critères du prototype (étape 2)
 
-Mesurés par `tools/measure.mjs` (scénario « vallée animée », 60 habitants + 20 véhicules + 24 animaux + fumée) : ≤ 60 appels de dessin, ≤ 200 000 triangles, mise à jour CPU (`updateActors` + `layer.update` + `fx.update`) < 4 ms par image (indicatif sous SwiftShader), précache < 6 Mo, aucune erreur, et une vérification que les acteurs bougent (positions différentes entre deux captures à 2 s d'écart).
+Mesurés par `tools/measure.mjs` (scénario « vallée animée », 60 habitants + 20 véhicules + 24 animaux + fumée) : ≤ 60 appels de dessin, ≤ 200 000 triangles, mise à jour CPU (`updateActors` + `layer.update` + `fx.update`) < 4 ms par image (indicatif sous SwiftShader), précache < 6 Mo, aucune erreur, et une vérification que les acteurs bougent (au moins 35 % des acteurs déplacés entre deux relevés à 2 s d'écart : les pauses des habitants, les cerfs à l'arrêt et les chouettes perchées font partie du tableau).
