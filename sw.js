@@ -32,12 +32,12 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/tiletown/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '0ce3a51a7cd0';
-// 77 fichiers, 2.70 Mo ; installés d'emblée (core) : 77 fichiers, 2.70 Mo
+const VERSION = '67e4e08164b4';
+// 77 fichiers, 2.68 Mo ; installés d'emblée (core) : 77 fichiers, 2.68 Mo
 const PRECACHE = [
-  ["index.html", 'c095598c97f75d9c', 29128, 'core'],
+  ["index.html", '44f7924ac64b462b', 29128, 'core'],
   ["manifest.webmanifest", 'd781b7f56357c6a9', 1194, 'core'],
-  ["dist/game.279365b678.js", '71d742665718b767', 762633, 'core'],
+  ["dist/game.b5f556a01f.js", 'e10a9f71a5726a87', 762633, 'core'],
   ["dist/game.b8ae07dec7.css", 'b8ae07dec7b5ff95', 16354, 'core'],
   ["assets/fonts/Nunito-latin-ext.woff2", '2c8d792869818ecb', 35588, 'core'],
   ["assets/fonts/Nunito-latin.woff2", 'ba344451eab25b21', 39128, 'core'],
@@ -48,7 +48,7 @@ const PRECACHE = [
   ["assets/icons/icon-maskable-192.png", '78fe1d888d171eae', 4581, 'core'],
   ["assets/icons/icon-maskable-512.png", '64571da0928dd936', 12807, 'core'],
   ["assets/icons/icon-monochrome-512.png", '34e7df917e687c83', 5857, 'core'],
-  ["assets/models/bee.glb", 'c767506b93e2978d', 56768, 'core'],
+  ["assets/models/bee.glb", 'f3a7a189dfcfd6cb', 56864, 'core'],
   ["assets/models/bridge.glb", '001930e968f7eefd', 8016, 'core'],
   ["assets/models/building-small-a.glb", '4e68cad04f2d12ea', 18832, 'core'],
   ["assets/models/building-small-b.glb", '4f92dca36f49fc9e', 16808, 'core'],
@@ -63,25 +63,25 @@ const PRECACHE = [
   ["assets/models/citizen-c.glb", 'c924f4dd91d65893', 11432, 'core'],
   ["assets/models/clinic.glb", '6abcf67e913873a2', 12788, 'core'],
   ["assets/models/compost.glb", '36b07642199f5fe4', 24040, 'core'],
-  ["assets/models/cow.glb", '4d71e987b8a9e450', 238084, 'core'],
+  ["assets/models/cow.glb", '6f733876b4fb0eff', 228040, 'core'],
   ["assets/models/crop-corn.glb", '8fff89afb582bfa6', 15444, 'core'],
   ["assets/models/crop-wheat.glb", '3e7b22196980337b', 27432, 'core'],
   ["assets/models/cyclist.glb", '34367742f2c920f2', 36648, 'core'],
-  ["assets/models/deer.glb", 'c12e76f2bc194275', 229632, 'core'],
-  ["assets/models/duck.glb", 'd43ff0e3e3008df4', 59548, 'core'],
+  ["assets/models/deer.glb", '6413ca117dfe7481', 219588, 'core'],
+  ["assets/models/duck.glb", '317c1381c8132575', 59636, 'core'],
   ["assets/models/factory-a.glb", 'e2c6a7d19f700896', 27856, 'core'],
   ["assets/models/factory-b.glb", '26588bb743101dcc', 22684, 'core'],
   ["assets/models/flowers.glb", '2830556365954e2b', 11936, 'core'],
-  ["assets/models/fox.glb", '2695c064e0ea7385', 248736, 'core'],
+  ["assets/models/fox.glb", 'c6a4b1ba533ffc30', 242552, 'core'],
   ["assets/models/heron.glb", 'c410b77ecb109021', 22312, 'core'],
   ["assets/models/house-a.glb", '6f4f0a5e4c64c3a4', 17888, 'core'],
   ["assets/models/house-b.glb", 'daeb472919507ffc', 16632, 'core'],
   ["assets/models/house-c.glb", '47a4da7c8af2fb7b', 13652, 'core'],
-  ["assets/models/manifest.json", '956ce20356c816f5', 60045, 'core'],
+  ["assets/models/manifest.json", 'dbf124ffc0d6f074', 60364, 'core'],
   ["assets/models/market.glb", '2986605864d11520', 24036, 'core'],
   ["assets/models/office-a.glb", 'a1ae95ee0cb201c5', 34608, 'core'],
   ["assets/models/otter.glb", '0792002d9dd36ea7', 19308, 'core'],
-  ["assets/models/owl.glb", '5f5d1161e06b7105', 56804, 'core'],
+  ["assets/models/owl.glb", 'ff7e89c7ead4003f', 56900, 'core'],
   ["assets/models/park.glb", '948dea911b9ff5ed', 29780, 'core'],
   ["assets/models/pine-a.glb", '822cadca3f8a68b5', 7032, 'core'],
   ["assets/models/pine-b.glb", 'ddd4bfb3518dc7e2', 4260, 'core'],

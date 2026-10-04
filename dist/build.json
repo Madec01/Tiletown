@@ -1,7 +1,7 @@
 {
-  "id": "0ce3a51a7cd0",
+  "id": "67e4e08164b4",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.279365b678.js",
+  "js": "dist/game.b5f556a01f.js",
   "css": "dist/game.b8ae07dec7.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -14,7 +14,7 @@
     "assets/icons/icon-maskable-192.png": "78fe1d888d171eae",
     "assets/icons/icon-maskable-512.png": "64571da0928dd936",
     "assets/icons/icon-monochrome-512.png": "34e7df917e687c83",
-    "assets/models/bee.glb": "c767506b93e2978d",
+    "assets/models/bee.glb": "f3a7a189dfcfd6cb",
     "assets/models/bridge.glb": "001930e968f7eefd",
     "assets/models/building-small-a.glb": "4e68cad04f2d12ea",
     "assets/models/building-small-b.glb": "4f92dca36f49fc9e",
@@ -29,25 +29,25 @@
     "assets/models/citizen-c.glb": "c924f4dd91d65893",
     "assets/models/clinic.glb": "6abcf67e913873a2",
     "assets/models/compost.glb": "36b07642199f5fe4",
-    "assets/models/cow.glb": "4d71e987b8a9e450",
+    "assets/models/cow.glb": "6f733876b4fb0eff",
     "assets/models/crop-corn.glb": "8fff89afb582bfa6",
     "assets/models/crop-wheat.glb": "3e7b22196980337b",
     "assets/models/cyclist.glb": "34367742f2c920f2",
-    "assets/models/deer.glb": "c12e76f2bc194275",
-    "assets/models/duck.glb": "d43ff0e3e3008df4",
+    "assets/models/deer.glb": "6413ca117dfe7481",
+    "assets/models/duck.glb": "317c1381c8132575",
     "assets/models/factory-a.glb": "e2c6a7d19f700896",
     "assets/models/factory-b.glb": "26588bb743101dcc",
     "assets/models/flowers.glb": "2830556365954e2b",
-    "assets/models/fox.glb": "2695c064e0ea7385",
+    "assets/models/fox.glb": "c6a4b1ba533ffc30",
     "assets/models/heron.glb": "c410b77ecb109021",
     "assets/models/house-a.glb": "6f4f0a5e4c64c3a4",
     "assets/models/house-b.glb": "daeb472919507ffc",
     "assets/models/house-c.glb": "47a4da7c8af2fb7b",
-    "assets/models/manifest.json": "956ce20356c816f5",
+    "assets/models/manifest.json": "dbf124ffc0d6f074",
     "assets/models/market.glb": "2986605864d11520",
     "assets/models/office-a.glb": "a1ae95ee0cb201c5",
     "assets/models/otter.glb": "0792002d9dd36ea7",
-    "assets/models/owl.glb": "5f5d1161e06b7105",
+    "assets/models/owl.glb": "ff7e89c7ead4003f",
     "assets/models/park.glb": "948dea911b9ff5ed",
     "assets/models/pine-a.glb": "822cadca3f8a68b5",
     "assets/models/pine-b.glb": "ddd4bfb3518dc7e2",
@@ -82,7 +82,7 @@
     "css/style.css": "493f66a1c253209f",
     "manifest.webmanifest": "d781b7f56357c6a9",
     "package-lock.json": "66cc44e0cd0d4a8b",
-    "src/core/actors.js": "a8d13445de0b6027",
+    "src/core/actors.js": "d39e001cb391910a",
     "src/core/grid.js": "29df44c5235c731b",
     "src/core/rng.js": "6fbad2721b18a2ac",
     "src/core/roads.js": "524fb3d4d1689cec",
@@ -94,16 +94,16 @@
     "src/loader.js": "782328b4f797e591",
     "src/main.js": "75592ffef4c9d14f",
     "src/pwa.js": "4600989641d122c6",
-    "src/render3d/actors.js": "e5ca1940ce8951d8",
+    "src/render3d/actors.js": "9d55b68069b8f6c0",
     "src/render3d/buildings.js": "2fbe725fbcf8bf9c",
     "src/render3d/camera.js": "da87199cdecbd096",
     "src/render3d/effects.js": "9829e81e430b42ab",
     "src/render3d/ground.js": "8c10111a94018cfa",
     "src/render3d/layers.js": "b38a0195b34ee0fe",
     "src/render3d/models.js": "a5fcdb14b9757dbc",
-    "src/render3d/puppet-pose.js": "e529678258e3848d",
+    "src/render3d/puppet-pose.js": "cb4dffd405a094b5",
     "src/render3d/renderer.js": "36d74a4838ddd50d",
-    "src/render3d/rigs.js": "44ea19366423abe4",
+    "src/render3d/rigs.js": "656b2f0e1a413fb8",
     "src/render3d/roads.js": "57de71f88ef6b40f",
     "src/render3d/util.js": "e37eba65381cb4a0",
     "src/ui/a11y.js": "d0792e98751893bd",
@@ -117,6 +117,14 @@
     "sw.js": "60270efef15e5454"
   },
   "history": [
+    {
+      "id": "67e4e08164b4",
+      "files": [
+        "dist/game.b5f556a01f.js",
+        "dist/game.b5f556a01f.js.map",
+        "dist/game.b8ae07dec7.css"
+      ]
+    },
     {
       "id": "0ce3a51a7cd0",
       "files": [
@@ -146,14 +154,6 @@
       "files": [
         "dist/game.30f321a295.js",
         "dist/game.30f321a295.js.map",
-        "dist/game.b8ae07dec7.css"
-      ]
-    },
-    {
-      "id": "ddd1a3fc9ef7",
-      "files": [
-        "dist/game.f15a9b737b.js",
-        "dist/game.f15a9b737b.js.map",
         "dist/game.b8ae07dec7.css"
       ]
     }

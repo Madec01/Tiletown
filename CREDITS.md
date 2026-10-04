@@ -17,7 +17,22 @@ Tous les modèles dérivent des kits ci-dessous, créés et distribués par **Ke
 | Car Kit 3.1 | Kenney | https://kenney.nl/assets/car-kit | CC0 1.0 | `car-a`, `car-b`, `truck`, `bus` (camionnette, provisoire) |
 | Fantasy Town Kit 2.0 | Kenney | https://kenney.nl/assets/fantasy-town-kit | CC0 1.0 | `market` (étals, charrette, banc, lanterne), fontaine et banc du `park`, banc et lanterne du `tram-stop` |
 | Modular Buildings | Kenney | https://kenney.nl/assets/modular-buildings | CC0 1.0 | `school`, `clinic`, `townhall` (assemblages) |
-| Mini Characters | Kenney | https://kenney.nl/assets/mini-characters | CC0 1.0 | téléchargé pour les habitants animés (étape 2) ; aucun GLB produit pour l'instant |
+| Mini Characters | Kenney | https://kenney.nl/assets/mini-characters | CC0 1.0 | téléchargé en réserve pour les habitants ; les habitants du jeu sont finalement des pantins Tiletown (`citizen-a/b/c`, ci-dessous) ; aucun GLB produit |
+
+### Modèles animés (étape 2 : vallée animée) — `tools/import-animated.js`, `tools/build-fauna.js`
+
+Squelettes et clips conservés dans le GLB (`rig: skinned`), ou pantins en primitives animés par le code (`rig: puppet`). Les kits bruts sont téléchargés par `node tools/fetch-kits.js` (Gobkit : parcours de téléchargement gratuit d'itch.io ; Quaternius : dossier Google Drive officiel, puis miroirs GitHub du même fichier si le quota Drive est dépassé). Textes de licence : `assets/models/LICENSE-quaternius.txt`, `assets/models/LICENSE-gobkit.txt`.
+
+| Ressource | Auteur | Adresse | Licence | Utilisée pour |
+|---|---|---|---|---|
+| Ultimate Animated Animals (glTF, février 2022) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | CC0 1.0 | `deer` (Deer.gltf), `fox` (Fox.gltf), `cow` (Cow.gltf) : clips Idle, Walk, Gallop, Eating conservés ; couleurs cuites en couleurs de sommets, une seule primitive par animal |
+| Free Animal Pack (vol. A) | Gobkit (Alsomind Tech Co., Ltd.) | https://gobkit.itch.io/gobkit-free-animal-pack | CC0 1.0 (LICENSE.txt du pack ; le champ `copyright` du GLB d'origine est vide) | `duck` (Duck.glb) : piste unique « all » 120 images à 24 i/s + clips idle / attack / dead / walk découpés ; atlas 512² quantifié vers la palette |
+| Free Animal Pack Vol. 2 | Gobkit (Alsomind Tech Co., Ltd.) | https://gobkit.itch.io/gobkit-free-animal-pack-vol-2 | CC0 1.0 (idem) | `bee` (Bee.glb), `owl` (Owl.glb) |
+| Pantins Tiletown : `citizen-a`, `citizen-b`, `citizen-c` (habitants), `heron`, `otter`, `swallow`, `cyclist` | création du projet, générés par `tools/build-fauna.js` à partir de primitives aux couleurs de la palette | ce dépôt | CC0 | habitants, héron, loutre, hirondelle, cycliste (nœuds nommés Body, Head, LegL… animés par procédure) |
+
+Poids des GLB animés : squelettes 0,86 Mo (cerf 214 Ko, renard 237 Ko, vache 223 Ko, canard 58 Ko, abeille 56 Ko, chouette 56 Ko), pantins 127 Ko (11 à 36 Ko chacun) ; total ≈ 0,99 Mo (objectif < 1,5 Mo).
+
+Non retenus : Quaternius « LowPoly Animated Animals » (mouton, FBX/OBJ/Blend seulement : pas de glTF, donc pas de `sheep`) ; modèles d'exemple de three.js (licence non précisée).
 
 ## Palette
 
