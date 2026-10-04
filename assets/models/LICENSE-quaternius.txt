@@ -1,0 +1,6 @@
+Modèles 3D animés de Tiletown dérivés du pack « Ultimate Animated Animals » de Quaternius
+(https://quaternius.com/packs/ultimateanimatedanimals.html), distribué sous Creative Commons Zero
+(CC0 1.0, domaine public) : https://creativecommons.org/publicdomain/zero/1.0/
+
+Fichiers : deer.glb (Deer.gltf), fox.glb (Fox.gltf), cow.glb (Cow.gltf). Normalisés par
+tools/import-animated.js (échelle, couleurs quantifiées vers la palette, sélection des clips, meshopt).

@@ -19,6 +19,11 @@
 //   node tools/import-models.js --verbose
 // Un identifiant dont la source manque est signalé et absent du manifeste (le rendu affichera une
 // boîte de remplacement).
+//
+// Les entrées ANIMÉES du manifeste (`animated: true`, produites par tools/import-animated.js et
+// tools/build-fauna.js) sont conservées telles quelles à chaque passage : ce script ne les régénère
+// pas et ne signale pas leurs GLB comme orphelins. Ses utilitaires (lecture/écriture glTF, couleurs,
+// primitives) sont exportés pour ces deux scripts.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -35,10 +40,10 @@ import { MODEL_MAP, KIT_MATERIALS, kitUrl, kitManifestName } from './model-map.j
 import { KITS, kitDir } from './fetch-kits.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT_DIR = joinPath(ROOT, 'assets', 'models');
-const MANIFEST_PATH = joinPath(OUT_DIR, 'manifest.json');
+export const OUT_DIR = joinPath(ROOT, 'assets', 'models');
+export const MANIFEST_PATH = joinPath(OUT_DIR, 'manifest.json');
 const LICENSE_PATH = joinPath(OUT_DIR, 'LICENSE-kenney.txt');
-const UNIT = '1 case = 1 unité, origine au centre de la case, y vers le haut, face +Z (sud)';
+export const UNIT = '1 case = 1 unité, origine au centre de la case, y vers le haut, face +Z (sud)';
 
 const args = process.argv.slice(2);
 const VERBOSE = args.includes('--verbose');
@@ -54,7 +59,7 @@ const PALETTE_INDEX = new Map(PALETTE_LIST.map((hex, i) => [hex, i]));
 const PALETTE_ROLE = new Map(Object.entries(PALETTE).map(([role, hex]) => [hex, role]));
 
 /** Rôle de palette → baseColorFactor linéaire. */
-function roleToLinearFactor(role) {
+export function roleToLinearFactor(role) {
   const hex = PALETTE[role];
   if (!hex) throw new Error(`rôle de palette inconnu : ${role}`);
   const [r, g, b] = hexToRgb(hex).map((v) => toLinear(v / 255));
@@ -62,7 +67,7 @@ function roleToLinearFactor(role) {
 }
 
 /** baseColorFactor linéaire → teinte de palette la plus proche (comparée en sRGB). */
-function quantizeFactor(factor) {
+export function quantizeFactor(factor) {
   const rgb = factor.slice(0, 3).map((c) => Math.round(toSrgb(Math.min(1, Math.max(0, c))) * 255));
   return nearestPaletteHex(rgb);
 }
@@ -106,7 +111,7 @@ function crc32(buf) {
 const quantizedTextureCache = new Map();
 
 /** Quantifie la texture-palette d'un kit : chaque pixel → teinte la plus proche de la palette commune. */
-function quantizeTextureImage(imageBytes) {
+export function quantizeTextureImage(imageBytes) {
   const hash = createHash('sha1').update(imageBytes).digest('hex');
   const cached = quantizedTextureCache.get(hash);
   if (cached) return cached;
@@ -131,11 +136,11 @@ function quantizeTextureImage(imageBytes) {
 
 // ─── Lecture des sources ────────────────────────────────────────────────────────────────────────
 
-const QUIET = new Logger(Logger.Verbosity.ERROR);
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder }).setLogger(QUIET);
+export const QUIET = new Logger(Logger.Verbosity.ERROR);
+export const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder }).setLogger(QUIET);
 
 /** Chemin d'un GLB source dans le kit (les kits Kenney rangent les GLB dans « Models/GLB format/ » ou « Models/GLTF format/ »). */
-function sourcePath(kit, file) {
+export function sourcePath(kit, file) {
   const base = kitDir(kit);
   for (const sub of ['Models/GLB format', 'Models/GLTF format', 'Models', '']) {
     const p = joinPath(base, sub, file);
@@ -148,7 +153,7 @@ function sourcePath(kit, file) {
  * Prépare un document source : matériaux quantifiés vers la palette, textures quantifiées,
  * tangentes supprimées, paramètres unifiés (metallic 0, roughness 1, sans unlit).
  */
-function prepareMaterials(doc, kit, materialOverrides = {}) {
+export function prepareMaterials(doc, kit, materialOverrides = {}) {
   const root = doc.getRoot();
   for (const material of root.listMaterials()) {
     const name = material.getName();
@@ -186,7 +191,7 @@ function prepareMaterials(doc, kit, materialOverrides = {}) {
 // ─── Primitives procédurales (boîte, cylindre, cône) aux couleurs de la palette ────────────────
 
 /** Géométrie d'une boîte posée sur y = 0, centrée en x/z, normales plates. */
-function boxGeometry([w, h, d]) {
+export function boxGeometry([w, h, d]) {
   const hx = w / 2, hz = d / 2;
   const faces = [
     { n: [0, 0, 1], v: [[-hx, 0, hz], [hx, 0, hz], [hx, h, hz], [-hx, h, hz]] },
@@ -206,7 +211,7 @@ function boxGeometry([w, h, d]) {
 }
 
 /** Cylindre (ou cône si topRadius = 0) posé sur y = 0 ; facettes plates ; renvoie côté et chapeau séparés. */
-function cylinderGeometry(radius, height, segments = 16, topRadius = radius) {
+export function cylinderGeometry(radius, height, segments = 16, topRadius = radius) {
   const side = { positions: [], normals: [], indices: [] };
   const cap = { positions: [], normals: [], indices: [] };
   const bottom = { positions: [], normals: [], indices: [] };
@@ -238,14 +243,14 @@ function cylinderGeometry(radius, height, segments = 16, topRadius = radius) {
 }
 
 /** Matériau plat d'un rôle de palette, partagé dans le document. */
-function flatMaterial(doc, role) {
+export function flatMaterial(doc, role) {
   const name = `flat-${role}`;
   const existing = doc.getRoot().listMaterials().find((m) => m.getName() === name && !m.getBaseColorTexture());
   if (existing) return existing;
   return doc.createMaterial(name).setBaseColorFactor(roleToLinearFactor(role)).setMetallicFactor(0).setRoughnessFactor(1);
 }
 
-function addGeometry(doc, buffer, node, geom, material) {
+export function addGeometry(doc, buffer, node, geom, material) {
   if (!geom.indices.length) return;
   const pos = doc.createAccessor().setType('VEC3').setArray(new Float32Array(geom.positions)).setBuffer(buffer);
   const nor = doc.createAccessor().setType('VEC3').setArray(new Float32Array(geom.normals)).setBuffer(buffer);
@@ -278,7 +283,7 @@ function addPrimitivePart(doc, buffer, scene, part) {
 // ─── Transformations ────────────────────────────────────────────────────────────────────────────
 
 /** Quaternion d'une rotation autour de Y (degrés). */
-function quatY(deg) {
+export function quatY(deg) {
   const a = (deg * Math.PI) / 180 / 2;
   return [0, Math.sin(a), 0, Math.cos(a)];
 }
@@ -330,7 +335,7 @@ function translateAll(doc, [tx, ty, tz], keepNodes) {
   }
 }
 
-function countTriangles(doc) {
+export function countTriangles(doc) {
   let tris = 0;
   for (const mesh of doc.getRoot().listMeshes()) {
     for (const prim of mesh.listPrimitives()) {
@@ -341,7 +346,7 @@ function countTriangles(doc) {
   return Math.round(tris);
 }
 
-const round3 = (v) => Math.round(v * 1000) / 1000;
+export const round3 = (v) => Math.round(v * 1000) / 1000;
 
 // ─── Construction d'un modèle ───────────────────────────────────────────────────────────────────
 
@@ -462,11 +467,14 @@ function writeLicenseFile(kitsUsed) {
   for (const kit of [...kitsUsed].sort()) {
     if (kit === 'tiletown') continue;
     const info = KITS[kit];
+    if (info && info.author && info.author !== 'Kenney') continue; // Quaternius, Gobkit : voir CREDITS.md et LICENSE-<auteur>.txt
     lines.push(`  - ${info ? info.name : kit} — https://kenney.nl/assets/${kit}`);
   }
   lines.push('', 'Texte de licence joint à chaque kit (License.txt) :', '');
   const texts = new Set();
   for (const kit of [...kitsUsed].sort()) {
+    const info = KITS[kit];
+    if (info && info.author && info.author !== 'Kenney') continue;
     const p = joinPath(kitDir(kit), 'License.txt');
     if (!existsSync(p)) continue;
     const text = readFileSync(p, 'utf8').replace(/\r/g, '').split('\n').map((l) => l.replace(/^\t/, '').trimEnd()).join('\n').trim();
@@ -487,9 +495,15 @@ async function main() {
   }
 
   // Manifeste existant : conservé pour les identifiants non régénérés (import partiel)
+  // Manifeste existant : relu pour conserver les identifiants non régénérés (import partiel) et, dans
+  // tous les cas, les modèles animés (import-animated.js, build-fauna.js) qui ne sont pas dans MODEL_MAP.
   let manifest = { palette: PALETTE_LIST, unit: UNIT, models: {} };
-  if (ONLY.length && existsSync(MANIFEST_PATH)) {
+  if (existsSync(MANIFEST_PATH)) {
     try { manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')); } catch { /* manifeste illisible : on repart de zéro */ }
+  }
+  manifest.models = manifest.models || {};
+  if (!ONLY.length) {
+    for (const [id, entry] of Object.entries(manifest.models)) if (!entry || !entry.animated) delete manifest.models[id];
   }
   manifest.palette = PALETTE_LIST;
   manifest.unit = UNIT;
@@ -523,16 +537,18 @@ async function main() {
     }
   }
 
-  // Ordre stable des modèles dans le manifeste (ordre du plan)
+  // Ordre stable des modèles dans le manifeste (ordre du plan), puis les modèles animés (ordre existant)
   const ordered = {};
   for (const id of Object.keys(MODEL_MAP)) if (manifest.models[id]) ordered[id] = manifest.models[id];
+  for (const [id, entry] of Object.entries(manifest.models)) if (!ordered[id] && entry && entry.animated) ordered[id] = entry;
   manifest.models = ordered;
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
   writeLicenseFile(new Set([...kitsUsed, ...Object.values(MODEL_MAP).map((s) => s.kit)]));
 
   // Fichiers GLB orphelins (identifiants retirés du plan)
   for (const f of readdirSync(OUT_DIR)) {
-    if (f.endsWith('.glb') && !MODEL_MAP[f.replace(/\.glb$/, '')]) log(`  (orphelin : ${f}, à supprimer ?)`);
+    const fid = f.replace(/\.glb$/, '');
+    if (f.endsWith('.glb') && !MODEL_MAP[fid] && !(manifest.models[fid] && manifest.models[fid].animated)) log(`  (orphelin : ${f}, à supprimer ?)`);
   }
 
   const allBytes = Object.values(manifest.models).reduce((n, m) => n + (m.bytes || 0), 0);
@@ -544,4 +560,7 @@ async function main() {
   }
 }
 
-await main();
+// Lancé directement : importe tout le plan. Importé (import-animated.js, build-fauna.js) : rien ne s'exécute.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tiletown — fixture des effets (fumée, pales, eau)</title>
+<!-- Démo et mesure des effets animés (docs/ARCHITECTURE.md §8.3) : vallée générée (src/core/worldgen.js,
+     roads.js) avec 3 usines, 1 centrale et 4 éoliennes ajoutées de force, rendu existant (createRenderer),
+     groupe des effets ajouté dans r.debug.scene, `fx.update` + `ground.update` dans la boucle.
+     Paramètres : ?seed= ?cols= ?rows= ; ?freeze=<s> (avance l'horloge à pas fixes de 1/60 s jusqu'à t puis
+     rend UNE image : captures déterministes) ; ?smoke=0..1 ; ?view=town|all|river|<x>,<y> ; ?zoom=<u> ;
+     ?top=1 (vue de dessus) ; ?stats=1 ; ?shadows=0 ; ?strategy=batched|instanced ; ?bridge=0 (sans la maison
+     raccordée par un pont) ; view=factory|turbine|bridge cadre l'élément voulu.
+     window.__tiletown : { ready, world, renderer, fx, ground, stats(), seek(t), measure(n), renderFrames(n) }. -->
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/examples/jsm/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe6; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; }
+  #stats { position: fixed; left: 8px; top: 8px; font: 12px/1.4 monospace; color: #333; background: rgba(255,255,255,.75); padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="stats"></div>
+<script type="module">
+import { createRenderer } from '../src/render3d/renderer.js';
+import { createEffects } from '../src/render3d/effects.js';
+import { generateWorld, centerOf } from '../src/core/worldgen.js';
+import { rebuildRoads, computeTraffic, faceTowardRoad, connectTile, applyPath } from '../src/core/roads.js';
+import { index, tileAt } from '../src/core/grid.js';
+import { PALETTE } from '../src/data/palette.js';
+
+const params = new URLSearchParams(location.search);
+const num = (k, d) => (params.has(k) && params.get(k) !== '' && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : d);
+const seed = num('seed', 12345);
+const cols = num('cols', 12);
+const rows = num('rows', 16);
+const freeze = params.has('freeze') ? num('freeze', 0) : null;
+const showStats = params.get('stats') === '1';
+const shadows = params.get('shadows') !== '0';
+
+// --- Monde : vallée générée + bâtiments forcés ------------------------------------------------
+function buildWorld() {
+  const world = generateWorld({ seed, cols, rows, map: 'valley', starterTown: true });
+  const center = centerOf(world);
+  const wanted = [
+    ['factory', 0], ['factory', 1], ['factory', 0], ['power-plant', 0],
+    ['wind-turbine', 0], ['wind-turbine', 0], ['wind-turbine', 0], ['wind-turbine', 0],
+  ];
+  const placed = [];
+  // Anneaux autour de la mairie (rayon 2 à 6) : herbe libre, jamais l'eau ni la nature native précieuse.
+  outer: for (let r = 2; r <= Math.max(cols, rows); r++) {
+    for (let y = center.y - r; y <= center.y + r; y++) {
+      for (let x = center.x - r; x <= center.x + r; x++) {
+        if (Math.max(Math.abs(x - center.x), Math.abs(y - center.y)) !== r) continue;
+        const t = tileAt(world, x, y);
+        if (!t || t.building || (t.terrain !== 'grass' && t.terrain !== 'meadow')) continue;
+        // Une case sur deux pour aérer la ville (les éoliennes à l'écart).
+        if ((x + y) % 2 === 1 && placed.length < 4) continue;
+        const [type, variant] = wanted[placed.length];
+        t.building = { type, level: 1, variant, yaw: 0 };
+        t.native = false;
+        placed.push({ x, y, type });
+        if (placed.length >= wanted.length) break outer;
+      }
+    }
+  }
+  // Une maison de l'autre côté de la rivière, raccordée par un pont (tablier à y = 0,07 au-dessus de l'eau à −0,05).
+  let bridgeHouse = null;
+  if (params.get('bridge') !== '0') {
+    const riverXs = [];
+    for (let x = 0; x < cols; x++) if (tileAt(world, x, center.y).terrain === 'river') riverXs.push(x);
+    if (riverXs.length) {
+      const dir = riverXs[0] > center.x ? 1 : -1;
+      for (let x = riverXs[dir > 0 ? riverXs.length - 1 : 0] + dir; x >= 0 && x < cols; x += dir) {
+        const t = tileAt(world, x, center.y);
+        if (t && !t.building && (t.terrain === 'grass' || t.terrain === 'meadow')) { bridgeHouse = { x, y: center.y }; break; }
+      }
+    }
+    if (bridgeHouse) {
+      const t = world.tiles[index(world, bridgeHouse.x, bridgeHouse.y)];
+      t.building = { type: 'house', level: 1, variant: 0, yaw: 0 };
+      t.native = false;
+      placed.push({ ...bridgeHouse, type: 'house' });
+    }
+  }
+  let next = rebuildRoads(world);
+  if (bridgeHouse) {
+    const link = connectTile(next, bridgeHouse.x, bridgeHouse.y);
+    if (link.ok && link.path.length) next = rebuildRoads(applyPath(next, link.path));
+  }
+  for (const p of placed) {
+    const t = next.tiles[index(next, p.x, p.y)];
+    t.building.yaw = faceTowardRoad(next, p.x, p.y, center);
+  }
+  next = computeTraffic(next);
+  next.forced = placed;
+  next.bridgeHouse = bridgeHouse;
+  return next;
+}
+
+// --- Démarrage ------------------------------------------------------------------------------
+const canvas = document.getElementById('map');
+const statsEl = document.getElementById('stats');
+if (showStats) statsEl.style.display = 'block';
+
+const world = buildWorld();
+const tiletown = { ready: false, world, renderer: null, fx: null, ground: null, time: 0 };
+window.__tiletown = tiletown;
+
+const rendererOptions = {
+  manifestUrl: '../assets/models/manifest.json',
+  pixelRatioMax: 2,
+  strategy: params.get('strategy') || 'auto',
+  shadows,
+};
+if (params.get('top') === '1') { rendererOptions.pitch = 89 * Math.PI / 180; rendererOptions.yaw = 0; }
+const renderer = await createRenderer(canvas, rendererOptions);
+tiletown.renderer = renderer;
+renderer.setWorld(world);
+const ground = renderer.debug.ground;
+tiletown.ground = ground;
+const fx = createEffects(renderer.debug.models, { palette: PALETTE, shadows });
+fx.setWorld(world);
+if (params.has('smoke')) fx.setSmokeLevel(num('smoke', 1));
+renderer.debug.scene.add(fx.group);
+renderer.setAnimating(true);
+tiletown.fx = fx;
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  renderer.resize(w, h, window.devicePixelRatio || 1);
+}
+resize();
+
+function applyView() {
+  const view = params.get('view') || 'town';
+  const zoom = num('zoom', 9);
+  const center = centerOf(world);
+  if (view === 'all') { renderer.camera.fitAll(); return; }
+  if (view === 'river') {
+    // Centre de la rivière (case médiane de l'écoulement) pour vérifier le sens des bandes.
+    const river = [];
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (tileAt(world, x, y).terrain === 'river') river.push({ x, y });
+    const mid = river[Math.floor(river.length / 2)] || center;
+    renderer.camera.lookAt(mid.x, mid.y, zoom);
+    return;
+  }
+  if (view === 'bridge') {
+    // Milieu du premier pont (arête valant 3), sinon la maison raccordée.
+    let spot = world.bridgeHouse || center;
+    for (let y = 0; y <= rows && spot === (world.bridgeHouse || center); y++) for (let x = 0; x < cols; x++) if (world.edges.h[y * cols + x] === 3) { spot = { x: x + 0.5, y: y - 0.5 }; break; }
+    for (let y = 0; y < rows && spot === (world.bridgeHouse || center); y++) for (let x = 0; x <= cols; x++) if (world.edges.v[y * (cols + 1) + x] === 3) { spot = { x: x - 0.5, y: y + 0.5 }; break; }
+    renderer.camera.lookAt(spot.x, spot.y, zoom);
+    return;
+  }
+  if (view === 'factory' || view === 'turbine') {
+    const want = view === 'factory' ? ['factory', 'power-plant'] : ['wind-turbine'];
+    const p = world.forced.find((f) => want.includes(f.type)) || center;
+    renderer.camera.lookAt(p.x, p.y, zoom);
+    return;
+  }
+  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(view);
+  if (m) { renderer.camera.lookAt(Number(m[1]), Number(m[2]), zoom); return; }
+  renderer.camera.lookAt(center.x, center.y, zoom);
+}
+applyView();
+window.addEventListener('resize', () => { resize(); applyView(); });
+
+/** Avance les effets de dt (s) : horloge commune aux pales, à la fumée et à l'eau. */
+function step(dt) {
+  tiletown.time += dt;
+  fx.update(dt, tiletown.time);
+  ground.update(dt);
+}
+
+/** Place l'horloge à t (s) et rend une image. */
+tiletown.seek = (t) => {
+  tiletown.time = t;
+  fx.update(0, t);
+  ground.setTime(t);
+  renderer.invalidate();
+  renderer.render(1 / 60);
+  refreshStats();
+};
+/** Médiane (ms) du temps CPU de fx.update + ground.update sur n pas de 1/60 s. */
+tiletown.measure = (n = 120) => {
+  const times = [];
+  for (let i = 0; i < n; i++) {
+    const t0 = performance.now();
+    step(1 / 60);
+    times.push(performance.now() - t0);
+  }
+  const sorted = times.slice().sort((a, b) => a - b);
+  return { medianMs: sorted[Math.floor(sorted.length / 2)], maxMs: sorted[sorted.length - 1], meanMs: times.reduce((s, v) => s + v, 0) / times.length };
+};
+/** Force n images et renvoie la médiane du temps CPU de rendu (ms). */
+tiletown.renderFrames = (n = 10) => {
+  const times = [];
+  for (let i = 0; i < n; i++) { renderer.invalidate(); renderer.render(1 / 60); times.push(renderer.stats().frameMs); }
+  times.sort((a, b) => a - b);
+  return times[Math.floor(times.length / 2)];
+};
+tiletown.stats = () => ({ ...renderer.stats(), fx: fx.stats(), ground: { ...ground.stats }, time: tiletown.time, forced: world.forced, wind: world.wind });
+
+function refreshStats() {
+  if (!showStats) return;
+  const s = tiletown.stats();
+  statsEl.textContent = `t ${s.time.toFixed(2)} s  appels ${s.calls}  triangles ${s.triangles}  image ${s.frameMs.toFixed(1)} ms\n`
+    + `fumée ${s.fx.smoke} bouffées / ${s.fx.emitters} cheminées  pales ${s.fx.blades}\n`
+    + `fx ${s.fx.calls} appels (+${s.fx.shadowCalls} ombre)  eau ${s.ground.water} cases  humides ${s.ground.wetland}  ponts ${s.roads.bridges}  vent ${s.wind}\n`
+    + `stratégie ${s.strategy}  ${cols}×${rows}  graine ${seed}`;
+}
+
+if (freeze !== null) {
+  // Déterministe : pas fixes jusqu'à t, une image, et la boucle s'arrête (la page attend `seek`).
+  const steps = Math.max(0, Math.round(freeze * 60));
+  for (let i = 0; i < steps; i++) step(1 / 60);
+  renderer.render(1 / 60);
+  refreshStats();
+  tiletown.ready = true;
+} else {
+  let lastT = performance.now();
+  function loop(t) {
+    const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
+    step(dt);
+    const drew = renderer.render(dt);
+    if (drew && !tiletown.ready) tiletown.ready = true;
+    if (drew) refreshStats();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
+
+// Gestes minimaux : glisser = défiler, molette / pincement = zoom, double clic = tout voir.
+const pointers = new Map();
+let lastPinch = null;
+canvas.addEventListener('pointerdown', (e) => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  if (pointers.size === 1) renderer.camera.pan(e.clientX - p.x, e.clientY - p.y);
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (lastPinch) renderer.camera.zoomAt(d / lastPinch, cx, cy);
+    lastPinch = d;
+  }
+});
+const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = null; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); renderer.camera.zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
+canvas.addEventListener('dblclick', () => renderer.camera.fitAll());
+</script>
+</body>
+</html>

@@ -14,10 +14,14 @@
 // sont convertis en Float32 avant fusion, condition exigée par `mergeGeometries` et `BatchedMesh`.
 // Les champs `scale` et `yaw` du manifeste sont informatifs (déjà appliqués dans les sommets).
 //
-// API : `await loadModels(url)` → { get(id), has(id), fallback(id), resolve(id), ids, palette, materials, dispose() }
-//   - get(id)      → { geometry, material, height, source: 'glb' } ou null si absent
+// API : `await loadModels(url)` → { get(id), has(id), fallback(id), resolve(id), getPart(id, name), partNames(id),
+//                                   ids, palette, materials, dispose() }
+//   - get(id)      → { geometry, material, height, source: 'glb', parts } ou null si absent
 //   - fallback(id) → { geometry, material, height, source: 'fallback' } (boîte 0,85 × h × 0,85
 //                    colorée par famille ; arbres, fleurs, rochers et cultures ont une forme simple)
+//   - getPart(id, name) → { geometry, material, pivot: [x, y, z], height } : un nœud du manifeste déclaré
+//                    dans `exclude` (sinon `nodes`) reste HORS de la fusion, géométrie exprimée au pivot
+//                    (origine du nœud) ; c'est ainsi que les pales d'éolienne tournent (effects.js).
 // Toutes les géométries portent position, normal, color (Float32), sont centrées en X/Z, posées sur y = 0.
 
 import * as THREE from 'three';
@@ -403,17 +407,54 @@ function resolveUrl(manifestUrl, file) {
 const _white = new THREE.Color(1, 1, 1);
 
 /**
- * Convertit une scène GLTF en une géométrie unique à couleurs de sommets. Renvoie
- * { geometry, kind: 'colored' | 'textured', texture } ; `textured` seulement si une texture n'a pas
- * pu être échantillonnée (la géométrie garde alors ses UV).
+ * Noms des nœuds d'un modèle à garder HORS de la fusion (pièces animées à part : pales d'éolienne,
+ * cheminées…) : le champ `exclude` du manifeste, sinon `nodes` (nœuds conservés par l'import, pivot
+ * au bon endroit). Toujours un tableau de chaînes.
  */
-function bakeScene(scene, textureCache) {
+export function excludedNodeNames(entry) {
+  if (!entry) return [];
+  const list = Array.isArray(entry.exclude) ? entry.exclude : (Array.isArray(entry.nodes) ? entry.nodes : []);
+  return list.filter((n) => typeof n === 'string' && n.length > 0);
+}
+
+/** Le nœud exclu (lui-même ou un ancêtre) qui porte `obj`, ou null. */
+function excludedOwner(obj, names) {
+  if (!names.length) return null;
+  for (let o = obj; o; o = o.parent) if (names.includes(o.name)) return o;
+  return null;
+}
+
+/** Translation d'une matrice (colonne 4) dans `out`. */
+function matrixPosition(m, out) {
+  return out.set(m.elements[12], m.elements[13], m.elements[14]);
+}
+
+/**
+ * Convertit une scène GLTF en une géométrie unique à couleurs de sommets. Renvoie
+ * { geometry, kind: 'colored' | 'textured', texture, parts } ; `textured` seulement si une texture n'a
+ * pas pu être échantillonnée (la géométrie garde alors ses UV).
+ * `excludeNames` : nœuds laissés hors de la fusion ; chacun devient une pièce de `parts`
+ * ({ name: { geometry, pivot: [x, y, z] } }), géométrie exprimée AU PIVOT (origine du nœud), le pivot
+ * dans le repère final du modèle (centré en X/Z, posé sur y = 0 avec les pièces comprises dans la boîte).
+ */
+function bakeScene(scene, textureCache, excludeNames = []) {
   scene.updateMatrixWorld(true);
   const colored = [];
   const textured = [];
+  const partsByNode = new Map(); // nœud exclu → { geometries: [], pivot: Vector3 }
   let texture = null;
+  const local = new THREE.Matrix4();
   scene.traverse((obj) => {
     if (!obj.isMesh || !obj.geometry) return;
+    const owner = excludedOwner(obj, excludeNames);
+    let part = null;
+    if (owner) {
+      part = partsByNode.get(owner);
+      if (!part) {
+        part = { geometries: [], pivot: matrixPosition(owner.matrixWorld, new THREE.Vector3()) };
+        partsByNode.set(owner, part);
+      }
+    }
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
     const groups = obj.geometry.groups.length && Array.isArray(obj.material) ? obj.geometry.groups : [null];
     for (const group of groups) {
@@ -425,16 +466,23 @@ function bakeScene(scene, textureCache) {
       const tint = material && material.color ? material.color : _white;
       const map = material && material.map;
       normalizeAttributes(g, Boolean(map));
-      g.applyMatrix4(obj.matrixWorld);
+      if (part) {
+        // Pièce animée : sommets relatifs au pivot (la rotation et l'échelle du nœud sont cuites, pas sa position).
+        local.copy(obj.matrixWorld);
+        local.elements[12] -= part.pivot.x; local.elements[13] -= part.pivot.y; local.elements[14] -= part.pivot.z;
+        g.applyMatrix4(local);
+      } else {
+        g.applyMatrix4(obj.matrixWorld);
+      }
+      let isTextured = false;
       if (map && g.attributes.uv) {
         const pixels = readTexturePixels(map, textureCache);
         if (pixels) {
           bakeTextureToColors(g, map, pixels, tint);
-          colored.push(g);
         } else {
           texture = texture || map;
           if (!g.attributes.color) paintGeometryLinear(g, tint.r, tint.g, tint.b);
-          textured.push(g);
+          isTextured = true;
         }
       } else {
         g.deleteAttribute('uv');
@@ -445,21 +493,55 @@ function bakeScene(scene, textureCache) {
         } else {
           paintGeometryLinear(g, tint.r, tint.g, tint.b);
         }
+      }
+      if (part) {
+        // Les pièces restent à couleurs de sommets (texture illisible → teinte du matériau).
+        if (g.attributes.uv) g.deleteAttribute('uv');
+        part.geometries.push(g);
+      } else if (isTextured) {
+        textured.push(g);
+      } else {
         colored.push(g);
       }
     }
   });
-  if (!colored.length && !textured.length) throw new Error('aucun mesh dans le GLB');
-  let parts, kind;
+  if (!colored.length && !textured.length) {
+    if (!partsByNode.size) throw new Error('aucun mesh dans le GLB');
+    // Tout le modèle était exclu : on garde tout fusionné (rien à animer séparément).
+    for (const part of partsByNode.values()) {
+      for (const g of part.geometries) { g.translate(part.pivot.x, part.pivot.y, part.pivot.z); colored.push(g); }
+    }
+    partsByNode.clear();
+  }
+  let mainParts, kind;
   if (textured.length) {
     // Repli mixte : les parties colorées reçoivent des UV nulles (la texture y est multipliée par la couleur).
     for (const g of colored) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
-    parts = textured.concat(colored); kind = 'textured';
+    mainParts = textured.concat(colored); kind = 'textured';
   } else {
-    parts = colored; kind = 'colored';
+    mainParts = colored; kind = 'colored';
   }
-  const geometry = groundGeometry(mergeParts(parts));
-  return { geometry, kind, texture };
+  const geometry = mergeParts(mainParts);
+  const parts = {};
+  for (const [node, part] of partsByNode) {
+    parts[node.name] = { geometry: mergeParts(part.geometries), pivot: part.pivot };
+  }
+  // Pose sur y = 0 et centrage X/Z d'après la boîte de TOUT le modèle (pièces comprises, à leur pivot) :
+  // le modèle garde exactement la place que lui a donnée l'import, pales en place ou non.
+  const box = geometry.boundingBox.clone();
+  const partBox = new THREE.Box3();
+  for (const part of Object.values(parts)) {
+    partBox.copy(part.geometry.boundingBox).translate(part.pivot);
+    box.union(partBox);
+  }
+  const dx = -(box.min.x + box.max.x) / 2, dy = -box.min.y, dz = -(box.min.z + box.max.z) / 2;
+  geometry.translate(dx, dy, dz);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  for (const part of Object.values(parts)) {
+    part.pivot = [part.pivot.x + dx, part.pivot.y + dy, part.pivot.z + dz];
+  }
+  return { geometry, kind, texture, parts };
 }
 
 /**
@@ -504,7 +586,7 @@ export async function loadModels(manifestUrl, options = {}) {
       try {
         const url = resolveUrl(manifestUrl, entry.file || `${id}.glb`);
         const gltf = await loader.loadAsync(url);
-        const { geometry, kind, texture } = bakeScene(gltf.scene, textureCache);
+        const { geometry, kind, texture, parts: rawParts } = bakeScene(gltf.scene, textureCache, excludedNodeNames(entry));
         let material = vertexMaterial;
         if (kind === 'textured' && texture) {
           if (!texturedMaterials.has(texture.uuid)) {
@@ -513,7 +595,11 @@ export async function loadModels(manifestUrl, options = {}) {
           }
           material = texturedMaterials.get(texture.uuid);
         }
-        entries.set(id, { geometry, material, height: geometry.boundingBox.max.y, source: 'glb', entry });
+        const parts = {};
+        for (const [name, p] of Object.entries(rawParts)) {
+          parts[name] = { name, geometry: p.geometry, material: vertexMaterial, pivot: p.pivot, height: p.geometry.boundingBox.max.y, source: 'glb' };
+        }
+        entries.set(id, { geometry, material, height: geometry.boundingBox.max.y, source: 'glb', entry, parts });
       } catch (err) {
         errors.push({ id, error: String((err && err.message) || err) });
         console.warn(`[models] modèle « ${id} » illisible : remplacement.`, err);
@@ -542,8 +628,25 @@ export async function loadModels(manifestUrl, options = {}) {
     },
     /** Modèle ou remplacement : ne renvoie jamais null. */
     resolve(id) { return entries.get(id) || api.fallback(id); },
+    /**
+     * Pièce laissée hors de la fusion (nœud `exclude` / `nodes` du manifeste), par exemple
+     * `getPart('wind-turbine', 'blades')` → { name, geometry, material, pivot: [x, y, z], height } ;
+     * la géométrie est exprimée au pivot (origine du nœud) dans le repère du modèle. null si absente.
+     */
+    getPart(id, name) {
+      const e = entries.get(id);
+      return (e && e.parts && e.parts[name]) || null;
+    },
+    /** Noms des pièces séparées d'un modèle (vide si aucune ou modèle absent). */
+    partNames(id) {
+      const e = entries.get(id);
+      return e && e.parts ? Object.keys(e.parts) : [];
+    },
     dispose() {
-      for (const e of entries.values()) e.geometry.dispose();
+      for (const e of entries.values()) {
+        e.geometry.dispose();
+        if (e.parts) for (const p of Object.values(e.parts)) p.geometry.dispose();
+      }
       for (const f of fallbacks.values()) f.geometry.dispose();
       for (const m of texturedMaterials.values()) { if (m.map) m.map.dispose(); m.dispose(); }
       vertexMaterial.dispose();

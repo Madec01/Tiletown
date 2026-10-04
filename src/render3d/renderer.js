@@ -18,6 +18,7 @@ import { loadModels } from './models.js';
 import { createGround } from './ground.js';
 import { createBuildings } from './buildings.js';
 import { createRoads } from './roads.js';
+import { createEffects } from './effects.js';
 import { layerColors } from './layers.js';
 
 /** Direction du soleil (du centre de la carte vers la lumière) : ouest-sud-ouest, haut. */
@@ -117,7 +118,10 @@ export async function createRenderer(canvas, options = {}) {
   const ground = createGround();
   const buildings = createBuildings(models, { strategy, modelFor: options.modelFor, shadows });
   const roads = createRoads(models, { markings });
-  scene.add(ground.group, buildings.group, roads.group);
+  // Effets animés (étape 2) : fumée des cheminées, pales des éoliennes ; l'eau animée vit dans ground.
+  const fx = createEffects(models, { palette: PALETTE, shadows });
+  scene.add(ground.group, buildings.group, roads.group, fx.group);
+  let elapsed = 0; // temps d'animation cumulé (s)
 
   let layer = { kind: 'none', values: null };
 
@@ -203,6 +207,8 @@ export async function createRenderer(canvas, options = {}) {
 
     setWorld(nextWorld) {
       world = nextWorld;
+      fx.setWorld(world);
+      animating = true; // vallée vivante : eau, fumée, pales (et acteurs via setActors)
       ground.setWorld(world);
       buildings.setWorld(world);
       roads.setWorld(world);
@@ -249,8 +255,12 @@ export async function createRenderer(canvas, options = {}) {
     render(dt = 0) {
       if (disposed || contextLost) return false;
       if (!dirty && !animating) return false;
-      void dt; // réservé aux animations (étape 2)
       const t0 = performance.now();
+      if (animating && dt > 0) {
+        elapsed += dt;
+        fx.update(dt, elapsed);
+        if (typeof ground.update === 'function') ground.update(dt);
+      }
       renderer.render(scene, threeCamera);
       last.frameMs = performance.now() - t0;
       last.calls = renderer.info.render.calls;
@@ -275,6 +285,7 @@ export async function createRenderer(canvas, options = {}) {
         buildings: { ...buildings.stats },
         roads: { ...roads.stats },
         ground: { ...ground.stats },
+        effects: fx.stats ? fx.stats() : null,
         models: { loaded: models.ids.length, errors: models.errors.length },
       };
     },
@@ -284,6 +295,7 @@ export async function createRenderer(canvas, options = {}) {
       disposed = true;
       canvas.removeEventListener('webglcontextlost', onContextLost, false);
       canvas.removeEventListener('webglcontextrestored', onContextRestored, false);
+      fx.dispose();
       buildings.dispose();
       roads.dispose();
       ground.dispose();
