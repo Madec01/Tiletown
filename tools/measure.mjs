@@ -143,6 +143,33 @@ async function measureScenario(browser, base, scenario) {
     return times[Math.floor(times.length / 2)];
   });
   await page.waitForTimeout(150);
+  // Scénario animé : on laisse tourner la boucle réelle 2 s et on compare les positions des acteurs.
+  let motion = null;
+  if (scenario.animated) {
+    const sample = () => page.evaluate(() => {
+      const t = globalThis.__tiletown;
+      const list = t.actors && t.actors.list ? t.actors.list : [];
+      return list.map((a) => [a.kind, a.x, a.z, a.y]);
+    });
+    const before = await sample();
+    const shot1 = path.join(OUT, scenario.file.replace('.png', '-t0.png'));
+    await page.screenshot({ path: shot1, scale: 'css' });
+    await page.waitForTimeout(2000);
+    const after = await sample();
+    const n = Math.min(before.length, after.length);
+    let moved = 0;
+    const byKind = {};
+    for (let i = 0; i < n; i++) {
+      byKind[after[i][0]] = (byKind[after[i][0]] || 0) + 1;
+      const d = Math.hypot(after[i][1] - before[i][1], after[i][2] - before[i][2], (after[i][3] || 0) - (before[i][3] || 0));
+      if (d > 0.05) moved++;
+    }
+    const updateMs = await page.evaluate(() => {
+      const t = globalThis.__tiletown;
+      return t.stats && typeof t.stats === 'function' ? (t.stats().updateMs ?? null) : null;
+    });
+    motion = { actors: n, moved, byKind, updateMs, screenshotT0: path.relative(ROOT, shot1) };
+  }
   const stats = await page.evaluate(() => globalThis.__tiletown.stats());
   const gl = await page.evaluate(() => {
     const r = globalThis.__tiletown.renderer;
@@ -154,7 +181,7 @@ async function measureScenario(browser, base, scenario) {
   const shot = path.join(OUT, scenario.file);
   await page.screenshot({ path: shot, scale: 'css' });
   await context.close();
-  return { ...scenario, readyMs, frameMedianMs, stats, gl, logs, screenshot: path.relative(ROOT, shot) };
+  return { ...scenario, readyMs, frameMedianMs, stats, gl, logs, motion, screenshot: path.relative(ROOT, shot) };
 }
 
 async function main() {
@@ -168,6 +195,10 @@ async function main() {
   ];
   if (existsSync(path.join(ROOT, fixture))) {
     scenarios.push({ name: 'Charge : 24 × 24, ≈ 500 îlots', page: `${fixture}?stats=1&stress=1`, width: 412, height: 915, dpr: 2.625, file: 'map-stress.png' });
+  }
+  if (hasMain && !PAGE) {
+    // Étape 2 : vallée animée (acteurs, fumée, eau) sur la page réelle, boucle qui tourne 2 s.
+    scenarios.push({ name: 'Vallée animée (2 s de boucle)', page: 'dev.html?stats=1', width: 412, height: 915, dpr: 2.625, file: 'map-anim.png', animated: true });
   }
 
   const exe = findChromium();
@@ -202,6 +233,15 @@ async function main() {
     ['Captures enregistrées', results.map((r) => r.screenshot).join(', '), results.every((r) => existsSync(path.join(ROOT, r.screenshot)))],
     ['Aucune erreur de page', results.reduce((n, r) => n + r.logs.filter((l) => l.startsWith('[pageerror]')).length, 0) + ' erreur(s)', results.every((r) => !r.logs.some((l) => l.startsWith('[pageerror]')))],
   ];
+  const anim = results.find((r) => r.animated);
+  if (anim) {
+    const m = anim.motion || { actors: 0, moved: 0, byKind: {}, updateMs: null };
+    const kinds = Object.entries(m.byKind).map(([k, n]) => `${k} ${n}`).join(', ');
+    rows.push(['§8.4 Appels de dessin ≤ 60 avec la vallée animée', `${anim.stats.calls}`, anim.stats.calls <= CRITERIA.calls]);
+    rows.push(['§8.4 Triangles ≤ 200 000 avec la vallée animée', `${anim.stats.triangles}`, anim.stats.triangles <= 200000]);
+    rows.push(['§8.4 Acteurs présents et en mouvement (≥ 50 % déplacés en 2 s)', `${m.moved} / ${m.actors} déplacés (${kinds || 'aucun acteur'})`, m.actors > 0 && m.moved >= m.actors * 0.5]);
+    rows.push(['§8.4 Mise à jour CPU < 4 ms par image (indicatif, SwiftShader)', m.updateMs == null ? 'non mesurée' : `${m.updateMs.toFixed(2)} ms`, m.updateMs != null && m.updateMs < 4]);
+  }
 
   const report = {
     date: new Date().toISOString(),
