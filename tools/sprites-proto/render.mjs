@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+import { writeFileSync } from 'node:fs';
+const t0 = Date.now();
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 400, height: 400 }, deviceScaleFactor: 1 });
+page.on('console', m => console.log('[page]', m.text()));
+page.on('pageerror', e => console.log('[pageerror]', e.message));
+await page.goto('file://' + process.cwd() + '/scene.html');
+await page.waitForFunction(() => window.__result, null, { timeout: 60000 });
+const r = await page.evaluate(() => window.__result);
+const png = await page.evaluate(() => window.__png);
+writeFileSync('ilot-2x.png', Buffer.from(png.split(',')[1], 'base64'));
+console.log(JSON.stringify({ ...r, totalMs: Date.now() - t0 }, null, 1));
+await browser.close();

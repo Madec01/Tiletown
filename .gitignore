@@ -1,0 +1,4 @@
+node_modules/
+__pycache__/
+# Garde-fou : un éventuel pack sous licence « maison » (non redistribuable) irait ici, jamais dans le dépôt
+assets/licensed/
