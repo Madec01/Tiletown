@@ -1,0 +1,651 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tiletown — interface HTML/CSS posée PAR-DESSUS la scène 3D (canvas plein écran).
+   Pensée d'abord pour le téléphone en portrait (docs/MOBILE.md) : écran de référence 412 × 915,
+   doit tenir de 360 × 740 à 430 × 932 et en fenêtre PC.
+
+   Plan de l'écran (portrait) :
+     #stage > #scene      la scène three.js, plein écran, sous tout le reste (touch-action: none)
+     #ui                  calque de l'interface (pointer-events: none ; ses enfants le réactivent)
+       #hud               barre du haut : 4 jauges (Population, Bonheur, Nature, Argent), date, pause/vitesse
+       #stats             mesures du prototype (appels de dessin, triangles, ms/image, i/s), en haut à droite
+       #sheet-layer       feuille coulissante du bas (catalogue, fiches)
+       #toasts            messages temporaires (au-dessus des onglets)
+       #tabbar            barre d'onglets du catalogue (≥ 56 px) : familles + Démolir + Calques
+       #rotate            « Tournez votre téléphone » (paysage sur téléphone)
+       #loading           écran de chargement et garde-fou (src/loader.js)
+
+   Règles tactiles (non négociables) : toute cible ≥ 48 × 48 px CSS ; texte ≥ 14 px (12 px pour les
+   mentions secondaires) ; chiffres importants ≥ 18 px ; marges de sécurité (encoche, barre de gestes) ;
+   100dvh / visualViewport (jamais 100vh seul) ; aucune information seulement au survol.
+
+   Couleurs : la palette commune (src/data/palette.js, 24 teintes) est recopiée ici en variables
+   --c-<rôle> (tests/style.test.js vérifie qu'elles correspondent). Les teintes dérivées (encre plus
+   sombre, fonds de boutons) sont obtenues par color-mix() à partir de la palette, jamais inventées.
+   Contraste : texte ≥ 4,5:1 sur son fond (encre --ink sur crème : ≈ 9:1 ; crème sur --btn-bg : ≈ 5,4:1).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Palette commune (src/data/palette.js) ── */
+  --c-grass-light: #8fcf6f;
+  --c-grass: #6fb85a;
+  --c-forest-dark: #4f9a4a;
+  --c-wheat: #e9c46a;
+  --c-soil: #c9a86a;
+  --c-river: #5fb3d9;
+  --c-lake-deep: #3f8fc2;
+  --c-wetland: #7fb89a;
+  --c-rock: #a8a39a;
+  --c-rock-light: #c9c4b8;
+  --c-roof-red: #d9654a;
+  --c-roof-orange: #e59a5a;
+  --c-roof-slate: #7a8fb5;
+  --c-wall-cream: #f4efe6;
+  --c-wall-beige: #e8d8c0;
+  --c-wall-tan: #c9b8a0;
+  --c-wood: #8b5a3c;
+  --c-asphalt: #5a5a66;
+  --c-sidewalk: #9a9aa6;
+  --c-marking: #f2f2f2;
+  --c-metal: #7d8591;
+  --c-metal-light: #b8bcc4;
+  --c-blossom: #e85d75;
+  --c-sun: #f7d84a;
+
+  /* ── Rôles de l'interface (dérivés de la palette) ── */
+  --bg: var(--c-forest-dark);                                       /* fond de page (derrière la scène) */
+  --panel: var(--c-wall-cream);                                     /* panneaux, cartes */
+  --panel-2: var(--c-wall-beige);                                   /* panneaux secondaires */
+  --line: var(--c-wall-tan);                                        /* filets */
+  --ink: #3a3a42;                                                   /* texte principal (repli sans color-mix) */
+  --ink-soft: var(--c-asphalt);                                     /* texte secondaire : 5,9:1 sur crème */
+  --btn-bg: #37693a;                                                /* boutons principaux (repli) */
+  --btn-ink: var(--c-wall-cream);
+  --accent: var(--c-forest-dark);
+  --danger: var(--c-roof-red);
+  --focus: var(--c-sun);
+  --shadow: 0 2px 0 rgba(58, 58, 66, 0.18), 0 8px 24px rgba(58, 58, 66, 0.18);
+
+  /* Jauges */
+  --g-population: var(--c-roof-slate);
+  --g-happiness: var(--c-blossom);
+  --g-nature: var(--c-forest-dark);
+  --g-money: var(--c-wheat);
+
+  /* Hauteur réelle de l'écran (écrite par src/main.js depuis visualViewport ; 100dvh sinon) */
+  --app-h: 100dvh;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  /* Zones couvertes par la barre du haut et les onglets (écrites par src/main.js) */
+  --inset-top: 0px;
+  --inset-bottom: 0px;
+  --sheet-h: 0px;
+  --tab-h: 64px;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 120ms;
+  --t-med: 220ms;
+
+  color-scheme: light;
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  :root {
+    --ink: color-mix(in srgb, var(--c-asphalt) 65%, #000);
+    --btn-bg: color-mix(in srgb, var(--c-forest-dark) 70%, #000);
+  }
+}
+
+@supports not (height: 100dvh) {
+  :root { --app-h: 100vh; }
+}
+
+/* Taille de base 16 px ; réglage « Taille du texte » (src/ui/a11y.js) : --text-scale = 1 à 1,5.
+   Toute l'interface est en rem : textes, marges et largeurs grandissent ensemble. */
+html { font-size: calc(16px * var(--text-scale, 1)); }
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: var(--app-h);
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 500;
+  line-height: 1.25;
+  font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+  touch-action: manipulation; /* pas de zoom au double toucher, pas de délai de 300 ms */
+}
+body { position: fixed; inset: 0; }
+
+img { -webkit-user-drag: none; }
+button,
+input { font: inherit; color: inherit; touch-action: manipulation; }
+button { -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+b,
+strong { font-weight: 800; }
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* Mouvements réduits (préférence du système ou réglage) */
+html.reduced-motion *,
+html.reduced-motion *::before,
+html.reduced-motion *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+
+/* ─── Scène ─────────────────────────────────────────────────────────────────── */
+#stage {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: var(--app-h);
+  overflow: hidden;
+  background: var(--bg);
+}
+#scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* les gestes (glisser, pincer) sont au canvas, pas au navigateur */
+}
+
+/* ─── Calque de l'interface ─────────────────────────────────────────────────── */
+#ui {
+  position: fixed;
+  inset: 0;
+  height: var(--app-h);
+  pointer-events: none; /* le doigt atteint la scène partout où il n'y a pas d'élément */
+}
+#ui > * { pointer-events: auto; }
+#ui > #toasts,
+#ui > #stats { pointer-events: none; }
+
+/* ─── Boutons ───────────────────────────────────────────────────────────────── */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--btn-bg);
+  color: var(--btn-ink);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  transition: transform var(--t-fast) ease, filter var(--t-fast) ease;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .btn:hover { filter: brightness(1.08); }
+}
+.btn:active { transform: translateY(2px); box-shadow: none; filter: brightness(0.95); }
+.btn--ghost { background: var(--panel-2); color: var(--ink); box-shadow: none; }
+.btn--danger { background: var(--c-roof-red); color: #fff; }
+.btn--big { font-size: 1.125rem; min-height: 56px; min-width: 14rem; }
+.btn--icon { padding: 0; width: 48px; }
+.btn[aria-disabled='true'] { opacity: 0.6; cursor: not-allowed; }
+
+/* ─── Barre du haut (HUD) ───────────────────────────────────────────────────── */
+#hud {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 48px;
+  grid-template-rows: auto auto;
+  gap: 4px 6px;
+  padding: calc(var(--safe-t) + 6px) calc(var(--safe-r) + 8px) 6px calc(var(--safe-l) + 8px);
+  background: var(--panel);
+  border-bottom: 2px solid var(--line);
+  box-shadow: 0 2px 0 rgba(58, 58, 66, 0.08);
+}
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 2px 5px 3px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  box-shadow: inset 4px 0 0 var(--g, var(--c-sidewalk)); /* barre de couleur de la jauge, à gauche */
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--t-fast);
+}
+.gauge:active { transform: translateY(1px); filter: brightness(0.97); }
+.gauge-label {
+  display: block;
+  max-width: 100%;
+  font-size: 0.75rem; /* 12 px : mention secondaire */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Écrans étroits : libellé court (« Habitants » pour « Population ») plutôt qu'un libellé tronqué. */
+.gauge-label-short { display: none; }
+@media (max-width: 379px) {
+  .gauge-label-long { display: none; }
+  .gauge-label-short { display: inline; }
+}
+.gauge-value {
+  font-size: 1.125rem; /* 18 px : chiffre important */
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gauge--population { --g: var(--g-population); }
+.gauge--happiness { --g: var(--g-happiness); }
+.gauge--nature { --g: var(--g-nature); }
+.gauge--money { --g: var(--g-money); }
+.gauge--money.is-negative .gauge-value { color: var(--c-roof-red); }
+
+.hud-date {
+  grid-column: 1 / 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 0.875rem; /* 14 px */
+  font-weight: 700;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-date .date-season { color: var(--ink); }
+.hud-date .date-sep { opacity: 0.5; }
+
+.hud-speed {
+  grid-column: 5;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--btn-bg);
+  color: var(--btn-ink);
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+.hud-speed:active { transform: translateY(2px); box-shadow: none; }
+.hud-speed .speed-glyph { font-size: 1.25rem; line-height: 1; }
+.hud-speed .speed-text { font-size: 0.75rem; font-weight: 800; }
+.hud-speed.is-paused { background: var(--c-roof-orange); color: var(--ink); }
+
+/* ─── Mesures du prototype (#stats) ─────────────────────────────────────────── */
+#stats {
+  position: absolute;
+  z-index: 15;
+  top: calc(var(--inset-top) + 6px);
+  right: calc(var(--safe-r) + 6px);
+  display: none;
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: rgba(58, 58, 66, 0.72);
+  color: var(--c-marking);
+  font: 600 11px/1.35 ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: pre;
+  pointer-events: none;
+}
+#stats.is-visible { display: block; }
+
+/* ─── Barre d'onglets du catalogue (bas) ────────────────────────────────────── */
+#tabbar {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 2px;
+  min-height: calc(56px + var(--safe-b));
+  padding: 4px calc(var(--safe-r) + 4px) calc(var(--safe-b) + 4px) calc(var(--safe-l) + 4px);
+  background: var(--panel);
+  border-top: 2px solid var(--line);
+  box-shadow: 0 -2px 0 rgba(58, 58, 66, 0.06);
+}
+.tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 48px;
+  min-height: 56px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background var(--t-fast), transform var(--t-fast);
+}
+.tab:active { transform: translateY(1px); background: var(--panel-2); }
+.tab.is-active { background: var(--panel-2); color: var(--ink); box-shadow: inset 0 -3px 0 var(--accent); }
+.tab--tool { color: var(--ink-soft); }
+.tab--tool.is-active { box-shadow: inset 0 -3px 0 var(--c-roof-red); }
+.tab-ico {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--tab-c, var(--c-sidewalk));
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12);
+}
+.tab--habitat { --tab-c: var(--c-roof-red); }
+.tab--activity { --tab-c: var(--c-roof-slate); }
+.tab--services { --tab-c: var(--c-sun); }
+.tab--infrastructure { --tab-c: var(--c-metal); }
+.tab--nature { --tab-c: var(--c-forest-dark); }
+.tab--demolish { --tab-c: var(--c-roof-orange); }
+.tab--layers { --tab-c: var(--c-river); }
+.tab-label {
+  max-width: 100%;
+  font-size: 0.75rem; /* 12 px */
+  font-weight: 600; /* (700 tronquait « Réseaux » dans un onglet de 48 px sur 360 px de large) */
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Feuille coulissante du bas ────────────────────────────────────────────── */
+#sheet-layer {
+  position: absolute;
+  z-index: 25;
+  left: 0;
+  right: 0;
+  top: var(--inset-top);
+  bottom: var(--inset-bottom);
+  pointer-events: none;
+}
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(58, 58, 66, 0);
+  transition: background var(--t-med) ease;
+}
+#sheet-layer.is-open .sheet-backdrop { pointer-events: auto; background: rgba(58, 58, 66, 0.16); }
+.sheet {
+  --avail: calc(var(--app-h) - var(--inset-top) - var(--inset-bottom));
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  /* Au moins ~180 px de carte restent visibles au-dessus. */
+  max-height: min(58%, calc(var(--avail) - 180px));
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 0 calc(var(--safe-r) + 10px) 0 calc(var(--safe-l) + 10px);
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--panel);
+  box-shadow: 0 -2px 0 var(--line), 0 -8px 24px rgba(58, 58, 66, 0.18);
+  pointer-events: auto;
+  transform: translateY(calc(100% + 24px));
+  transition: transform 240ms var(--ease-out), visibility 0s linear 240ms;
+  visibility: hidden;
+  touch-action: pan-y;
+}
+#sheet-layer.is-open .sheet { transform: none; visibility: visible; transition: transform 260ms var(--ease-out); }
+.sheet-grab {
+  display: grid;
+  place-items: center;
+  flex: none;
+  height: 18px;
+  pointer-events: none; /* décorative : la feuille se ferme par le ✕ (48 px) ou le fond */
+}
+.sheet-grab-bar { display: block; width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
+.sheet-head { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 0 4px; }
+.sheet-title { flex: 1; min-width: 0; margin: 0; font-size: 1.25rem; font-weight: 800; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 1.25rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sheet-x:active { transform: translateY(1px); filter: brightness(0.95); }
+.sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0 calc(12px + var(--safe-b));
+  scrollbar-width: thin;
+}
+.sheet-hint { margin: 8px 2px 10px; font-size: 0.875rem; color: var(--ink-soft); line-height: 1.3; }
+
+/* Cartes du catalogue : ≥ 64 px de haut, 2 colonnes sur téléphone */
+.card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 560px) { .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 2px solid var(--panel-2);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--t-fast), border-color var(--t-fast);
+}
+.card:active { transform: translateY(1px); border-color: var(--accent); }
+.card.is-selected { border-color: var(--accent); background: var(--panel-2); }
+.card-swatch { flex: none; width: 36px; height: 36px; border-radius: 9px; background: var(--sw, var(--c-sidewalk)); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12); }
+.card-body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.card-title { font-size: 0.9375rem; font-weight: 800; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-price { font-size: 0.875rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+/* ─── Messages (toasts) ─────────────────────────────────────────────────────── */
+#toasts {
+  position: absolute;
+  z-index: 35;
+  left: 50%;
+  /* Au-dessus des onglets et de la feuille ouverte ; jamais sur la barre du haut. */
+  bottom: min(calc(var(--inset-bottom) + var(--sheet-h) + 10px), calc(var(--app-h) - var(--inset-top) - 62px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 6px;
+  width: min(30rem, calc(100vw - 16px));
+  pointer-events: none;
+}
+.toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 6px 12px 6px 10px;
+  border-radius: var(--radius-sm);
+  border-left: 5px solid var(--toast-c, var(--c-river));
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 0.9375rem; /* 15 px */
+  box-shadow: var(--shadow);
+  pointer-events: none; /* les messages ne captent jamais le doigt (seul leur bouton « Voir ») */
+  animation: toast-in 280ms var(--ease-pop);
+}
+.toast--info { --toast-c: var(--c-river); }
+.toast--success { --toast-c: var(--c-forest-dark); }
+.toast--warn { --toast-c: var(--c-roof-orange); }
+.toast--error { --toast-c: var(--c-roof-red); }
+.toast--money { --toast-c: var(--c-wheat); }
+.toast-body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.toast-title { font-weight: 800; }
+.toast-text { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+.toast-go { pointer-events: auto; flex: none; min-height: 48px; }
+.toast.is-leaving { animation: toast-out 240ms ease forwards; }
+.toast.is-bump { animation: toast-bump 300ms var(--ease-pop); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@keyframes toast-bump { 40% { transform: scale(1.03); } }
+
+/* ─── Téléphone tenu à l'horizontale ────────────────────────────────────────── */
+#rotate {
+  position: absolute;
+  z-index: 200;
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--c-wall-cream);
+  text-align: center;
+}
+body.is-rotated #rotate { display: grid; }
+.rotate-box { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.rotate-phone {
+  width: 40px;
+  height: 68px;
+  border: 4px solid var(--c-wall-cream);
+  border-radius: 8px;
+  animation: rotate-phone 2.2s ease-in-out infinite;
+}
+@keyframes rotate-phone {
+  0%, 30% { transform: rotate(-90deg); }
+  60%, 100% { transform: rotate(0deg); }
+}
+.rotate-title { margin: 8px 0 0; font-size: 1.375rem; font-weight: 800; }
+.rotate-text { margin: 0; font-size: 1rem; max-width: 22rem; }
+
+/* ─── Chargement et garde-fou ───────────────────────────────────────────────── */
+#loading {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  place-items: safe center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 16px);
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(244, 239, 230, 0.12), transparent 60%),
+    var(--bg);
+  color: var(--c-wall-cream);
+  transition: opacity 450ms ease, visibility 0s linear 450ms;
+}
+#loading.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
+.loading-box { display: flex; flex-direction: column; align-items: center; gap: 16px; min-width: 0; max-width: 100%; text-align: center; }
+.logo-title { margin: 0; font-size: 2.5rem; font-weight: 900; letter-spacing: 0.02em; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.25); }
+.logo-sub { margin: -10px 0 0; font-size: 1rem; opacity: 0.9; }
+.logo-tile {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, var(--c-grass-light), var(--c-grass));
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.12), 0 6px 0 rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+.logo-tile::before { content: ''; position: absolute; left: 22px; top: 30px; width: 28px; height: 22px; background: var(--c-wall-cream); border-radius: 2px; }
+.logo-tile::after { content: ''; position: absolute; left: 18px; top: 16px; width: 0; height: 0; border-left: 18px solid transparent; border-right: 18px solid transparent; border-bottom: 16px solid var(--c-roof-red); }
+.loading-gauge {
+  position: relative;
+  width: min(22rem, 80vw);
+  height: 14px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2px rgba(244, 239, 230, 0.5);
+}
+.loading-fill {
+  height: 100%;
+  border-radius: 7px;
+  background: var(--c-sun);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 180ms ease;
+}
+.loading-text { margin: 0; font-size: 1rem; }
+.loading-error { margin: 0; max-width: min(30rem, 100%); color: #ffd6cf; font-size: 0.9375rem; line-height: 1.35; }
+.boot-help { max-width: min(30rem, 100%); font-size: 0.9375rem; line-height: 1.35; }
+.boot-repair { min-height: 48px; }
+.boot-details { width: min(30rem, 100%); max-width: 100%; font-size: 0.875rem; }
+.boot-details > summary { min-height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: underline; }
+.boot-details > pre {
+  margin: 0;
+  padding: 8px;
+  max-height: 40vh;
+  overflow: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.noscript { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; padding: 16px; background: var(--bg); color: var(--c-wall-cream); font-size: 1.125rem; text-align: center; }
+
+/* ─── Grand écran en paysage (PC) : la carte reste au centre, l'interface est bornée en largeur ─── */
+@media (min-width: 900px) and (orientation: landscape) {
+  #hud { left: 50%; right: auto; width: min(100%, 52rem); transform: translateX(-50%); border-radius: 0 0 var(--radius) var(--radius); border: 2px solid var(--line); border-top: 0; }
+  #tabbar { left: 50%; right: auto; width: min(100%, 52rem); transform: translateX(-50%); border-radius: var(--radius) var(--radius) 0 0; border: 2px solid var(--line); border-bottom: 0; }
+}

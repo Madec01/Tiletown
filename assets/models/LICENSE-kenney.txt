@@ -1,0 +1,271 @@
+Modèles 3D de Tiletown : origine et licence
+==========================================
+
+Les fichiers GLB de ce dossier sont dérivés des kits ci-dessous, créés et distribués par Kenney
+(www.kenney.nl) sous licence Creative Commons Zero (CC0 1.0, domaine public) :
+http://creativecommons.org/publicdomain/zero/1.0/
+
+Ils ont été normalisés par tools/import-models.js (échelle, orientation, couleurs quantifiées vers la
+palette de Tiletown, assemblages, compression meshopt). Les primitives géométriques ajoutées par
+Tiletown (rues étroites, dalles, bassins, tas) sont elles aussi placées sous CC0.
+
+Kits utilisés :
+  - Car Kit — https://kenney.nl/assets/car-kit
+  - City Kit Commercial — https://kenney.nl/assets/city-kit-commercial
+  - City Kit Industrial — https://kenney.nl/assets/city-kit-industrial
+  - City Kit Roads — https://kenney.nl/assets/city-kit-roads
+  - City Kit Suburban — https://kenney.nl/assets/city-kit-suburban
+  - Fantasy Town Kit — https://kenney.nl/assets/fantasy-town-kit
+  - Modular Buildings — https://kenney.nl/assets/modular-buildings
+  - Nature Kit — https://kenney.nl/assets/nature-kit
+  - Train Kit — https://kenney.nl/assets/train-kit
+
+Texte de licence joint à chaque kit (License.txt) :
+
+----------------------------------------
+Car Kit (3.1)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 02-04-2026 14:03
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:	 twitter.com/KenneyNL
+• BlueSky:	 kenney.bsky.social
+• Instagram: instagram.com/kenney_nl
+
+----------------------------------------
+City Kit Commercial (2.1)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 21-07-2025 18:16
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:	 twitter.com/KenneyNL
+• BlueSky:	 kenney.bsky.social
+• Instagram: instagram.com/kenney_nl
+
+----------------------------------------
+City Kit Industrial (2.0)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 31-08-2026 12:22
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:	 twitter.com/KenneyNL
+• BlueSky:	 kenney.bsky.social
+• Instagram: instagram.com/kenney_nl
+
+----------------------------------------
+City Kit Roads (2.1)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 18-08-2026 10:43
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:	 twitter.com/KenneyNL
+• BlueSky:	 kenney.bsky.social
+• Instagram: instagram.com/kenney_nl
+
+----------------------------------------
+City Kit Suburban (2.0)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 23-04-2025 20:22
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:	 twitter.com/KenneyNL
+• BlueSky:	 kenney.bsky.social
+• Instagram: instagram.com/kenney_nl
+
+----------------------------------------
+Fantasy Town Kit (2.0)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 03-08-2025 13:56
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:	 twitter.com/KenneyNL
+• BlueSky:	 kenney.bsky.social
+• Instagram: instagram.com/kenney_nl
+
+----------------------------------------
+Modular Buildings (2.1)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 08-02-2024 14:01
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:   twitter.com/KenneyNL
+• Instagram: instagram.com/kenney_nl
+• Mastodon:  mastodon.gamedev.place/@kenney
+
+----------------------------------------
+Nature Kit (2.1)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 29-04-2020 01:02
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+This content is free to use in personal, educational and commercial projects.
+Support us by crediting Kenney or www.kenney.nl (this is not mandatory)
+
+		------------------------------
+
+Donate:   http://support.kenney.nl
+Request:  http://request.kenney.nl
+Patreon:  http://patreon.com/kenney/
+
+Follow on Twitter for updates:
+http://twitter.com/KenneyNL
+
+----------------------------------------
+Train Kit (1.1)
+
+Created/distributed by Kenney (www.kenney.nl)
+Creation date: 22-09-2024 23:33
+Additional credit(s): Guus Vermeulen, Tony Schaer
+
+		------------------------------
+
+License: (Creative Commons Zero, CC0)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You can use this content for personal, educational, and commercial purposes.
+
+Support by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)
+
+		------------------------------
+
+• Website : www.kenney.nl
+• Donate  : www.kenney.nl/donate
+
+• Patreon : patreon.com/kenney
+
+Follow on social media for updates:
+
+• Twitter:   twitter.com/KenneyNL
+• Instagram: instagram.com/kenney_nl
+• Mastodon:  mastodon.gamedev.place/@kenney

@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <!-- Portrait, plein écran jusque sous l'encoche (viewport-fit=cover) ; pas de zoom involontaire de la page :
+       la scène (canvas, touch-action: none) a ses propres gestes (pincer = zoom de la carte). Le réglage
+       d'accessibilité « Zoom à deux doigts » (src/ui/a11y.js) peut rendre le zoom de page au navigateur. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Tiletown : un city builder cosy en tuiles. Construisez la ville la plus prospère possible en respectant la vallée : l’air, l’eau et la faune comptent autant que l’argent.">
+  <meta name="theme-color" content="#f4efe6">
+  <title>Tiletown</title>
+  <!-- Application installable (PWA) : manifeste, icônes ; le service worker est enregistré par src/pwa.js -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tiletown">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="application-name" content="Tiletown">
+  <meta name="color-scheme" content="only light">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+  <!-- Fichier généré par tools/build.js depuis src/index.template.html (ne pas modifier à la main). -->
+  <link rel="preload" href="assets/fonts/Nunito-latin.woff2?v=ba344451ea" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/Nunito-latin-ext.woff2?v=2c8d792869" as="font" type="font/woff2" crossorigin>
+
+  <!-- Chargeur et garde-fou de démarrage (script classique, recopié depuis src/loader.js par
+       tools/build.js) : vérifie WebGL 2, télécharge le jeu en montrant la progression, réessaie en cas
+       d'échec, affiche la vraie erreur (« Détails ») et le bouton « Réparer le jeu ». -->
+  <script>window.__TILETOWN_BUILD__ = {"id":"ddd1a3fc9ef7","js":{"src":"dist/game.f15a9b737b.js","sha":"9563d73400b8bb41","size":748588},"css":["dist/game.b8ae07dec7.css"]};</script>
+  <script>
+/* Chargeur et garde-fou de démarrage de Tiletown (adapté de Seve).
+ *
+ * Script CLASSIQUE (pas un module), recopié tel quel dans index.html et dev.html par tools/build.js
+ * (jamais chargé comme fichier séparé : rien qui puisse manquer ou dater d'une autre version).
+ * Écrit en JavaScript prudent (var, pas de fonctions fléchées) : il doit pouvoir s'exécuter et
+ * afficher une erreur lisible même sur un navigateur ancien.
+ *
+ * Il lit window.__TILETOWN_BUILD__ (écrit juste avant par tools/build.js) :
+ *   { id, js: { src, sha, size }, css: [...] }      jeu empaqueté (index.html)
+ *   { id: 'dev', dev: true, module: 'src/main.js' }  modules non empaquetés (dev.html)
+ *
+ * Rôle :
+ *  0. WebGL 2 : vérifié AVANT tout téléchargement (contexte d'essai sur un canvas détaché). Absent
+ *     (≈ 1 % des Android, navigateur très ancien, accélération désactivée) → message clair et définitif,
+ *     sans bouton « Réparer » (qui n'y changerait rien), avec les « Détails » à transmettre.
+ *  1. Télécharge le paquet du jeu (dist/game.<empreinte>.js, module ES) en montrant la progression dans
+ *     la jauge, vérifie son empreinte SHA-256, puis l'exécute comme module. En cas d'échec (réseau coupé,
+ *     fichier tronqué ou altéré) : jusqu'à 3 nouveaux essais espacés (1 s, 2,5 s, 5 s), en contournant
+ *     le cache (« ?r=n », cache: 'reload').
+ *  2. Feuille de style : nouveaux essais de la même façon ; le jeu ne démarre qu'une fois le style en
+ *     place (les mesures de mise en page en dépendent).
+ *  3. Garde-fou : erreur de script, ou plus aucun progrès pendant 25 s → si une version plus récente du
+ *     service worker attend, on l'active et on recharge une seule fois (repère dans sessionStorage :
+ *     jamais de boucle) ; sinon, bouton « Réparer le jeu » et zone « Détails » (le vrai message d'erreur).
+ *  4. window.__repairGame() : désinscrit le service worker, vide les caches tiletown-*, retélécharge la
+ *     page et chaque fichier qu'elle désigne en contournant le cache HTTP, puis recharge avec « ?r=<heure> »
+ *     (retiré de l'adresse au chargement suivant). localStorage (réglages, partie) n'est jamais touché.
+ *
+ * Interface pour le jeu (src/main.js) : window.__bootProgress(0..1) (suite du chargement, après le
+ * paquet), window.__bootOk() (prêt), window.__bootFail(err), window.__bootWebGL (résultat du test 0).
+ */
+(function () {
+  'use strict';
+  var BUILD = window.__TILETOWN_BUILD__ || { id: 'inconnue', dev: true, module: 'src/main.js' };
+  var KEY = 'tiletown.bootRecovery';
+  var CACHE_PREFIX = 'tiletown-';
+  var BASE = new URL('./', location.href).href;
+  var JS_SHARE = BUILD.dev ? 0.1 : 0.35; // part de la jauge pour le téléchargement du paquet
+  var STALL_MS = 25000;
+  var BACKOFF = [1000, 2500, 5000];
+  var t0 = Date.now();
+
+  var ok = false;
+  var failed = false;
+  var blocked = false; // WebGL 2 absent : rien à réparer
+  var busy = false;
+  var shown = false;
+  var progress = 0;
+  var log = [];
+
+  // ── Adresse : « ?r=… » (rechargement forcé) est retiré ; « ?dev=1 » ouvre dev.html ────────
+  try {
+    var params = new URLSearchParams(location.search);
+    if (params.get('dev') === '1' && !BUILD.dev) {
+      params.delete('dev');
+      var qs = params.toString();
+      location.replace(BASE + 'dev.html' + (qs ? '?' + qs : '') + location.hash);
+      return;
+    }
+    if (params.has('r')) {
+      params.delete('r');
+      var rest = params.toString();
+      history.replaceState(history.state, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+  } catch (e) { /* navigateur ancien : sans importance */ }
+
+  function store(v) { try { if (v) sessionStorage.setItem(KEY, v); else sessionStorage.removeItem(KEY); } catch (e) { /* stockage bloqué */ } }
+  function tried() { try { return !!sessionStorage.getItem(KEY); } catch (e) { return true; } }
+  // Étapes normales : console.info ; échecs et nouveaux essais : console.warn (une partie qui démarre
+  // bien ne laisse aucun avertissement dans la console).
+  function note(msg, problem) {
+    var line = '[' + ((Date.now() - t0) / 1000).toFixed(1) + ' s] ' + msg;
+    log.push(line);
+    if (log.length > 40) log.shift();
+    if (problem === undefined) problem = /ÉCHEC|essai|introuvable|aucun progrès|rejetée|erreur|absent/i.test(msg);
+    try { (problem ? console.warn : console.info)('[chargement] ' + msg); } catch (e) { /* console absente */ }
+    renderDetails();
+  }
+  function errText(err) {
+    if (!err) return 'erreur inconnue';
+    if (typeof err === 'string') return err;
+    var m = err.message || String(err);
+    if (err.filename) m += ' (' + err.filename.replace(BASE, '') + ':' + (err.lineno || 0) + ':' + (err.colno || 0) + ')';
+    return m;
+  }
+
+  // ── DOM : l'écran de chargement n'existe qu'une fois la page lue ─────────────────────
+  var domReady = document.readyState !== 'loading';
+  var domWaiters = [];
+  function whenDom(fn) { if (domReady) fn(); else domWaiters.push(fn); }
+  if (!domReady) {
+    document.addEventListener('DOMContentLoaded', function () {
+      domReady = true;
+      var list = domWaiters;
+      domWaiters = [];
+      for (var i = 0; i < list.length; i++) list[i]();
+    });
+  }
+  function $(sel) { return document.querySelector(sel); }
+
+  function paint() {
+    whenDom(function () {
+      var fill = $('#loading .loading-fill');
+      var gauge = $('#loading .loading-gauge');
+      if (fill) fill.style.transform = 'scaleX(' + progress.toFixed(3) + ')';
+      if (gauge) gauge.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
+    });
+  }
+  function setProgress(v) {
+    v = Math.max(0, Math.min(1, v));
+    if (v > progress + 0.0005) {
+      progress = v;
+      lastProgress = Date.now();
+      paint();
+    }
+  }
+  function setText(msg) {
+    whenDom(function () {
+      var t = $('#loading .loading-text');
+      if (t && !ok) t.textContent = msg;
+    });
+  }
+
+  // ── WebGL 2 : contexte d'essai ─────────────────────────────────────────────────────
+  function probeWebGL() {
+    var info = { ok: false, renderer: '', reason: '' };
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl2', { failIfMajorPerformanceCaveat: false });
+      if (!gl) {
+        info.reason = window.WebGL2RenderingContext ? 'contexte WebGL 2 refusé (accélération désactivée ?)' : 'WebGL 2 inconnu de ce navigateur';
+        return info;
+      }
+      info.ok = true;
+      try {
+        var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+        info.renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
+      } catch (e) { /* sans importance */ }
+      var lose = gl.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext(); // libère le contexte d'essai (le jeu crée le sien)
+    } catch (e) {
+      info.reason = errText(e);
+    }
+    return info;
+  }
+
+  // ── Zone « Détails » (repliée) : ce qui s'est passé, à photographier ─────────────────
+  function details() {
+    var sw = 'aucun';
+    try { if (navigator.serviceWorker && navigator.serviceWorker.controller) sw = 'actif'; } catch (e) { /* */ }
+    var gl = window.__bootWebGL || {};
+    var lines = [
+      'Version : ' + BUILD.id + (BUILD.dev ? ' (développement)' : ''),
+      'Adresse : ' + location.href,
+      'Service worker : ' + sw + ' — en ligne : ' + (navigator.onLine === false ? 'non' : 'oui'),
+      'Navigateur : ' + navigator.userAgent,
+      'Écran : ' + window.innerWidth + ' × ' + window.innerHeight + ' (×' + (window.devicePixelRatio || 1) + ')',
+      'WebGL 2 : ' + (gl.ok ? 'oui' + (gl.renderer ? ' — ' + gl.renderer : '') : 'non' + (gl.reason ? ' — ' + gl.reason : '')),
+      '',
+    ];
+    return lines.concat(log).join('\n');
+  }
+  function renderDetails() {
+    if (!shown) return;
+    whenDom(function () {
+      var pre = $('#boot-details-text');
+      if (pre) pre.textContent = details();
+    });
+  }
+
+  function showHelp(message, options) {
+    if (ok) return;
+    options = options || {};
+    whenDom(function () {
+      if (ok) return;
+      var box = $('#loading .loading-box') || document.body;
+      if (message) {
+        var err = $('#loading .loading-error');
+        if (err) { err.hidden = false; err.textContent = message; }
+      }
+      if (shown) { renderDetails(); return; }
+      shown = true;
+      if (!options.noRepair) {
+        var p = document.createElement('p');
+        p.className = 'loading-error boot-help';
+        p.textContent = 'Le jeu ne démarre pas ? « Réparer le jeu » retélécharge le jeu et recharge la page (vos réglages et votre ville sont conservés).';
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.id = 'boot-repair';
+        b.className = 'btn boot-repair';
+        b.textContent = 'Réparer le jeu';
+        b.onclick = function () { b.disabled = true; b.textContent = 'Réparation…'; window.__repairGame(); };
+        box.appendChild(p);
+        box.appendChild(b);
+      }
+      var d = document.createElement('details');
+      d.className = 'boot-details boot-help';
+      var s = document.createElement('summary');
+      s.textContent = 'Détails';
+      var pre = document.createElement('pre');
+      pre.id = 'boot-details-text';
+      d.appendChild(s);
+      d.appendChild(pre);
+      box.appendChild(d);
+      renderDetails();
+    });
+  }
+
+  // ── Réparation ────────────────────────────────────────────────────────────────────
+  function refetch(url) {
+    return fetch(url, { cache: 'reload', credentials: 'same-origin' }).then(function (r) {
+      return r.ok ? r.text() : '';
+    }).catch(function () { return ''; });
+  }
+
+  window.__repairGame = function () {
+    store(null);
+    setText('Réparation…');
+    var jobs = [];
+    if ('serviceWorker' in navigator) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.filter(function (r) { return r.scope.indexOf(BASE) === 0; }).map(function (r) { return r.unregister(); }));
+      }).catch(function () {}));
+    }
+    if (window.caches) {
+      jobs.push(caches.keys().then(function (names) {
+        return Promise.all(names.filter(function (n) { return n.indexOf(CACHE_PREFIX) === 0; }).map(function (n) { return caches.delete(n); }));
+      }).catch(function () {}));
+    }
+    var work = Promise.all(jobs).then(function () {
+      // La page elle-même (sous ses deux adresses), puis chaque fichier qu'elle désigne : le cache
+      // HTTP du navigateur est rafraîchi, plus aucune vieille copie ne peut resservir.
+      var page = location.pathname;
+      var pages = [page, BASE, BASE + 'index.html'];
+      return Promise.all(pages.map(refetch)).then(function (texts) {
+        var html = texts.join('\n');
+        var urls = {};
+        var re = /(?:src|href)\s*=\s*"([^"#]+)"|"src"\s*:\s*"([^"]+)"/g;
+        var m;
+        while ((m = re.exec(html))) {
+          var u = m[1] || m[2];
+          if (/^(data:|blob:|mailto:|javascript:)/.test(u)) continue;
+          var abs = new URL(u, BASE).href;
+          if (abs.indexOf(BASE) === 0) urls[abs] = true;
+        }
+        urls[BASE + 'sw.js'] = true;
+        urls[BASE + 'manifest.webmanifest'] = true;
+        return Promise.all(Object.keys(urls).map(refetch));
+      });
+    });
+    var timeout = new Promise(function (resolve) { setTimeout(resolve, 20000); });
+    return Promise.race([work, timeout]).then(function () {
+      var p = new URLSearchParams(location.search);
+      p.set('r', String(Date.now()));
+      location.replace(location.pathname + '?' + p.toString() + location.hash);
+    });
+  };
+
+  // ── Garde-fou : nouvelle version du service worker, sinon « Réparer » ────────────────
+  function reload() { if (!ok) location.reload(); }
+  function recover(message) {
+    if (ok || blocked) return;
+    if (busy) { showHelp(message); return; }
+    busy = true;
+    if (tried() || !('serviceWorker' in navigator)) { showHelp(message); return; }
+    navigator.serviceWorker.getRegistration(BASE).then(function (reg) {
+      if (!reg || ok) { showHelp(message); return; }
+      return reg.update().catch(function () {}).then(function () {
+        var w = reg.waiting || reg.installing;
+        if (!w) { showHelp(message); return; }
+        note('nouvelle version du service worker trouvée : activation');
+        var activate = function (worker) {
+          if (ok) return;
+          store(String(Date.now()));
+          navigator.serviceWorker.addEventListener('controllerchange', reload);
+          worker.postMessage({ type: 'SKIP_WAITING' });
+          setTimeout(reload, 5000);
+        };
+        if (w.state === 'installed') { activate(w); return; }
+        var done = false;
+        var t = setTimeout(function () { if (!done) { done = true; showHelp(message); } }, 60000);
+        w.addEventListener('statechange', function () {
+          if (done) return;
+          if (w.state === 'installed' || w.state === 'activated') { done = true; clearTimeout(t); activate(w); }
+          else if (w.state === 'redundant') { done = true; clearTimeout(t); showHelp(message); }
+        });
+      });
+    }).catch(function () { showHelp(message); });
+  }
+
+  function fail(err, where) {
+    if (ok) return;
+    var msg = errText(err);
+    var e = err && err.error ? err.error : err;
+    var where2 = '';
+    if (e && e.stack && where !== 'paquet' && where !== 'style') { // (erreurs du jeu : où ?)
+      var frames = String(e.stack).split('\n');
+      for (var i = 0; i < frames.length; i++) if (/:\d+:\d+/.test(frames[i])) { where2 = ' — ' + frames[i].trim().replace(BASE, ''); break; }
+    }
+    note('ÉCHEC' + (where ? ' (' + where + ')' : '') + ' : ' + msg + where2);
+    failed = true;
+    document.documentElement.classList.add('boot-failed');
+    setText('Impossible de charger le jeu.');
+    recover(msg);
+  }
+
+  /** WebGL 2 absent : message définitif, sans réparation. */
+  function block(reason) {
+    blocked = true;
+    failed = true;
+    clearInterval(watch);
+    document.documentElement.classList.add('boot-failed');
+    document.documentElement.classList.add('boot-blocked');
+    note('WebGL 2 absent : ' + reason);
+    setText('Ce téléphone ou ce navigateur ne sait pas afficher la 3D du jeu.');
+    showHelp('Tiletown a besoin de WebGL 2 (la 3D des navigateurs récents : Chrome, Firefox, Safari 15 et plus). '
+      + 'Vérifiez que l’accélération matérielle n’est pas désactivée dans les réglages du navigateur, ou essayez un autre navigateur.', { noRepair: true });
+  }
+
+  window.__bootProgress = function (v) {
+    setProgress(JS_SHARE + (1 - JS_SHARE) * (Number(v) || 0));
+  };
+  window.__bootOk = function () {
+    if (ok) return;
+    ok = true;
+    store(null);
+    clearInterval(watch);
+    setProgress(1);
+    note('jeu prêt');
+    whenDom(function () {
+      var nodes = document.querySelectorAll('.boot-help, .boot-repair');
+      for (var i = 0; i < nodes.length; i++) nodes[i].parentNode.removeChild(nodes[i]);
+      var err = $('#loading .loading-error');
+      if (err && failed) { err.hidden = true; err.textContent = ''; }
+      document.documentElement.classList.remove('boot-failed');
+    });
+  };
+  window.__bootFail = function (err) { fail(err || 'échec du démarrage', 'jeu'); };
+
+  window.addEventListener('error', function (e) {
+    if (ok) return;
+    var t = e.target;
+    if (e instanceof ErrorEvent || e.error) { fail(e.error && e.error.message ? e : (e.message || e.error), 'script'); return; }
+    // (Les balises de loadByTag gèrent elles-mêmes leurs nouveaux essais.)
+    if (t && t.tagName === 'SCRIPT' && !t.hasAttribute('data-boot-retry')) fail('script introuvable : ' + (t.src || ''), 'script');
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    if (ok) return;
+    note('promesse rejetée : ' + errText(e.reason));
+  });
+
+  // Plus aucun progrès pendant STALL_MS → garde-fou (sans rien interrompre : si le chargement
+  // repart, le jeu démarre normalement et l'aide disparaît).
+  var lastProgress = Date.now();
+  var watch = setInterval(function () {
+    if (ok) { clearInterval(watch); return; }
+    if (Date.now() - lastProgress > STALL_MS && !busy && !blocked) {
+      note('aucun progrès depuis ' + Math.round(STALL_MS / 1000) + ' s (' + Math.round(progress * 100) + ' %)');
+      recover('Le chargement semble bloqué.');
+    }
+  }, 1000);
+
+  // ── Feuilles de style (liens <link data-boot-css>, qui appellent __bootCss) ───────────
+  var cssPending = 0;
+  var cssBroken = false; // plus d'essai possible : le jeu ne démarre pas sans style
+  var cssWaiters = [];
+  var cssTries = {};
+  function cssDone() {
+    if (cssPending > 0 || cssBroken) return;
+    var list = cssWaiters;
+    cssWaiters = [];
+    for (var i = 0; i < list.length; i++) list[i]();
+  }
+  function whenCss(fn) { cssWaiters.push(fn); whenDom(checkCss); }
+  function checkCss() {
+    var links = document.querySelectorAll('link[data-boot-css]');
+    var pending = 0;
+    for (var i = 0; i < links.length; i++) {
+      var l = links[i];
+      if (l.__bootDone) continue;
+      if (l.sheet) { l.__bootDone = true; continue; }
+      pending++;
+    }
+    cssPending = pending;
+    cssDone();
+  }
+  window.__bootCss = function (link, success) {
+    if (link.__bootDone) return;
+    var key = link.getAttribute('data-boot-css') || link.href;
+    if (success) {
+      link.__bootDone = true;
+      whenDom(checkCss);
+      return;
+    }
+    var n = (cssTries[key] || 0) + 1;
+    cssTries[key] = n;
+    link.__bootDone = true; // remplacé par un nouveau lien
+    if (n > BACKOFF.length) {
+      cssBroken = true;
+      fail('feuille de style introuvable : ' + key, 'style');
+      return;
+    }
+    note('style ' + key + ' : échec, nouvel essai ' + n + '/' + BACKOFF.length);
+    setTimeout(function () {
+      var l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.setAttribute('data-boot-css', key);
+      l.onload = function () { window.__bootCss(l, true); };
+      l.onerror = function () { window.__bootCss(l, false); };
+      l.href = key + (key.indexOf('?') < 0 ? '?' : '&') + 'r=' + n;
+      document.head.appendChild(l);
+      if (link.parentNode) link.parentNode.removeChild(link);
+    }, BACKOFF[n - 1]);
+  };
+
+  // ── Paquet du jeu ─────────────────────────────────────────────────────────────────
+  function hex16(buf) {
+    var b = new Uint8Array(buf, 0, 8);
+    var s = '';
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return s;
+  }
+
+  function download(url, attempt) {
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var stallTimer = null;
+    function arm() {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+    }
+    arm();
+    var opts = { credentials: 'same-origin', cache: attempt ? 'reload' : 'default' };
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch(url, opts).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' pour ' + url.replace(BASE, ''));
+      var size = BUILD.js.size || Number(res.headers.get('Content-Length')) || 0;
+      if (!res.body || !res.body.getReader) return res.arrayBuffer();
+      var reader = res.body.getReader();
+      var chunks = [];
+      var got = 0;
+      function pump() {
+        return reader.read().then(function (r) {
+          if (r.done) return;
+          chunks.push(r.value);
+          got += r.value.length;
+          arm();
+          if (size) setProgress(0.02 + (JS_SHARE - 0.02) * Math.min(1, got / size));
+          return pump();
+        });
+      }
+      return pump().then(function () {
+        var all = new Uint8Array(got);
+        var off = 0;
+        for (var i = 0; i < chunks.length; i++) { all.set(chunks[i], off); off += chunks[i].length; }
+        return all.buffer;
+      });
+    }).then(function (buf) {
+      clearTimeout(stallTimer);
+      return buf;
+    }, function (err) {
+      clearTimeout(stallTimer);
+      if (err && err.name === 'AbortError') throw new Error('téléchargement bloqué (plus rien reçu pendant 15 s)');
+      throw err;
+    });
+  }
+
+  function verify(buf) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!subtle || !BUILD.js.sha) return Promise.resolve(buf);
+    return subtle.digest('SHA-256', buf).then(function (d) {
+      var got = hex16(d);
+      if (got !== BUILD.js.sha) throw new Error('fichier du jeu incomplet ou altéré (empreinte ' + got + ' au lieu de ' + BUILD.js.sha + ')');
+      return buf;
+    });
+  }
+
+  function run(buf, url) {
+    var code = new TextDecoder('utf-8').decode(buf);
+    whenDom(function () {
+      whenCss(function () {
+        if (ok) return;
+        note('paquet reçu (' + Math.round(buf.byteLength / 1024) + ' Ko), démarrage');
+        setProgress(JS_SHARE);
+        var s = document.createElement('script');
+        s.type = 'module'; // le paquet est un module ES (esbuild, format esm)
+        // sourceURL : les erreurs et le débogueur désignent le vrai fichier (et sa carte des sources).
+        s.textContent = code + '\n//# sourceURL=' + new URL(url.split('?')[0], BASE).href;
+        document.head.appendChild(s);
+      });
+    });
+  }
+
+  function loadBundle(attempt) {
+    var src = BUILD.js.src;
+    var url = attempt ? src + '?r=' + attempt : src;
+    return download(url, attempt).then(verify).then(function (buf) { run(buf, src); }, function (err) {
+      if (attempt < BACKOFF.length) {
+        note('paquet : ' + errText(err) + ' — nouvel essai ' + (attempt + 1) + '/' + BACKOFF.length);
+        setText('Connexion difficile… nouvel essai (' + (attempt + 1) + '/' + BACKOFF.length + ')');
+        return new Promise(function (resolve) { setTimeout(resolve, BACKOFF[attempt]); }).then(function () {
+          setText('Chargement…');
+          return loadBundle(attempt + 1);
+        });
+      }
+      fail(err, 'paquet');
+    });
+  }
+
+  // Sans fetch en flux (navigateur ancien) : simple balise <script>, avec les mêmes essais.
+  function loadByTag(src, attempt) {
+    whenDom(function () {
+      var s = document.createElement('script');
+      s.type = 'module';
+      s.setAttribute('data-boot-retry', '1');
+      s.onerror = function () {
+        if (attempt < BACKOFF.length) {
+          note('script ' + src + ' introuvable — nouvel essai ' + (attempt + 1) + '/' + BACKOFF.length);
+          setTimeout(function () { loadByTag(src, attempt + 1); }, BACKOFF[attempt]);
+        } else fail('script introuvable : ' + src, 'paquet');
+      };
+      s.src = attempt ? src + '?r=' + attempt : src;
+      whenCss(function () { document.head.appendChild(s); });
+    });
+  }
+
+  // Mode développement (dev.html) : modules non empaquetés, chargés par import() pour obtenir le
+  // vrai message d'erreur (fichier manquant, export introuvable…). Le plan d'importation (importmap :
+  // three → node_modules) est dans la page, avant ce script.
+  function loadDev(src) {
+    whenDom(function () {
+      whenCss(function () {
+        setProgress(JS_SHARE);
+        var dynImport;
+        try { dynImport = new Function('u', 'return import(u)'); } catch (e) { dynImport = null; }
+        if (!dynImport) { loadByTag(src, 0); return; }
+        dynImport(new URL(src, BASE).href).catch(function (err) { fail(err, 'modules'); });
+      });
+    });
+  }
+
+  setProgress(0.02);
+  var gl = probeWebGL();
+  window.__bootWebGL = gl;
+  if (!gl.ok) {
+    whenDom(function () { block(gl.reason || 'contexte refusé'); });
+    return;
+  }
+  note('WebGL 2 : oui' + (gl.renderer ? ' (' + gl.renderer + ')' : ''), false);
+  if (BUILD.dev) loadDev(BUILD.module || 'src/main.js');
+  else if (window.fetch && window.TextDecoder && window.Promise) loadBundle(0);
+  else loadByTag(BUILD.js.src, 0);
+})();
+  </script>
+  <link rel="stylesheet" href="dist/game.b8ae07dec7.css" data-boot-css="dist/game.b8ae07dec7.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
+</head>
+<body class="is-loading">
+  <!-- Scène 3D (three.js, WebGL 2), sous toute l'interface : plein écran. Aucun texte n'y est dessiné. -->
+  <div id="stage">
+    <canvas id="scene" aria-label="La vallée et la ville" role="img"></canvas>
+  </div>
+
+  <!-- Interface HTML par-dessus la scène (tout texte, tout bouton vit ici) -->
+  <div id="ui">
+    <!-- Barre du haut : Population · Bonheur · Nature · Argent, date, pause / vitesse (src/ui/hud.js) -->
+    <header id="hud" aria-label="État de la ville"></header>
+
+    <!-- Mesures du prototype (?stats=1 ou développement) : appels de dessin, triangles, ms/image, i/s -->
+    <div id="stats" aria-hidden="true"></div>
+
+    <!-- Feuille coulissante du bas (catalogue, fiches) -->
+    <div id="sheet-layer"></div>
+
+    <!-- Messages temporaires -->
+    <div id="toasts" aria-live="polite"></div>
+
+    <!-- Barre d'onglets du catalogue : Habitat · Activité · Services · Réseaux · Nature · Démolir · Calques -->
+    <nav id="tabbar" aria-label="Catalogue"></nav>
+
+    <!-- Téléphone tenu à l'horizontale -->
+    <div id="rotate" aria-hidden="true">
+      <div class="rotate-box">
+        <div class="rotate-phone"></div>
+        <p class="rotate-title">Tournez votre téléphone</p>
+        <p class="rotate-text">Tiletown se joue en tenant le téléphone à la verticale.</p>
+      </div>
+    </div>
+
+    <!-- Écran de chargement et garde-fou (src/loader.js) -->
+    <div id="loading" role="status">
+      <div class="loading-box">
+        <div class="logo-tile" aria-hidden="true"></div>
+        <h1 class="logo-title">Tiletown</h1>
+        <p class="logo-sub">Une ville qui respire</p>
+        <div class="loading-gauge" role="progressbar" aria-label="Chargement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="loading-fill"></div>
+        </div>
+        <p class="loading-text">Chargement…</p>
+        <p class="loading-error" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <p class="noscript">Ce jeu a besoin de JavaScript pour fonctionner.</p>
+  </noscript>
+</body>
+</html>

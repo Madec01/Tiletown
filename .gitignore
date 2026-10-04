@@ -2,3 +2,9 @@ node_modules/
 __pycache__/
 # Garde-fou : un éventuel pack sous licence « maison » (non redistribuable) irait ici, jamais dans le dépôt
 assets/licensed/
+
+# Kits 3D bruts téléchargés par tools/fetch-kits.js (volumineux, régénérables)
+assets/models/raw/
+
+# Sorties des mesures et planches (régénérables : node tools/measure.mjs, tools/preview-models.mjs)
+tools/measure-out/

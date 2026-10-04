@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <!-- Portrait, plein écran jusque sous l'encoche (viewport-fit=cover) ; pas de zoom involontaire de la page :
+       la scène (canvas, touch-action: none) a ses propres gestes (pincer = zoom de la carte). Le réglage
+       d'accessibilité « Zoom à deux doigts » (src/ui/a11y.js) peut rendre le zoom de page au navigateur. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Tiletown : un city builder cosy en tuiles. Construisez la ville la plus prospère possible en respectant la vallée : l’air, l’eau et la faune comptent autant que l’argent.">
+  <meta name="theme-color" content="#f4efe6">
+  <title>Tiletown</title>
+  <!-- Application installable (PWA) : manifeste, icônes ; le service worker est enregistré par src/pwa.js -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Tiletown">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="application-name" content="Tiletown">
+  <meta name="color-scheme" content="only light">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+  <!-- {{GENERATED}} -->
+{{PRELOAD}}
+{{IMPORTMAP}}
+  <!-- Chargeur et garde-fou de démarrage (script classique, recopié depuis src/loader.js par
+       tools/build.js) : vérifie WebGL 2, télécharge le jeu en montrant la progression, réessaie en cas
+       d'échec, affiche la vraie erreur (« Détails ») et le bouton « Réparer le jeu ». -->
+{{BOOT}}
+{{STYLES}}
+</head>
+<body class="is-loading">
+  <!-- Scène 3D (three.js, WebGL 2), sous toute l'interface : plein écran. Aucun texte n'y est dessiné. -->
+  <div id="stage">
+    <canvas id="scene" aria-label="La vallée et la ville" role="img"></canvas>
+  </div>
+
+  <!-- Interface HTML par-dessus la scène (tout texte, tout bouton vit ici) -->
+  <div id="ui">
+    <!-- Barre du haut : Population · Bonheur · Nature · Argent, date, pause / vitesse (src/ui/hud.js) -->
+    <header id="hud" aria-label="État de la ville"></header>
+
+    <!-- Mesures du prototype (?stats=1 ou développement) : appels de dessin, triangles, ms/image, i/s -->
+    <div id="stats" aria-hidden="true"></div>
+
+    <!-- Feuille coulissante du bas (catalogue, fiches) -->
+    <div id="sheet-layer"></div>
+
+    <!-- Messages temporaires -->
+    <div id="toasts" aria-live="polite"></div>
+
+    <!-- Barre d'onglets du catalogue : Habitat · Activité · Services · Réseaux · Nature · Démolir · Calques -->
+    <nav id="tabbar" aria-label="Catalogue"></nav>
+
+    <!-- Téléphone tenu à l'horizontale -->
+    <div id="rotate" aria-hidden="true">
+      <div class="rotate-box">
+        <div class="rotate-phone"></div>
+        <p class="rotate-title">Tournez votre téléphone</p>
+        <p class="rotate-text">Tiletown se joue en tenant le téléphone à la verticale.</p>
+      </div>
+    </div>
+
+    <!-- Écran de chargement et garde-fou (src/loader.js) -->
+    <div id="loading" role="status">
+      <div class="loading-box">
+        <div class="logo-tile" aria-hidden="true"></div>
+        <h1 class="logo-title">Tiletown</h1>
+        <p class="logo-sub">Une ville qui respire</p>
+        <div class="loading-gauge" role="progressbar" aria-label="Chargement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="loading-fill"></div>
+        </div>
+        <p class="loading-text">Chargement…</p>
+        <p class="loading-error" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <p class="noscript">Ce jeu a besoin de JavaScript pour fonctionner.</p>
+  </noscript>
+</body>
+</html>

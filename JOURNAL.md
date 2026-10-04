@@ -15,6 +15,21 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-04 (suite) — Dépôt créé, prototype de rendu lancé
+
+- Dépôt `Madec01/tiletown` créé par l'utilisateur (vide) ; premier commit « graine » préparé en local. La poussée est refusée (403) tant que l'application GitHub Claude n'est pas installée sur le dépôt ; liens transmis à l'utilisateur.
+- Sauvegarde : tag `backup/graine-2026-10-04` sur le premier commit.
+- `docs/ARCHITECTURE.md` écrit : contrat entre modules (état du monde, arêtes, catalogue, manifeste des modèles, API du rendu, critères du prototype).
+- `package.json` : three 0.186.1 en dépendance ; esbuild, @gltf-transform, meshoptimizer, playwright, adm-zip en développement. `src/data/palette.js` : palette commune de 24 teintes.
+- **Prototype étape 1 (carte statique) livré.** Résultats mesurés (Playwright, Chromium sans GPU, 412 × 915 et 360 × 740) : 10 appels de dessin, 74 000 triangles passe d'ombre comprise, précache 1,70 Mo (64 fichiers), 0 erreur, prêt en ≈ 1 s ; 75 tests passent ; `node tools/build.js --check` à jour.
+  - Pipeline des modèles : 10 kits Kenney téléchargés (`tools/fetch-kits.js`, cache ignoré par git), 50 modèles normalisés (`tools/import-models.js`, `tools/model-map.js`) : échelle 1 case = 1 u, couleurs quantifiées vers la palette, assemblages (école, clinique, mairie, marché, arrêt de tram, épuration, centrale, compost, parc), rues étroites pour les arêtes, meshopt ; 0,82 Mo au total ; planche de contrôle `tools/preview-models.mjs`. Provisoire : `bus` = camionnette.
+  - Logique pure : `rng`, `grid`, `worldgen` (rivière bord à bord, lacs, zones humides, forêts, collines, champs, mairie et ville de départ), `roads` (rues sur les arêtes, raccordement Dijkstra, trafic), catalogue `tiles.js` (21 tuiles), `terrain.js` ; `tools/print-world.js`.
+  - Rendu three.js : caméra pure (`camera.js`, 12 tests), un seul `BatchedMesh` pour la ville (repli instancié), sol instancié coloré par terrain, rues et nœuds sur les arêtes, ponts, calques par couleurs d'instances, ombres PCF 2048, rendu seulement si nécessaire, perte de contexte gérée ; `tools/measure.mjs` et `tools/measure-fixture.html`.
+  - Squelette : build esbuild (three.js inclus, 731 Ko de JS), `dev.html` avec import map, PWA (manifeste, `sw.js`, icônes générées par `tools/make-icons.mjs`), HUD à 4 jauges, onglets du catalogue, feuille, gestes (tap, appui long, double tap, pan, pincement, molette), police Nunito (OFL), tests de cibles tactiles.
+  - Intégration : vue de jeu par défaut rapprochée sur la mairie (`lookAt`, ≈ 8 îlots de large), double tap = bascule vue d'ensemble / vue de jeu, `?view=all` ; crédits complétés (Nunito, icônes) ; scripts npm.
+- Limites connues / à faire : triangles sur une grande carte de test 24 × 24 (1,19 M, critère ≤ 150 k KO) → simplifier les modèles (`simplify`) ou niveaux de détail ; pas de hachures daltoniennes sur les calques ; `bus` provisoire ; stats « i/s » trompeuses au repos (rendu seulement si nécessaire). Le proxy git de la session refuse l'envoi des **tags** : les sauvegardes sont poussées comme **branches** `backup/…` (le tag reste en local).
+- Prototype étape 1 (carte statique) lancé en quatre chantiers parallèles : squelette/build/PWA/interface ; logique pure (grille, vallée, rues sur les arêtes) ; pipeline des modèles 3D (téléchargement des kits Kenney, normalisation, palette, meshopt, manifeste) ; rendu three.js (sol, îlots, rues, calques, caméra, mesures Playwright).
+
 ## 2026-10-04 (suite) — Revirement : rendu lisse, pas de pixel art
 
 - L'utilisateur refuse finalement le pixel art et veut un rendu **lisse** (non pixelisé), façon Islanders, Townscaper, Dorfromantik, Mini Motorways.

@@ -1,0 +1,1956 @@
+{
+  "palette": [
+    "#8fcf6f",
+    "#6fb85a",
+    "#4f9a4a",
+    "#e9c46a",
+    "#c9a86a",
+    "#5fb3d9",
+    "#3f8fc2",
+    "#7fb89a",
+    "#a8a39a",
+    "#c9c4b8",
+    "#d9654a",
+    "#e59a5a",
+    "#7a8fb5",
+    "#f4efe6",
+    "#e8d8c0",
+    "#c9b8a0",
+    "#8b5a3c",
+    "#5a5a66",
+    "#9a9aa6",
+    "#f2f2f2",
+    "#7d8591",
+    "#b8bcc4",
+    "#e85d75",
+    "#f7d84a"
+  ],
+  "unit": "1 case = 1 unité, origine au centre de la case, y vers le haut, face +Z (sud)",
+  "models": {
+    "house-a": {
+      "file": "house-a.glb",
+      "kit": "kenney-city-kit-suburban",
+      "source": "building-type-a.glb",
+      "scale": 0.654,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.336
+        ],
+        "max": [
+          0.425,
+          0.545,
+          0.336
+        ],
+        "size": [
+          0.85,
+          0.545,
+          0.672
+        ]
+      },
+      "triangles": 1174,
+      "bytes": 17888
+    },
+    "house-b": {
+      "file": "house-b.glb",
+      "kit": "kenney-city-kit-suburban",
+      "source": "building-type-r.glb",
+      "scale": 0.827,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.422
+        ],
+        "max": [
+          0.425,
+          0.944,
+          0.422
+        ],
+        "size": [
+          0.85,
+          0.944,
+          0.843
+        ]
+      },
+      "triangles": 1030,
+      "bytes": 16632
+    },
+    "house-c": {
+      "file": "house-c.glb",
+      "kit": "kenney-city-kit-suburban",
+      "source": "building-type-h.glb",
+      "scale": 0.654,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.299
+        ],
+        "max": [
+          0.425,
+          0.482,
+          0.299
+        ],
+        "size": [
+          0.85,
+          0.482,
+          0.599
+        ]
+      },
+      "triangles": 770,
+      "bytes": 13652,
+      "note": "toit plat à panneaux solaires"
+    },
+    "building-small-a": {
+      "file": "building-small-a.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-a.glb",
+      "scale": 0.904,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.399,
+          0,
+          -0.425
+        ],
+        "max": [
+          0.399,
+          1.169,
+          0.425
+        ],
+        "size": [
+          0.799,
+          1.169,
+          0.85
+        ]
+      },
+      "triangles": 1252,
+      "bytes": 18832
+    },
+    "building-small-b": {
+      "file": "building-small-b.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-d.glb",
+      "scale": 0.944,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.397,
+          0,
+          -0.425
+        ],
+        "max": [
+          0.397,
+          1.221,
+          0.425
+        ],
+        "size": [
+          0.793,
+          1.221,
+          0.85
+        ]
+      },
+      "triangles": 1100,
+      "bytes": 16808
+    },
+    "building-tall-a": {
+      "file": "building-tall-a.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-f.glb",
+      "scale": 0.825,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.347,
+          0,
+          -0.425
+        ],
+        "max": [
+          0.347,
+          1.397,
+          0.425
+        ],
+        "size": [
+          0.693,
+          1.397,
+          0.85
+        ]
+      },
+      "triangles": 1794,
+      "bytes": 24432
+    },
+    "building-tall-b": {
+      "file": "building-tall-b.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-l.glb",
+      "scale": 0.606,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.415,
+          0,
+          -0.425
+        ],
+        "max": [
+          0.415,
+          1.376,
+          0.425
+        ],
+        "size": [
+          0.831,
+          1.376,
+          0.85
+        ]
+      },
+      "triangles": 3512,
+      "bytes": 43692
+    },
+    "shop-a": {
+      "file": "shop-a.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-g.glb",
+      "scale": 0.876,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.404
+        ],
+        "max": [
+          0.425,
+          1.484,
+          0.404
+        ],
+        "size": [
+          0.85,
+          1.484,
+          0.808
+        ]
+      },
+      "triangles": 2006,
+      "bytes": 27692,
+      "note": "auvent orange en rez-de-chaussée"
+    },
+    "shop-b": {
+      "file": "shop-b.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-k.glb",
+      "scale": 0.408,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.192
+        ],
+        "max": [
+          0.425,
+          0.6,
+          0.192
+        ],
+        "size": [
+          0.85,
+          0.6,
+          0.384
+        ]
+      },
+      "triangles": 2960,
+      "bytes": 37820,
+      "note": "commerce large à auvents, bas"
+    },
+    "office-a": {
+      "file": "office-a.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-i.glb",
+      "scale": 0.653,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.405,
+          0,
+          -0.425
+        ],
+        "max": [
+          0.405,
+          1.097,
+          0.425
+        ],
+        "size": [
+          0.81,
+          1.097,
+          0.85
+        ]
+      },
+      "triangles": 2544,
+      "bytes": 34608
+    },
+    "factory-a": {
+      "file": "factory-a.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "building-l.glb",
+      "scale": 0.432,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.45,
+          0,
+          -0.404
+        ],
+        "max": [
+          0.45,
+          0.831,
+          0.404
+        ],
+        "size": [
+          0.9,
+          0.831,
+          0.808
+        ]
+      },
+      "triangles": 1896,
+      "bytes": 27856,
+      "note": "deux cheminées"
+    },
+    "factory-b": {
+      "file": "factory-b.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "building-e.glb",
+      "scale": 0.535,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.45,
+          0,
+          -0.345
+        ],
+        "max": [
+          0.45,
+          0.882,
+          0.345
+        ],
+        "size": [
+          0.9,
+          0.882,
+          0.69
+        ]
+      },
+      "triangles": 1484,
+      "bytes": 22684,
+      "note": "deux cheminées sur le toit"
+    },
+    "school": {
+      "file": "school.glb",
+      "kit": "kenney-modular-buildings",
+      "source": "building-corner-window.glb",
+      "scale": 0.307,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/modular-buildings",
+      "bbox": {
+        "min": [
+          -0.46,
+          0,
+          -0.322
+        ],
+        "max": [
+          0.46,
+          0.678,
+          0.322
+        ],
+        "size": [
+          0.92,
+          0.678,
+          0.644
+        ]
+      },
+      "triangles": 738,
+      "bytes": 17248,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-corner-window.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-window.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-steps-wide.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-window-awnings.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "roof-flat-border-corner.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "roof-flat-border-straight.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : 3 × 2 blocs, 2 étages, perron, toit à parapet, drapeau"
+    },
+    "clinic": {
+      "file": "clinic.glb",
+      "kit": "kenney-modular-buildings",
+      "source": "building-corner-window.glb",
+      "scale": 0.421,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/modular-buildings",
+      "bbox": {
+        "min": [
+          -0.421,
+          0,
+          -0.425
+        ],
+        "max": [
+          0.421,
+          0.989,
+          0.425
+        ],
+        "size": [
+          0.842,
+          0.989,
+          0.85
+        ]
+      },
+      "triangles": 424,
+      "bytes": 12788,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-corner-window.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-door-window.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "roof-flat-border-corner.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : 2 × 2 blocs, 2 étages, croix sur la façade et le toit"
+    },
+    "townhall": {
+      "file": "townhall.glb",
+      "kit": "kenney-modular-buildings",
+      "source": "building-corner-window.glb",
+      "scale": 0.307,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/modular-buildings",
+      "bbox": {
+        "min": [
+          -0.46,
+          0,
+          -0.322
+        ],
+        "max": [
+          0.46,
+          0.869,
+          0.322
+        ],
+        "size": [
+          0.92,
+          0.869,
+          0.644
+        ]
+      },
+      "triangles": 746,
+      "bytes": 17084,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-corner-window.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-window-large.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-steps-wide.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "roof-flat-border-corner.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "roof-flat-border-straight.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "building-windows-round.glb"
+        },
+        {
+          "kit": "kenney-modular-buildings",
+          "source": "roof-flat-top.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : 3 × 2 blocs, 2 étages à grandes fenêtres, tour centrale, drapeau"
+    },
+    "market": {
+      "file": "market.glb",
+      "kit": "kenney-fantasy-town-kit",
+      "source": "stall-red.glb",
+      "scale": 0.406,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/fantasy-town-kit",
+      "bbox": {
+        "min": [
+          -0.45,
+          0,
+          -0.385
+        ],
+        "max": [
+          0.45,
+          0.518,
+          0.385
+        ],
+        "size": [
+          0.9,
+          0.518,
+          0.771
+        ]
+      },
+      "triangles": 1550,
+      "bytes": 24036,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "stall-red.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "stall-green.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "cart.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "stall-bench.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "lantern.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : deux étals (rouge, vert), charrette, banc et lanterne sur une dalle"
+    },
+    "tram-stop": {
+      "file": "tram-stop.glb",
+      "kit": "kenney-train-kit",
+      "source": "spline-track.glb",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/train-kit",
+      "bbox": {
+        "min": [
+          -0.505,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.505,
+          0.625,
+          0.5
+        ],
+        "size": [
+          1.01,
+          0.625,
+          1
+        ]
+      },
+      "triangles": 658,
+      "bytes": 19548,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-train-kit",
+          "source": "spline-track.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "stall-bench.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "lantern.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "orientation": "voie le long de Z (nord–sud) à x = -0,15 ; quai à l’est (x > 0,2)",
+      "note": "assemblage : rails du Train Kit, quai, abri (poteaux + toit), banc et lanterne du Fantasy Town"
+    },
+    "wastewater": {
+      "file": "wastewater.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "detail-tank-large.glb",
+      "scale": 0.438,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.46,
+          0,
+          -0.438
+        ],
+        "max": [
+          0.46,
+          0.267,
+          0.438
+        ],
+        "size": [
+          0.92,
+          0.267,
+          0.876
+        ]
+      },
+      "triangles": 1440,
+      "bytes": 24956,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "detail-tank-large.glb"
+        },
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "building-k.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : deux bassins ronds, cuve et petit bâtiment technique"
+    },
+    "wind-turbine": {
+      "file": "wind-turbine.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "windmill.glb",
+      "scale": 0.6,
+      "yaw": 90,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.338,
+          0,
+          -0.181
+        ],
+        "max": [
+          0.338,
+          1.388,
+          0.181
+        ],
+        "size": [
+          0.676,
+          1.388,
+          0.363
+        ]
+      },
+      "triangles": 456,
+      "bytes": 12056,
+      "nodes": [
+        "blades"
+      ],
+      "note": "le nœud « blades » reste séparé (pivot au moyeu) pour l’animation"
+    },
+    "solar": {
+      "file": "solar.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "solar-panel-landscape-group.glb",
+      "scale": 0.49,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.371,
+          0,
+          -0.45
+        ],
+        "max": [
+          0.371,
+          0.129,
+          0.45
+        ],
+        "size": [
+          0.742,
+          0.129,
+          0.9
+        ]
+      },
+      "triangles": 1952,
+      "bytes": 28336,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "solar-panel-landscape-group.glb"
+        }
+      ],
+      "note": "assemblage : deux rangées de panneaux"
+    },
+    "power-plant": {
+      "file": "power-plant.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "building-o.glb",
+      "scale": 0.372,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.46,
+          0,
+          -0.412
+        ],
+        "max": [
+          0.46,
+          0.716,
+          0.412
+        ],
+        "size": [
+          0.92,
+          0.716,
+          0.824
+        ]
+      },
+      "triangles": 1246,
+      "bytes": 18700,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "building-o.glb"
+        },
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "chimney-large.glb"
+        },
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "chimney-medium.glb"
+        }
+      ],
+      "note": "assemblage : bâtiment, tour de refroidissement et cheminée"
+    },
+    "compost": {
+      "file": "compost.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "shipping-container-a.glb",
+      "scale": 0.6,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.42,
+          0,
+          -0.45
+        ],
+        "max": [
+          0.42,
+          0.227,
+          0.45
+        ],
+        "size": [
+          0.84,
+          0.227,
+          0.9
+        ]
+      },
+      "triangles": 1266,
+      "bytes": 24040,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "shipping-container-a.glb"
+        },
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "shipping-container-b.glb"
+        },
+        {
+          "kit": "kenney-city-kit-industrial",
+          "source": "shipping-container-c.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : trois conteneurs et deux tas de compost sur une dalle"
+    },
+    "water-tower": {
+      "file": "water-tower.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "water-tower.glb",
+      "scale": 0.7,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.298,
+          0,
+          -0.291
+        ],
+        "max": [
+          0.298,
+          1.499,
+          0.291
+        ],
+        "size": [
+          0.597,
+          1.499,
+          0.582
+        ]
+      },
+      "triangles": 968,
+      "bytes": 13216
+    },
+    "park": {
+      "file": "park.glb",
+      "kit": "kenney-fantasy-town-kit",
+      "source": "fountain-round.glb",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/fantasy-town-kit",
+      "bbox": {
+        "min": [
+          -0.48,
+          0,
+          -0.48
+        ],
+        "max": [
+          0.48,
+          0.736,
+          0.48
+        ],
+        "size": [
+          0.96,
+          0.736,
+          0.96
+        ]
+      },
+      "triangles": 1734,
+      "bytes": 29780,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "fountain-round.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "tree_default.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "tree_oak.glb"
+        },
+        {
+          "kit": "kenney-fantasy-town-kit",
+          "source": "stall-bench.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "flower_redA.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "flower_yellowB.glb"
+        },
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "assemblage : pelouse, fontaine, deux arbres, banc, fleurs"
+    },
+    "tree-a": {
+      "file": "tree-a.glb",
+      "kit": "kenney-nature-kit",
+      "source": "tree_default.glb",
+      "scale": 0.5,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.189,
+          0,
+          -0.163
+        ],
+        "max": [
+          0.189,
+          0.854,
+          0.163
+        ],
+        "size": [
+          0.378,
+          0.854,
+          0.327
+        ]
+      },
+      "triangles": 114,
+      "bytes": 4760
+    },
+    "tree-b": {
+      "file": "tree-b.glb",
+      "kit": "kenney-nature-kit",
+      "source": "tree_oak.glb",
+      "scale": 0.6,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.192,
+          0,
+          -0.222
+        ],
+        "max": [
+          0.192,
+          0.736,
+          0.222
+        ],
+        "size": [
+          0.384,
+          0.736,
+          0.444
+        ]
+      },
+      "triangles": 196,
+      "bytes": 5888
+    },
+    "tree-c": {
+      "file": "tree-c.glb",
+      "kit": "kenney-nature-kit",
+      "source": "tree_fat.glb",
+      "scale": 0.6,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.227,
+          0,
+          -0.196
+        ],
+        "max": [
+          0.227,
+          0.69,
+          0.196
+        ],
+        "size": [
+          0.453,
+          0.69,
+          0.392
+        ]
+      },
+      "triangles": 50,
+      "bytes": 3912
+    },
+    "pine-a": {
+      "file": "pine-a.glb",
+      "kit": "kenney-nature-kit",
+      "source": "tree_pineDefaultA.glb",
+      "scale": 0.55,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.146,
+          0,
+          -0.146
+        ],
+        "max": [
+          0.146,
+          0.85,
+          0.146
+        ],
+        "size": [
+          0.293,
+          0.85,
+          0.293
+        ]
+      },
+      "triangles": 230,
+      "bytes": 7032
+    },
+    "pine-b": {
+      "file": "pine-b.glb",
+      "kit": "kenney-nature-kit",
+      "source": "tree_pineTallA.glb",
+      "scale": 0.6,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.116,
+          0,
+          -0.118
+        ],
+        "max": [
+          0.116,
+          0.918,
+          0.118
+        ],
+        "size": [
+          0.232,
+          0.918,
+          0.235
+        ]
+      },
+      "triangles": 78,
+      "bytes": 4260
+    },
+    "bush": {
+      "file": "bush.glb",
+      "kit": "kenney-nature-kit",
+      "source": "plant_bushDetailed.glb",
+      "scale": 0.8,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.241,
+          0,
+          -0.241
+        ],
+        "max": [
+          0.241,
+          0.288,
+          0.241
+        ],
+        "size": [
+          0.482,
+          0.288,
+          0.482
+        ]
+      },
+      "triangles": 104,
+      "bytes": 4024
+    },
+    "flowers": {
+      "file": "flowers.glb",
+      "kit": "kenney-nature-kit",
+      "source": "flower_redA.glb",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.303,
+          0,
+          -0.242
+        ],
+        "max": [
+          0.303,
+          0.292,
+          0.242
+        ],
+        "size": [
+          0.607,
+          0.292,
+          0.483
+        ]
+      },
+      "triangles": 380,
+      "bytes": 11936,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-nature-kit",
+          "source": "flower_redA.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "flower_yellowB.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "flower_purpleC.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "grass_leafs.glb"
+        }
+      ],
+      "note": "assemblage : touffe de fleurs rouges, jaunes, roses et d’herbe"
+    },
+    "rock-a": {
+      "file": "rock-a.glb",
+      "kit": "kenney-nature-kit",
+      "source": "rock_largeA.glb",
+      "scale": 0.6,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.235,
+          0,
+          -0.305
+        ],
+        "max": [
+          0.235,
+          0.156,
+          0.305
+        ],
+        "size": [
+          0.471,
+          0.156,
+          0.609
+        ]
+      },
+      "triangles": 80,
+      "bytes": 4432
+    },
+    "rock-b": {
+      "file": "rock-b.glb",
+      "kit": "kenney-nature-kit",
+      "source": "rock_largeB.glb",
+      "scale": 0.55,
+      "yaw": 30,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.284,
+          0,
+          -0.226
+        ],
+        "max": [
+          0.284,
+          0.237,
+          0.226
+        ],
+        "size": [
+          0.568,
+          0.237,
+          0.452
+        ]
+      },
+      "triangles": 85,
+      "bytes": 5488
+    },
+    "crop-wheat": {
+      "file": "crop-wheat.glb",
+      "kit": "kenney-nature-kit",
+      "source": "crops_wheatStageB.glb",
+      "scale": 0.8,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.413,
+          0,
+          -0.416
+        ],
+        "max": [
+          0.413,
+          0.428,
+          0.416
+        ],
+        "size": [
+          0.827,
+          0.428,
+          0.832
+        ]
+      },
+      "triangles": 1440,
+      "bytes": 27432,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-nature-kit",
+          "source": "crops_wheatStageB.glb"
+        }
+      ],
+      "note": "assemblage : quatre touffes de blé"
+    },
+    "crop-corn": {
+      "file": "crop-corn.glb",
+      "kit": "kenney-nature-kit",
+      "source": "crops_cornStageC.glb",
+      "scale": 0.5,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/nature-kit",
+      "bbox": {
+        "min": [
+          -0.318,
+          0,
+          -0.318
+        ],
+        "max": [
+          0.318,
+          0.625,
+          0.318
+        ],
+        "size": [
+          0.636,
+          0.625,
+          0.636
+        ]
+      },
+      "triangles": 744,
+      "bytes": 15444,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "kenney-nature-kit",
+          "source": "crops_cornStageC.glb"
+        },
+        {
+          "kit": "kenney-nature-kit",
+          "source": "crops_cornStageD.glb"
+        }
+      ],
+      "note": "assemblage : quatre pieds de maïs"
+    },
+    "road-straight": {
+      "file": "road-straight.glb",
+      "kit": "kenney-city-kit-roads",
+      "source": "road-straight.glb",
+      "scale": 1,
+      "yaw": 90,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-roads",
+      "bbox": {
+        "min": [
+          -0.5,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.02,
+          0.5
+        ],
+        "size": [
+          1,
+          0.02,
+          1
+        ]
+      },
+      "triangles": 44,
+      "bytes": 4612,
+      "orientation": "axe Z (nord–sud) ; bras N et S"
+    },
+    "road-corner": {
+      "file": "road-corner.glb",
+      "kit": "kenney-city-kit-roads",
+      "source": "road-bend.glb",
+      "scale": 1,
+      "yaw": 180,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-roads",
+      "bbox": {
+        "min": [
+          -0.5,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.02,
+          0.5
+        ],
+        "size": [
+          1,
+          0.02,
+          1
+        ]
+      },
+      "triangles": 260,
+      "bytes": 6232,
+      "orientation": "bras N et E"
+    },
+    "road-t": {
+      "file": "road-t.glb",
+      "kit": "kenney-city-kit-roads",
+      "source": "road-intersection.glb",
+      "scale": 1,
+      "yaw": 90,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-roads",
+      "bbox": {
+        "min": [
+          -0.5,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.02,
+          0.5
+        ],
+        "size": [
+          1,
+          0.02,
+          1
+        ]
+      },
+      "triangles": 84,
+      "bytes": 5064,
+      "orientation": "bras N, E et S (fermé à l’ouest)"
+    },
+    "road-cross": {
+      "file": "road-cross.glb",
+      "kit": "kenney-city-kit-roads",
+      "source": "road-crossroad.glb",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-roads",
+      "bbox": {
+        "min": [
+          -0.5,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.02,
+          0.5
+        ],
+        "size": [
+          1,
+          0.02,
+          1
+        ]
+      },
+      "triangles": 116,
+      "bytes": 5348,
+      "orientation": "bras N, E, S, W"
+    },
+    "road-crosswalk": {
+      "file": "road-crosswalk.glb",
+      "kit": "kenney-city-kit-roads",
+      "source": "road-crossing.glb",
+      "scale": 1,
+      "yaw": 90,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-roads",
+      "bbox": {
+        "min": [
+          -0.5,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.02,
+          0.5
+        ],
+        "size": [
+          1,
+          0.02,
+          1
+        ]
+      },
+      "triangles": 104,
+      "bytes": 4972,
+      "orientation": "axe Z (nord–sud) ; passage piéton au centre"
+    },
+    "bridge": {
+      "file": "bridge.glb",
+      "kit": "kenney-city-kit-roads",
+      "source": "road-bridge.glb",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-roads",
+      "bbox": {
+        "min": [
+          -0.5,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.52,
+          0.5
+        ],
+        "size": [
+          1,
+          0.52,
+          1
+        ]
+      },
+      "triangles": 240,
+      "bytes": 8016,
+      "orientation": "axe Z (nord–sud) ; tablier à 0,5 u"
+    },
+    "road-edge-straight": {
+      "file": "road-edge-straight.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.15,
+          0,
+          -0.5
+        ],
+        "max": [
+          0.15,
+          0.035,
+          0.5
+        ],
+        "size": [
+          0.3,
+          0.035,
+          1
+        ]
+      },
+      "triangles": 84,
+      "bytes": 5356,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "orientation": "axe Z (nord–sud), 0,3 u de large × 1 u de long, trottoirs à x = ±0,135",
+      "note": "primitives : chaussée, deux trottoirs, pointillé central"
+    },
+    "road-edge-node-2": {
+      "file": "road-edge-node-2.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.15,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.15,
+          0.035,
+          0.15
+        ],
+        "size": [
+          0.3,
+          0.035,
+          0.3
+        ]
+      },
+      "triangles": 48,
+      "bytes": 3760,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "orientation": "nœud d’angle 0,3 × 0,3 u ; bras N et E ; trottoir extérieur à l’ouest et au sud"
+    },
+    "road-edge-node-3": {
+      "file": "road-edge-node-3.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.15,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.15,
+          0.035,
+          0.15
+        ],
+        "size": [
+          0.3,
+          0.035,
+          0.3
+        ]
+      },
+      "triangles": 48,
+      "bytes": 3808,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "orientation": "nœud en T 0,3 × 0,3 u ; bras N, E et S ; trottoir à l’ouest"
+    },
+    "road-edge-node-4": {
+      "file": "road-edge-node-4.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.15,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.15,
+          0.035,
+          0.15
+        ],
+        "size": [
+          0.3,
+          0.035,
+          0.3
+        ]
+      },
+      "triangles": 60,
+      "bytes": 3956,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "orientation": "croisement 0,3 × 0,3 u ; bras N, E, S, W"
+    },
+    "tram": {
+      "file": "tram.glb",
+      "kit": "kenney-train-kit",
+      "source": "train-tram-classic.glb",
+      "scale": 0.35,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/train-kit",
+      "bbox": {
+        "min": [
+          -0.219,
+          0,
+          -0.457
+        ],
+        "max": [
+          0.219,
+          0.882,
+          0.457
+        ],
+        "size": [
+          0.438,
+          0.882,
+          0.914
+        ]
+      },
+      "triangles": 1648,
+      "bytes": 26016,
+      "orientation": "avant vers +Z"
+    },
+    "car-a": {
+      "file": "car-a.glb",
+      "kit": "kenney-car-kit",
+      "source": "sedan.glb",
+      "scale": 0.35,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/car-kit",
+      "bbox": {
+        "min": [
+          -0.262,
+          0,
+          -0.446
+        ],
+        "max": [
+          0.262,
+          0.455,
+          0.446
+        ],
+        "size": [
+          0.525,
+          0.455,
+          0.892
+        ]
+      },
+      "triangles": 2032,
+      "bytes": 23436,
+      "orientation": "avant vers +Z"
+    },
+    "car-b": {
+      "file": "car-b.glb",
+      "kit": "kenney-car-kit",
+      "source": "hatchback-sports.glb",
+      "scale": 0.35,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/car-kit",
+      "bbox": {
+        "min": [
+          -0.227,
+          0,
+          -0.499
+        ],
+        "max": [
+          0.227,
+          0.385,
+          0.499
+        ],
+        "size": [
+          0.455,
+          0.385,
+          0.998
+        ]
+      },
+      "triangles": 2088,
+      "bytes": 24160,
+      "orientation": "avant vers +Z"
+    },
+    "bus": {
+      "file": "bus.glb",
+      "kit": "kenney-car-kit",
+      "source": "delivery.glb",
+      "scale": 0.35,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/car-kit",
+      "bbox": {
+        "min": [
+          -0.262,
+          0,
+          -0.569
+        ],
+        "max": [
+          0.262,
+          0.577,
+          0.569
+        ],
+        "size": [
+          0.525,
+          0.577,
+          1.137
+        ]
+      },
+      "triangles": 2476,
+      "bytes": 28656,
+      "orientation": "avant vers +Z",
+      "provisional": true,
+      "note": "le Car Kit n’a pas de bus : camionnette longue (delivery) en attendant"
+    },
+    "truck": {
+      "file": "truck.glb",
+      "kit": "kenney-car-kit",
+      "source": "truck.glb",
+      "scale": 0.35,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/car-kit",
+      "bbox": {
+        "min": [
+          -0.262,
+          0,
+          -0.516
+        ],
+        "max": [
+          0.262,
+          0.455,
+          0.516
+        ],
+        "size": [
+          0.525,
+          0.455,
+          1.032
+        ]
+      },
+      "triangles": 2082,
+      "bytes": 23992,
+      "orientation": "avant vers +Z"
+    }
+  },
+  "generated": "2026-10-04"
+}
