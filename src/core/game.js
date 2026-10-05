@@ -29,6 +29,7 @@ import { hashSeed, createRng } from './rng.js';
 import {
   createEcology, cloneEcology, serializeEcology, reviveEcology, syncEcology, stepEcology, describeEcology,
   cityAir, healthOf, tourismOf, airHappinessPenalty, fieldYieldOf, speciesSummary, speciesCount,
+  pollutedShare,
 } from './ecology.js';
 import { calendar, isSeasonEnd, isYearEnd, MONTH_LABELS } from './calendar.js';
 import { TILE_BY_ID, FAMILIES, isBuiltTile, isUrbanFamily, residentsOfTile, jobsOfTile } from '../data/tiles.js';
@@ -463,8 +464,11 @@ export function monthTick(game) {
   // 2. Les habitants : exode par lassitude, puis exode écologique (§7.3), sinon arrivées.
   let population = Math.min(game.population, stats.capacity);
   const unhappy = stats.happiness < HAPPINESS_EXODUS ? game.streaks.unhappy + 1 : 0;
-  const cityAirMean = eco ? cityAir(eco, game.world).mean : 0;
-  const ecoExodus = Boolean(eco) && (cityAirMean > ECO_EXODUS_AIR || stats.health < ECO_EXODUS_HEALTH);
+  // §5.1 et §7.3 : les quartiers dont l'air dépasse le seuil perdent des habitants, et une santé trop
+  // basse vide toute la ville.
+  const choking = eco ? pollutedShare(eco, game.world, ECO_EXODUS_AIR) : 0;
+  const sick = Boolean(eco) && stats.health < ECO_EXODUS_HEALTH;
+  const ecoExodus = Boolean(eco) && (choking > 0 || sick);
   if (unhappy >= EXODUS_MONTHS && population > 0) {
     const departures = Math.min(population, Math.max(1, Math.round(population * EXODUS_RATE)));
     population -= departures;
@@ -472,9 +476,10 @@ export function monthTick(game) {
       ? 'Un habitant quitte la vallée, lassé d’attendre mieux.'
       : `${departures} habitants quittent la vallée, lassés d’attendre mieux.`));
   } else if (ecoExodus && population > 0) {
-    const departures = Math.min(population, Math.max(1, Math.round(population * ECO_EXODUS_RATE)));
+    const rate = ECO_EXODUS_RATE * Math.max(sick ? 1 : 0, choking);
+    const departures = Math.min(population, Math.max(1, Math.round(population * rate)));
     population -= departures;
-    const why = cityAirMean > ECO_EXODUS_AIR ? 'l’air est devenu irrespirable' : 'la santé se dégrade';
+    const why = choking > 0 ? 'l’air y est devenu irrespirable' : 'la santé se dégrade';
     events.push(event('departures', month, departures === 1
       ? `Un habitant s’en va : ${why}.`
       : `${departures} habitants s’en vont : ${why}.`));

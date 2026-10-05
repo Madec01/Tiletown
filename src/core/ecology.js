@@ -20,7 +20,7 @@ import { index, coords, inBounds, DIRS4, DIRS8 } from './grid.js';
 import { EDGE } from './roads.js';
 import { seasonOf } from './calendar.js';
 import { TERRAINS } from '../data/terrain.js';
-import { TILES, TILE_BY_ID, isBuiltTile } from '../data/tiles.js';
+import { TILES, TILE_BY_ID, isBuiltTile, residentsOfTile } from '../data/tiles.js';
 import { SPECIES } from '../data/species.js';
 import {
   ECO_EMIT, ECO_SINK, ECO_AIR_PER_TRAFFIC, ECO_AIR_KEEP, ECO_AIR_WIND, ECO_AIR_DECAY,
@@ -612,7 +612,9 @@ export function airStep(eco, world) {
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
-      a1[i] = eco.air[i] + emitOf(world.tiles[i]) + trafficEmitOf(world, x, y) - sinkOf(world, i);
+      // Plancher à zéro : un puits n'absorbe que ce qu'il y a (sans ce plancher, une forêt sur un air déjà
+      // pur « nettoierait » ses voisines à distance, et rien ne pourrait jamais s'accumuler dans la vallée).
+      a1[i] = Math.max(0, eco.air[i] + emitOf(world.tiles[i]) + trafficEmitOf(world, x, y) - sinkOf(world, i));
     }
   }
   const wind = dirOf(world.wind);
@@ -1088,6 +1090,23 @@ export function cityAir(eco, world) {
     return { mean: eco.air.length > 0 ? all / eco.air.length : 0, worst: -1, count: 0 };
   }
   return { mean: sum / count, worst, count };
+}
+
+/**
+ * Part du logement (0..1) qui respire un air au-dessus de `threshold` : §5.1 dit qu'« un quartier avec
+ * A > 60 perd des habitants », quartier par quartier et non en moyenne — un faubourg propre ne sauve pas
+ * le quartier qui étouffe.
+ */
+export function pollutedShare(eco, world, threshold) {
+  let total = 0;
+  let polluted = 0;
+  for (let i = 0; i < world.tiles.length; i++) {
+    const capacity = residentsOfTile(world.tiles[i]);
+    if (capacity <= 0) continue;
+    total += capacity;
+    if (eco.air[i] > threshold) polluted += capacity;
+  }
+  return total > 0 ? polluted / total : 0;
 }
 
 /** Nappe moyenne sous les quartiers (sans quartier : 0). */

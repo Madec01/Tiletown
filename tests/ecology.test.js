@@ -16,6 +16,7 @@ import { makeWorld, setTerrain, place } from './world-helpers.js';
 import {
   ECO_EMIT, ECO_SINK, ECO_WATER_OUT, ECO_WATER_IN, ECO_SOIL, ECO_SOIL_START, ECO_SOIL_EROSION,
   ECO_TRAFFIC_CUT, ECO_SPECIES_LEAVE_MONTHS, ECO_FAUNA_BASE, ECO_RIVER_CARRY, MONTH_SECONDS,
+  ECO_AIR_KEEP, ECO_AIR_DECAY, ECO_AIR_WIND,
 } from '../src/data/balance.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -69,10 +70,11 @@ test('écologie / air : une usine pollue ses voisins, davantage sous le vent ; u
   assert.ok(east > 0 && west > 0, 'les voisins reçoivent la pollution');
   assert.ok(east > west, 'sous le vent, c’est pire');
   assert.equal(far, 0, 'rien ne va encore jusqu’au bord');
-  // La valeur exacte du contrat : A1 = 12, diffusion 0,6/0,4, vent 0,15, dissipation 0,97.
+  // La valeur exacte du contrat : A1 = 12, diffusion (keep / 1−keep), vent, dissipation.
   const a1 = ECO_EMIT.factory;
-  assert.ok(Math.abs(here - 0.97 * (0.6 * a1 + 0.4 * 0 + 0.15 * (0 - a1))) < 1e-4);
-  assert.ok(Math.abs(east - 0.97 * (0.4 * (a1 / 4) + 0.15 * a1)) < 1e-4);
+  const k = ECO_AIR_KEEP;
+  assert.ok(Math.abs(here - ECO_AIR_DECAY * (k * a1 + (1 - k) * 0 + ECO_AIR_WIND * (0 - a1))) < 1e-4);
+  assert.ok(Math.abs(east - ECO_AIR_DECAY * ((1 - k) * (a1 / 4) + ECO_AIR_WIND * a1)) < 1e-4);
 
   // La même usine avec une forêt à l'est : elle absorbe au lieu de laisser passer.
   const wooded = makeWorld(7, 7);

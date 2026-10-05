@@ -8,11 +8,13 @@ import { makeWorld, setTerrain, place, riverColumn } from './world-helpers.js';
 import {
   windVector, hexToLinear, chimneyOffsets, collectSmokeEmitters, smokePuffAt,
   rotationAxisOf, rotorOf, collectBladeAnchors, bladeAngle, createEffects,
+  hazeDensity, collectHaze,
   SMOKE_LIFE, SMOKE_RISE, WIND_SPEED, SMOKE_SCALE, SMOKE_PUFFS, SMOKE_MAX, BLADE_RPS, BLADE_RPS_JITTER, CHIMNEYS,
+  HAZE_THRESHOLD, HAZE_HEIGHT, HAZE_SIZE, HAZE_MAX, HAZE_MIN_DENSITY,
 } from '../src/render3d/effects.js';
 import {
   flowVector, bankMask, bankVector, BANK_N, BANK_E, BANK_S, BANK_W, createGround,
-  WATER_LEVEL, WETLAND_FILM_LEVEL, WATER_STYLES, createWaterMaterial,
+  WATER_LEVEL, WETLAND_FILM_LEVEL, WATER_STYLES, createWaterMaterial, createLandMaterial,
 } from '../src/render3d/ground.js';
 import { BUILDING_SCALE } from '../src/render3d/buildings.js';
 import { excludedNodeNames, createVertexColorMaterial } from '../src/render3d/models.js';
@@ -430,4 +432,149 @@ test('excludedNodeNames : `exclude` d’abord, sinon `nodes`, toujours des chaî
   assert.deepEqual(excludedNodeNames({ exclude: [1, 'x'] }), ['x']);
   assert.deepEqual(excludedNodeNames({}), []);
   assert.deepEqual(excludedNodeNames(null), []);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Brume d'air vicié et champs d'écologie du sol (docs/ARCHITECTURE.md §10.3)
+
+test('effects : hazeDensity — rien jusqu’à 50, puis croissance jusqu’à 1 à 100', () => {
+  assert.equal(HAZE_THRESHOLD, 50);
+  assert.equal(hazeDensity(0), 0);
+  assert.equal(hazeDensity(50), 0);
+  assert.equal(hazeDensity(75), 0.5);
+  assert.equal(hazeDensity(100), 1);
+  assert.equal(hazeDensity(400), 1, 'hors échelle : borné');
+  assert.equal(hazeDensity(-20), 0);
+  assert.equal(hazeDensity(NaN), 0);
+  // Échelle 0 à 1 (si l'écologie fournit des valeurs normalisées).
+  assert.equal(hazeDensity(0.75, 1), 0.5);
+  assert.equal(hazeDensity(0.5, 1), 0);
+});
+
+test('effects : collectHaze — un voile par case polluée, au centre, les plus denses d’abord', () => {
+  const values = new Float32Array([0, 60, 100, 55, 51, 80]);
+  const list = collectHaze(values, 3, 2);
+  assert.deepEqual(list.map((h) => h.i), [2, 5, 1, 3], 'les cases ≤ 50 (et le voile imperceptible de 51) écartées');
+  assert.deepEqual(list[0], { i: 2, x: 2.5, y: 0.5, density: 1 });
+  assert.deepEqual(list[2], { i: 1, x: 1.5, y: 0.5, density: hazeDensity(60) });
+  assert.ok(list.every((h) => h.density >= HAZE_MIN_DENSITY));
+  assert.deepEqual(collectHaze(null, 3, 2), []);
+  assert.deepEqual(collectHaze(new Float32Array(6), 3, 2), [], 'air pur : aucun voile');
+  assert.deepEqual(collectHaze(values, 0, 0), []);
+});
+
+test('effects : fx.setAir — une InstancedMesh de brume, un appel de dessin, sans ombre', () => {
+  const models = stubModels();
+  const world = makeWorld(4, 4);
+  const fx = createEffects(models, { shadows: true });
+  fx.setWorld(world);
+  assert.equal(fx.stats().haze, 0);
+  assert.equal(fx.stats().calls, 0);
+
+  const air = new Float32Array(16);
+  air[5] = 100; air[6] = 70; air[9] = 20;      // deux cases polluées, une propre
+  fx.setAir(air);
+  const s = fx.stats();
+  assert.equal(s.haze, 2);
+  assert.equal(s.calls, 1, 'un seul appel de dessin pour toute la brume');
+  const haze = fx.haze;
+  assert.ok(haze && haze.isInstancedMesh);
+  assert.equal(haze.count, 2);
+  assert.equal(haze.castShadow, false);
+  assert.equal(haze.receiveShadow, false);
+  assert.equal(haze.material.transparent, true);
+  assert.ok(haze.count <= HAZE_MAX);
+  // Le voile le plus dense est au-dessus du centre de sa case, à la hauteur prévue.
+  const m = new THREE.Matrix4();
+  haze.getMatrixAt(0, m);
+  const p = new THREE.Vector3().setFromMatrixPosition(m);
+  assert.ok(Math.abs(p.x - 1.5) < 1e-6 && Math.abs(p.z - 1.5) < 1e-6, `${p.x}, ${p.z}`);
+  assert.ok(Math.abs(p.y - HAZE_HEIGHT) < 0.11, `hauteur ${p.y}`);
+  const scale = new THREE.Vector3().setFromMatrixScale(m);
+  assert.ok(Math.abs(scale.x - HAZE_SIZE) < 1e-6);
+  const density = haze.geometry.attributes.aDensity;
+  assert.equal(density.getX(0), 1);
+  assert.ok(density.getX(1) > 0 && density.getX(1) < 1);
+
+  // Un nouveau monde garde la brume (mêmes valeurs d'air, cases recalculées).
+  fx.setWorld(makeWorld(4, 4));
+  assert.equal(fx.stats().haze, 2);
+  // Air pur : plus rien à dessiner.
+  fx.setAir(new Float32Array(16));
+  assert.equal(fx.stats().haze, 0);
+  assert.equal(fx.stats().calls, 0);
+  assert.equal(fx.haze.visible, false);
+  fx.setAir(air);
+  fx.setAir(null);
+  assert.equal(fx.stats().haze, 0);
+  fx.dispose();
+  assert.equal(fx.group.children.length, 0);
+});
+
+test('ground : setLayerValues, setLayerPattern et setWaterQuality écrivent les attributs d’instance', () => {
+  const world = makeWorld(4, 4);
+  riverColumn(world, 1);
+  setTerrain(world, 3, 3, 'wetland');
+  const ground = createGround();
+  ground.setWorld(world);
+  const land = ground.group.getObjectByName('land');
+  const water = ground.group.getObjectByName('water');
+  const film = ground.group.getObjectByName('wetland-film');
+  // Sans calque : l'attribut vaut −1 partout (aucune hachure).
+  assert.ok(Array.from(land.geometry.attributes.aLayer.array).every((v) => v === -1));
+  assert.ok(Array.from(water.geometry.attributes.aLayer.array).every((v) => v === -1));
+
+  const field = new Float32Array(16).fill(0.5);
+  field[0] = 1;              // (0, 0) : terre
+  field[1] = 0.25;           // (1, 0) : rivière
+  field[15] = 0;             // (3, 3) : zone humide
+  ground.setLayerValues(field);
+  assert.equal(land.geometry.attributes.aLayer.getX(0), 1, 'première case de terre');
+  assert.equal(water.geometry.attributes.aLayer.getX(0), 0.25, 'première case de rivière');
+  assert.equal(film.geometry.attributes.aLayer.getX(0), 0, 'pellicule de la zone humide');
+  ground.setLayerValues(null);
+  assert.ok(Array.from(land.geometry.attributes.aLayer.array).every((v) => v === -1));
+
+  // Mode daltonien : un seul interrupteur, partagé par la terre et l'eau.
+  assert.equal(ground.layerPattern, false);
+  ground.setLayerPattern(true);
+  assert.equal(ground.layerPattern, true);
+  assert.equal(ground.stats.pattern, 1);
+  ground.setLayerPattern(false);
+  assert.equal(ground.layerPattern, false);
+
+  // Qualité de l'eau : seules l'eau et les zones humides portent l'attribut (0 à 1).
+  const quality = new Float32Array(16);
+  quality[1] = 100;          // rivière en haut : polluée
+  quality[15] = 40;          // zone humide
+  ground.setWaterQuality(quality);
+  assert.equal(water.geometry.attributes.aQuality.getX(0), 1);
+  assert.ok(Math.abs(film.geometry.attributes.aQuality.getX(0) - 0.4) < 1e-6);
+  ground.setWaterQuality(null);
+  assert.equal(water.geometry.attributes.aQuality.getX(0), 0);
+
+  // Les champs survivent à la reconstruction du monde (le calque reste allumé).
+  ground.setLayerValues(field);
+  ground.setWaterQuality(quality);
+  ground.setWorld(world);
+  const land2 = ground.group.getObjectByName('land');
+  const water2 = ground.group.getObjectByName('water');
+  assert.equal(land2.geometry.attributes.aLayer.getX(0), 1);
+  assert.equal(water2.geometry.attributes.aQuality.getX(0), 1);
+  ground.dispose();
+});
+
+test('ground : createLandMaterial — hachures ajoutées au shader de la terre, une seule fois', () => {
+  const uniforms = { uPattern: { value: 0 } };
+  const { material } = createLandMaterial(uniforms);
+  const shader = { uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <color_fragment>' };
+  material.onBeforeCompile(shader);
+  assert.equal(shader.uniforms.uPattern, uniforms.uPattern, 'le même interrupteur que l’eau');
+  assert.match(shader.vertexShader, /attribute float aLayer/);
+  assert.match(shader.vertexShader, /vHatchPos/);
+  assert.match(shader.fragmentShader, /uniform float uPattern/);
+  assert.match(shader.fragmentShader, /fract\( s \)/);
+  assert.equal(typeof material.customProgramCacheKey, 'function');
+  assert.notEqual(material.customProgramCacheKey(), createWaterMaterial().material.customProgramCacheKey());
+  material.dispose();
 });

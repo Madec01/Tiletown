@@ -17,6 +17,7 @@
 
 import { createGame, advance, canPlace, place, calendar } from '../src/core/game.js';
 import { speciesSummary } from '../src/core/ecology.js';
+import { centerOf } from '../src/core/worldgen.js';
 import { tileAt } from '../src/core/grid.js';
 import { TILE_BY_ID } from '../src/data/tiles.js';
 import { MONTH_SECONDS } from '../src/data/balance.js';
@@ -36,9 +37,11 @@ function parseArgs(argv) {
 
 /**
  * La case la moins chère où poser `tileId`. `nature` dit quoi faire de la nature native : `spare` l'évite
- * (conduite douce), `raze` la cherche au contraire (conduite « tout bétonner »).
+ * (conduite douce), `raze` la cherche au contraire et serre la ville autour de la mairie (conduite
+ * « tout bétonner » : du dense, du bitume, et la vallée qu'on grignote de l'intérieur).
  */
 function cheapestSpot(game, tileId, nature = 'spare') {
+  const c = centerOf(game.world);
   let best = null;
   for (let y = 0; y < game.world.rows; y++) {
     for (let x = 0; x < game.world.cols; x++) {
@@ -46,8 +49,11 @@ function cheapestSpot(game, tileId, nature = 'spare') {
       if (!check.ok) continue;
       const t = tileAt(game.world, x, y);
       const wild = t.native && t.terrain !== 'grass';
-      const bias = wild ? (nature === 'raze' ? -1000 : 1000) : 0;
-      const score = check.cost + bias + check.path.length * 0.01;
+      const bias = wild && nature !== 'river' ? (nature === 'raze' ? -1000 : 1000) : 0;
+      const pull = nature === 'raze' ? 12 * Math.max(Math.abs(x - c.x), Math.abs(y - c.y)) : 0;
+      // `river` : coller à l'eau, quoi qu'il en coûte (l'arbitrage de §7.4, pris à l'envers).
+      if (nature === 'river' && !touchesWater(game.world, x, y)) continue;
+      const score = check.cost + bias + pull + check.path.length * 0.01;
       if (!best || score < best.score) best = { x, y, check, score };
     }
   }
@@ -89,7 +95,9 @@ const STRATEGIES = {
         else if (s.shortages.includes('water')) next = tryPlace(g, 'water-tower', 0, 'raze');
         else if (s.shortages.includes('food')) next = tryPlace(g, 'field', 0, 'raze');
         else {
-          next = tryPlace(g, 'factory', 0, 'raze')
+          // L'usine au bord de la rivière (§7.4) : le terrain le moins cher, l'aval qu'on oublie.
+          next = tryPlace(g, 'factory', 0, 'river')
+            || tryPlace(g, 'factory', 0, 'raze')
             || tryPlace(g, 'house', 0, 'raze')
             || tryPlace(g, 'shop', 0, 'raze')
             || tryPlace(g, 'office', 0, 'raze');
@@ -125,6 +133,15 @@ const STRATEGIES = {
     },
   },
 };
+
+/** Vrai si la case touche la rivière ou un lac (par un côté). */
+function touchesWater(world, x, y) {
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const t = tileAt(world, x + dx, y + dy);
+    if (t && (t.terrain === 'river' || t.terrain === 'lake')) return true;
+  }
+  return false;
+}
 
 /** Nombre de bâtiments d'un type. */
 function countType(game, type) {

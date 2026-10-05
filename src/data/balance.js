@@ -165,12 +165,18 @@ export const ECO_SINK = Object.freeze({
 });
 /** Air : pollution ajoutée par unité de trafic de chaque arête riveraine. */
 export const ECO_AIR_PER_TRAFFIC = 0.5;
-/** Air : part gardée sur place par la diffusion (le reste vient de la moyenne des quatre voisins). */
-export const ECO_AIR_KEEP = 0.6;
+/**
+ * Air : part gardée sur place par la diffusion (le reste vient de la moyenne des quatre voisins) et
+ * dissipation mensuelle. GAME_DESIGN §5.1 proposait 0,6 et 0,97 ; mesuré sur une carrière de trois ans
+ * (tools/simulate.js), la pollution n'atteignait alors jamais les seuils de ce même §5.1 (bonheur à 40,
+ * exode à 60) : une usine plafonnait à 18 sur sa propre case. 0,7 et 0,98 concentrent la fumée là où elle
+ * sort et la laissent s'accumuler : une usine monte à ~45 chez elle, une centrale rend un quartier voisin
+ * invivable, et « tout bétonner » étouffe la vallée en trois ans.
+ */
+export const ECO_AIR_KEEP = 0.7;
 /** Air : poids du vent dominant (écart avec le voisin au vent). */
 export const ECO_AIR_WIND = 0.15;
-/** Air : dissipation mensuelle. */
-export const ECO_AIR_DECAY = 0.97;
+export const ECO_AIR_DECAY = 0.98;
 /** Air d'un quartier : bonheur −1 par tranche de 10 au-delà de 40. */
 export const ECO_AIR_HAPPY_THRESHOLD = 40;
 export const ECO_AIR_HAPPY_STEP = 10;
