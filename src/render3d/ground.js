@@ -2,42 +2,57 @@
 // `InstancedMesh` de boîtes : c'est UN SEUL MAILLAGE SOUDÉ, continu, tiré d'un champ de hauteur
 // interpolé en douceur (smootherstep) entre les centres de cases. Conséquences voulues :
 //   - les collines deviennent des DÔMES ARRONDIS qui courent sur plusieurs cases (plus de marches) ;
-//   - les berges DESCENDENT EN PENTE vers l'eau et les coudes de rivière s'arrondissent tout seuls
-//     (un coin de case entouré de terre remonte au-dessus du niveau de l'eau : l'angle droit disparaît) ;
 //   - les couleurs de terrain se FONDENT d'une case à l'autre (couleur par sommet, interpolée) : une
 //     forêt de plusieurs cases lit comme une seule forêt, pas comme un damier ;
 //   - un micro-relief continu en coordonnées monde (creux seulement, jamais de bosse) casse les aplats
 //     sans jamais faire léviter ce qui est posé à `surfaceHeight`.
+//
+// L'EAU suit le même principe depuis le chantier « rivière sinueuse ». Elle ne suit PLUS les bords de
+// cases : rivière, lacs et zones humides sont chacun UN SEUL MAILLAGE SOUDÉ dont le contour est la
+// LIGNE DE NIVEAU 0,5 d'un champ de « présence d'eau » :
+//   - champ par case (1 dans l'eau, 0 sur la terre), interpolé en smootherstep comme les hauteurs :
+//     les coudes à angle droit du tracé de `worldgen` deviennent des virages doux, et la largeur reste
+//     d'une case en moyenne (le niveau 0,5 tombe exactement sur la frontière des cases en ligne droite) ;
+//   - un SERPENTEMENT continu en coordonnées monde (`SHORE_WOBBLE`, ≈ 0,12 unité) déplace le rivage,
+//     fenêtré pour ne jamais toucher le centre des cases : la rivière reste donc continue d'un bout à
+//     l'autre (le champ vaut exactement 1 le long de la ligne qui joint les centres d'eau) et aucune
+//     flaque ne se détache ;
+//   - LE LIT ET LA BERGE SONT CREUSÉS D'APRÈS LE MÊME CHAMP : la surface vaut exactement `WATER_LEVEL`
+//     sur la ligne de niveau 0,5, descend vers le lit à l'intérieur, remonte en pente douce à
+//     l'extérieur. Il ne peut donc y avoir ni trou au bord de l'eau ni eau qui déborde sur la terre,
+//     et l'invariant « hors de l'eau, la surface ne descend jamais sous `WATER_LEVEL` » est exact.
+//   - la nappe d'eau est extraite un peu AVANT le rivage (`WATER_OVERLAP`) : son bord se glisse sous la
+//     berge, qui le masque — ni filet de terre apparent ni bagarre de profondeur sur la ligne d'eau.
+// Le maillage est obtenu par `contourMesh` (marching squares, sommets soudés par arête de grille).
+//
 // Le shader du sol ajoute, sans appel de dessin supplémentaire : grain d'herbe continu, affleurements
 // rocheux sur les pentes raides, liseré de sable au bord de l'eau, ombre de contact (`aAo`) au pied des
 // bâtiments et sous les bosquets, liseré de grille LOCAL pendant la pose (`setGridHint`), et les
-// hachures du mode daltonien (inchangées).
-//
-// L'EAU reste deux `InstancedMesh` de plans 1 × 1 (rivière et lacs à `WATER_LEVEL`, pellicule des zones
-// humides à `WETLAND_FILM_LEVEL`) partageant un `MeshLambertMaterial` modifié par `onBeforeCompile` :
-// ondulation, sens du courant, écume des berges, eau qui verdit avec la pollution. Depuis l'étape 5 les
-// bandes claires et le scintillement sont BEAUCOUP PLUS DISCRETS : le courant reste lisible, il n'attire
-// plus l'œil. `update(dt)` avance l'horloge du shader.
+// hachures du mode daltonien (inchangées). Le shader de l'eau (`aFlow`, `aStyle`, `aShore`, `aQuality`)
+// garde ses effets : ondulation, sens du courant discret, écume atténuée, haut-fond pâle, eau qui
+// verdit avec la pollution — tous pilotés par `aShore`, la DISTANCE AU RIVAGE, qui remplace l'ancien
+// masque de berges par côté de case.
 //
 // ÉCOLOGIE (§10.3), inchangé côté appelant :
 //   `setLayerValues(norm)` + `setLayerPattern(on)` : hachures du mode daltonien (attribut `aLayer`) ;
-//   `setWaterQuality(values)` : l'eau glisse vers un vert trouble (attribut d'instance `aQuality`).
+//   `setWaterQuality(values)` : l'eau glisse vers un vert trouble (attribut `aQuality`).
 //
 // Repère : la case (x, y) couvre [x, x+1] × [y, y+1] en (X, Z) ; le dessus de la terre plate est à
-// y = 0 ; nord = −Z, est = +X. Fonctions pures (testables sous Node) : `flowVector`, `bankMask`,
-// `bankVector`, `hillHeight`, `surfaceHeight`, `heightAt`, `terrainColorHex`.
+// y = 0 ; nord = −Z, est = +X. Fonctions pures (testables sous Node) : `flowVector`, `hillHeight`,
+// `hillMass`, `waterField`, `marshField`, `shoreDistance`, `isWaterAt`, `contourMesh`, `surfaceHeight`,
+// `heightAt`, `terrainColorHex`, `groundColorHex`.
 
 import * as THREE from 'three';
 import { PALETTE } from '../data/palette.js';
 import { TERRAINS } from '../data/terrain.js';
-import { hashUnit, lerp, composeScaled } from './util.js';
+import { hashUnit, lerp } from './util.js';
 import { LAYER_BANDS, HATCH_CYCLES, valueScale, layerNormalized } from './layers.js';
 
 /** Épaisseur de référence de la terre (le socle commence là ; roads.js s'en sert pour les piles de pont). */
 export const LAND_THICKNESS = 0.12;
 /** Niveau de la surface de l'eau profonde (rivière, lac). Abaissé à l'étape 5 : la berge se voit. */
 export const WATER_LEVEL = -0.16;
-/** Niveau de la pellicule d'eau des zones humides : au-dessus de la terre (0), sous les trottoirs (0,012). */
+/** Hauteur de la pellicule des zones humides AU-DESSUS du sol creusé (elle épouse le fond de la cuvette). */
 export const WETLAND_FILM_LEVEL = 0.006;
 /** Hauteur des collines au-dessus du sol (min, max). Bruit COHÉRENT : les cases voisines se ressemblent. */
 export const HILL_HEIGHT = Object.freeze([0.52, 1.10]);
@@ -57,9 +72,29 @@ export const SUBDIV_LIMIT = 700;
 export const DIP = 0.035;
 /** Échelle du micro-relief, en cases. */
 export const DIP_SCALE = 2.6;
-/** Fond des rivières et des lacs (caché sous l'eau ; donne la pente de la berge). */
+/** Fond des rivières et des lacs (caché sous l'eau ; donne la pente du lit). */
 export const BED_RIVER = -0.38;
 export const BED_LAKE = -0.50;
+/** Creux d'une zone humide sous la plaine : la nappe est LÉGÈREMENT ENFONCÉE (≤ DIP, rien ne lévite). */
+export const WETLAND_DEPTH = 0.03;
+
+/**
+ * Pente du champ d'eau à la traversée du rivage (dérivée de smootherstep en son milieu, par case).
+ * Sert à convertir « écart de champ » ↔ « distance au rivage en unités monde ».
+ */
+export const FIELD_SLOPE = 1.875;
+/** Amplitude du SERPENTEMENT du rivage, en unités monde : le contour ondule, jamais géométrique. */
+export const SHORE_WOBBLE = 0.12;
+/** Échelles (en cases) des deux octaves du serpentement : une grande houle, un grain fin. */
+export const SHORE_WOBBLE_SCALE = Object.freeze([3.1, 1.25]);
+/**
+ * Marge d'extraction de la nappe d'eau SOUS la berge (en unités de champ) : le bord du maillage d'eau
+ * passe un peu avant le rivage, là où la terre est déjà au-dessus du niveau de l'eau et le masque.
+ */
+export const WATER_OVERLAP = 0.08;
+/** Largeur du fondu du bord de la pellicule des zones humides (unités monde). */
+export const WETLAND_FADE = 0.16;
+
 /** Amplitude de l'ondulation de l'eau profonde (u). */
 export const WAVE_AMPLITUDE = 0.015;
 /** Vitesse de défilement des bandes claires le long du courant (u/s). */
@@ -80,11 +115,6 @@ export const WATER_MURKY_MIX = 0.72;
 export const HATCH_DARKEN = 0.5;
 /** Force de l'ombre de contact au pied des objets (0 = aucune, 1 = noire). */
 export const CONTACT_SHADOW = 0.3;
-/** Bits du masque des berges (`bankMask`) : côtés de la case bordés de terre. */
-export const BANK_N = 1;
-export const BANK_E = 2;
-export const BANK_S = 4;
-export const BANK_W = 8;
 
 /** Couleur de repli si un terrain est inconnu du catalogue. */
 const UNKNOWN_TERRAIN_COLOR = PALETTE.grass;
@@ -125,32 +155,8 @@ export function flowVector(dir) {
   return v ? [v[0], v[1]] : [0, 0];
 }
 
-/**
- * Masque des berges d'une case d'eau : bits N (1), E (2), S (4), W (8) levés pour chaque côté bordé
- * de terre (toute case qui n'est pas de l'eau profonde ; la zone humide compte comme une berge).
- * Hors de la carte, l'eau continue : pas d'écume au bord du monde.
- */
-export function bankMask(world, x, y) {
-  const land = (nx, ny) => {
-    if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) return false;
-    const t = world.tiles[ny * world.cols + nx];
-    return !t || !isWaterTerrain(t.terrain);
-  };
-  let mask = 0;
-  if (land(x, y - 1)) mask |= BANK_N;
-  if (land(x + 1, y)) mask |= BANK_E;
-  if (land(x, y + 1)) mask |= BANK_S;
-  if (land(x - 1, y)) mask |= BANK_W;
-  return mask;
-}
-
-/** Masque des berges → [n, e, s, w] (0 ou 1), l'attribut `aBanks` du shader. */
-export function bankVector(mask) {
-  return [mask & BANK_N ? 1 : 0, mask & BANK_E ? 1 : 0, mask & BANK_S ? 1 : 0, mask & BANK_W ? 1 : 0];
-}
-
 // ---------------------------------------------------------------------------------------------
-// Champ de hauteur (pur, testable) : collines arrondies, berges en pente, micro-relief continu
+// Champ de hauteur et champ d'eau (purs, testables)
 // ---------------------------------------------------------------------------------------------
 
 /** Courbe de lissage de Perlin (C², dérivée nulle aux extrémités) : des pentes sans arête. */
@@ -160,6 +166,7 @@ function smootherstep(t) {
 }
 
 const clampInt = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** Bruit de valeur lissé, déterministe : même graine → même paysage, sur tout appareil. */
 function valueNoise(seed, x, y, k = 0) {
@@ -202,14 +209,13 @@ export function hillHeight(world, x, y) {
   return lerp(HILL_HEIGHT[0], HILL_HEIGHT[1], n) * hillMass(world, x, y);
 }
 
-/** Hauteur visée au CENTRE d'une case : l'eau creuse, la colline monte, le reste est à plat. */
+/**
+ * Hauteur de la TERRE FERME au CENTRE d'une case, avant creusement de l'eau : la colline monte, tout
+ * le reste (eau comprise : son lit est creusé ensuite, d'après le champ d'eau) est à plat.
+ */
 function tileTarget(world, x, y) {
   const t = world.tiles[y * world.cols + x];
-  const terrain = t ? t.terrain : 'grass';
-  if (terrain === 'river') return BED_RIVER;
-  if (terrain === 'lake') return BED_LAKE;
-  if (terrain === 'hill') return hillHeight(world, x, y);
-  return 0;
+  return t && t.terrain === 'hill' ? hillHeight(world, x, y) : 0;
 }
 
 /** Champ de hauteur et masques d'un monde, calculés une fois et mémorisés (clé : l'objet monde). */
@@ -220,16 +226,24 @@ function getField(world) {
   if (f && f.cols === world.cols && f.rows === world.rows) return f;
   const { cols, rows } = world;
   const n = cols * rows;
-  const h = new Float32Array(n);
-  const flat = new Float32Array(n);   // 1 : surface tenue à plat (bâti, zone humide) — pas de micro-relief
+  const base = new Float32Array(n);    // hauteur de la terre ferme (colline comprise)
+  const flat = new Float32Array(n);    // 1 : surface tenue à plat (bâti, zone humide) — pas de micro-relief
+  const wet = new Float32Array(n);     // 1 : eau profonde (rivière, lac)
+  const marsh = new Float32Array(n);   // 1 : zone humide
+  const depth = new Float32Array(n);   // creusement du lit sous la ligne d'eau
   const water = new Uint8Array(n);
+  const riverDepth = WATER_LEVEL - BED_RIVER, lakeDepth = WATER_LEVEL - BED_LAKE;
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       const t = world.tiles[i];
-      h[i] = tileTarget(world, x, y);
-      water[i] = t && isWaterTerrain(t.terrain) ? 1 : 0;
-      flat[i] = t && (t.building || isShallowWater(t.terrain)) ? 1 : 0;
+      const terrain = t ? t.terrain : 'grass';
+      base[i] = tileTarget(world, x, y);
+      water[i] = isWaterTerrain(terrain) ? 1 : 0;
+      wet[i] = water[i];
+      marsh[i] = isShallowWater(terrain) ? 1 : 0;
+      depth[i] = terrain === 'lake' ? lakeDepth : riverDepth;
+      flat[i] = t && (t.building || isShallowWater(terrain)) ? 1 : 0;
     }
   }
   // Le lissé de « à plat » déborde d'une case : une rue au bord d'un îlot ne flotte pas au-dessus d'un creux.
@@ -248,7 +262,9 @@ function getField(world) {
       spread[y * cols + x] = m;
     }
   }
-  f = { cols, rows, h, flat: spread, water, seed: (world.seed | 0) };
+  // La profondeur du lit s'étale sur la terre voisine : au bord d'un lac, le lit plonge comme un lac.
+  spreadFromMask(depth, 1, water, cols, rows, riverDepth, 2);
+  f = { cols, rows, base, flat: spread, wet, marsh, depth, water, seed: (world.seed | 0) };
   FIELDS.set(world, f);
   return f;
 }
@@ -263,50 +279,162 @@ function sampleSmooth(field, cols, rows, x, z) {
   return lerp(lerp(a, b, tx), lerp(c, d, tx), tz);
 }
 
-/** Indices de case touchés par une coordonnée (deux sur une frontière exacte, un sinon, aucun hors carte). */
-function tilesAtCoord(v, n, out) {
-  out.length = 0;
-  const k = Math.round(v);
-  if (Math.abs(v - k) < 1e-6) {
-    if (k - 1 >= 0 && k - 1 < n) out.push(k - 1);
-    if (k >= 0 && k < n) out.push(k);
-  } else {
-    const i = Math.floor(v);
-    if (i >= 0 && i < n) out.push(i);
-  }
-  return out;
-}
-
-const _xs = [], _zs = [];
-
-/** Vrai si le point (x, z) est à l'intérieur de l'union des cases d'eau profonde (frontières comprises). */
-function insideDeepWater(world, x, z) {
-  const f = getField(world);
-  tilesAtCoord(x, f.cols, _xs);
-  tilesAtCoord(z, f.rows, _zs);
-  if (!_xs.length || !_zs.length) return false;
-  for (const tx of _xs) for (const tz of _zs) if (!f.water[tz * f.cols + tx]) return false;
-  return true;
+/** Même échantillonnage, pour un champ à plusieurs composantes (couleurs, courant). */
+function sampleSmoothN(field, comps, c, cols, rows, x, z) {
+  const fx = x - 0.5, fz = z - 0.5;
+  const x0 = Math.floor(fx), z0 = Math.floor(fz);
+  const tx = smootherstep(fx - x0), tz = smootherstep(fz - z0);
+  const at = (gx, gz) => field[(clampInt(gz, 0, rows - 1) * cols + clampInt(gx, 0, cols - 1)) * comps + c];
+  const a = at(x0, z0), b = at(x0 + 1, z0), cc = at(x0, z0 + 1), d = at(x0 + 1, z0 + 1);
+  return lerp(lerp(a, b, tx), lerp(cc, d, tx), tz);
 }
 
 /**
- * HAUTEUR RÉELLE DU TERRAIN en coordonnées CONTINUES (x, z) : c'est la surface qu'on voit.
- * Entre deux centres de cases elle interpole en douceur ; elle creuse sous l'eau, et un micro-relief
- * continu (jamais une bosse, seulement un creux) casse les aplats sans faire léviter ce qui est posé.
- * Hors des cases d'eau, elle ne descend jamais sous `WATER_LEVEL` : le plan d'eau d'une case couvre
- * donc toujours exactement sa case, sans trou au bord. Ce raccord est la SEULE discontinuité de la
- * fonction (sur la frontière exacte d'une case d'eau) ; le maillage, lui, échantillonne la grille de
- * sommets et reste soudé — aucune fente n'apparaît.
+ * Étale les valeurs des cases du masque sur leurs voisines (moyenne pondérée, `passes` anneaux).
+ * L'eau garde ainsi SA couleur, SON calque et SON courant jusque sous la berge : rien de la terre
+ * voisine ne déteint sur la nappe quand on l'échantillonne au-delà du centre des cases d'eau.
+ * Mute `values` sur place ; les cases hors de portée reçoivent `fallback`.
+ */
+function spreadFromMask(values, comps, mask, cols, rows, fallback, passes = 2) {
+  const n = cols * rows;
+  const known = Uint8Array.from(mask);
+  const acc = new Float32Array(comps);
+  for (let pass = 0; pass < passes; pass++) {
+    const next = Uint8Array.from(known);
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = y * cols + x;
+        if (known[i]) continue;
+        acc.fill(0);
+        let total = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+            const j = ny * cols + nx;
+            if (!known[j]) continue;
+            const w = dx === 0 || dy === 0 ? 1 : 0.5;
+            for (let c = 0; c < comps; c++) acc[c] += values[j * comps + c] * w;
+            total += w;
+          }
+        }
+        if (total <= 0) continue;
+        for (let c = 0; c < comps; c++) values[i * comps + c] = acc[c] / total;
+        next[i] = 1;
+      }
+    }
+    known.set(next);
+  }
+  for (let i = 0; i < n; i++) {
+    if (known[i]) continue;
+    for (let c = 0; c < comps; c++) values[i * comps + c] = Array.isArray(fallback) ? fallback[c] : fallback;
+  }
+  return values;
+}
+
+/**
+ * Serpentement du rivage, dans [−1, 1] : deux octaves de bruit continu en coordonnées monde. La grande
+ * houle domine, pour que les deux rives d'une rivière bougent ensemble plutôt que de la pincer.
+ */
+function shoreNoise(seed, x, z, k) {
+  const a = valueNoise(seed, x / SHORE_WOBBLE_SCALE[0], z / SHORE_WOBBLE_SCALE[0], k);
+  const b = valueNoise(seed, x / SHORE_WOBBLE_SCALE[1], z / SHORE_WOBBLE_SCALE[1], k + 1);
+  return ((a - 0.5) * 1.4 + (b - 0.5) * 0.6);
+}
+
+/**
+ * Fenêtre du serpentement : 1 dans la bande de transition (autour de la ligne de niveau 0,5),
+ * 0 au centre des cases (champ à 0 ou à 1). Deux garanties précieuses :
+ *   - le champ vaut EXACTEMENT 1 au centre des cases d'eau et sur les segments qui les joignent →
+ *     la rivière reste continue d'un bout à l'autre, quelle que soit la graine ;
+ *   - le champ vaut EXACTEMENT 0 au centre des cases de terre → aucune flaque détachée, et la hauteur
+ *     de pose d'un bâtiment riverain ne bouge pas d'un pouce.
+ */
+function wobbleWindow(f0) {
+  return 1 - smootherstep((Math.abs(f0 - 0.5) - 0.12) / 0.33);
+}
+
+/** Champ brut + serpentement, commun à l'eau profonde et aux zones humides. */
+function wobbledField(values, f, x, z, key) {
+  const f0 = sampleSmooth(values, f.cols, f.rows, x, z);
+  const w = wobbleWindow(f0);
+  if (w <= 0) return f0;
+  return f0 + SHORE_WOBBLE * FIELD_SLOPE * w * shoreNoise(f.seed ^ key, x, z, key);
+}
+
+/**
+ * CHAMP D'EAU PROFONDE en coordonnées continues : ≥ 0,5 dans l'eau, 0,5 exactement sur le rivage,
+ * 1 au centre d'une case d'eau entourée d'eau. C'est LUI qui dessine la rivière : la nappe, le lit et
+ * la berge en sont tous tirés, donc ils ne peuvent pas se contredire.
+ */
+export function waterField(world, x, z) {
+  const f = getField(world);
+  return wobbledField(f.wet, f, x, z, 0x1ea0);
+}
+
+/** Même champ pour les zones humides (contour propre, décalé du précédent par une autre graine). */
+export function marshField(world, x, z) {
+  const f = getField(world);
+  return wobbledField(f.marsh, f, x, z, 0x6a5d);
+}
+
+/** Distance signée au rivage, en unités monde : > 0 dans l'eau, 0 sur la ligne d'eau, < 0 sur la terre. */
+export function shoreDistance(world, x, z) {
+  return (waterField(world, x, z) - 0.5) / FIELD_SLOPE;
+}
+
+/** Vrai si le point continu (x, z) est dans l'eau profonde (du bon côté de la ligne de niveau). */
+export function isWaterAt(world, x, z) {
+  return waterField(world, x, z) >= 0.5;
+}
+
+/**
+ * Profil de la BERGE : 0 sur la terre ferme, 1 à la ligne d'eau et au-delà. Parabole (dérivée nulle
+ * côté plaine, franche côté eau) : la berge quitte l'eau avec une vraie pente puis s'adoucit dans la
+ * prairie — une plage, pas un biseau mou qui lutterait avec le plan d'eau.
+ */
+function bankBlend(f) {
+  if (f >= 0.5) return 1;
+  if (f <= 0) return 0;
+  const t = 2 * f;
+  return t * t;
+}
+
+/** Profil du LIT : 0 à la ligne d'eau, 1 au cœur de l'eau ; plonge franchement puis s'aplatit. */
+function bedBlend(f) {
+  if (f <= 0.5) return 0;
+  const v = clamp01((f - 0.5) * 2);
+  return v * (2 - v);
+}
+
+/**
+ * HAUTEUR RÉELLE DU TERRAIN en coordonnées CONTINUES (x, z) : c'est la surface qu'on voit, et elle est
+ * CONTINUE PARTOUT (plus aucun raccord à la frontière des cases d'eau). Construction :
+ *   terre ferme interpolée → ramenée à `WATER_LEVEL` sur le rivage (profil `bankBlend`) → creusée vers
+ *   le lit à l'intérieur (profil `bedBlend`) → creusée encore par le micro-relief et la cuvette des
+ *   zones humides, tous deux éteints au bord de l'eau.
+ * Deux propriétés exactes en découlent :
+ *   - `heightAt == WATER_LEVEL` exactement sur la ligne de niveau 0,5 du champ d'eau (le bord de la
+ *     nappe) ; au-dessus à l'extérieur, en dessous à l'intérieur → ni trou ni débordement ;
+ *   - hors de l'eau la surface ne descend JAMAIS sous `WATER_LEVEL` (la terre ferme est à 0 au moins,
+ *     soit 0,16 au-dessus, et les creux cumulés valent au plus DIP + WETLAND_DEPTH = 0,065).
  */
 export function heightAt(world, x, z) {
   const f = getField(world);
-  let h = sampleSmooth(f.h, f.cols, f.rows, x, z);
-  const flat = sampleSmooth(f.flat, f.cols, f.rows, x, z);
-  if (flat < 1) {
-    const dip = valueNoise(f.seed ^ 0x51f1, x / DIP_SCALE, z / DIP_SCALE, 11);
-    h -= DIP * dip * (1 - flat);
+  const base = sampleSmooth(f.base, f.cols, f.rows, x, z);
+  const wf = waterField(world, x, z);
+  const bank = bankBlend(wf);
+  let h = base + (WATER_LEVEL - base) * bank;
+  if (wf > 0.5) h -= sampleSmooth(f.depth, f.cols, f.rows, x, z) * bedBlend(wf);
+  if (bank < 1) {
+    const flat = sampleSmooth(f.flat, f.cols, f.rows, x, z);
+    let sink = 0;
+    if (flat < 1) sink += DIP * valueNoise(f.seed ^ 0x51f1, x / DIP_SCALE, z / DIP_SCALE, 11) * (1 - flat);
+    const mf = marshField(world, x, z);
+    if (mf > 0) sink += WETLAND_DEPTH * clamp01(mf);
+    h -= (1 - bank) * sink;
   }
-  if (!insideDeepWater(world, x, z)) h = Math.max(h, WATER_LEVEL);
   return h;
 }
 
@@ -314,7 +442,8 @@ export function heightAt(world, x, z) {
  * Altitude de la surface sur laquelle poser un décor ou un bâtiment en (x, y) — CONTRAT INCHANGÉ
  * (buildings.js, roads.js, actors.js, ghost.js, species.js) : 0 sur la terre plate, `WATER_LEVEL` sur
  * l'eau, `hillHeight` sur une colline. Le maillage passe exactement par cette valeur au centre des cases
- * bâties ; sur les cases naturelles le micro-relief peut creuser jusqu'à `DIP` sous elle (jamais au-dessus).
+ * bâties ; sur les cases naturelles les creux continus (micro-relief, cuvette de zone humide) peuvent
+ * descendre jusqu'à `DIP` sous elle (jamais au-dessus).
  */
 export function surfaceHeight(world, x, y) {
   const tile = world.tiles[y * world.cols + x];
@@ -325,10 +454,88 @@ export function surfaceHeight(world, x, y) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Extraction de contour (marching squares) : un maillage soudé pour la région « champ ≥ iso »
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * MAILLAGE D'UNE LIGNE DE NIVEAU. `field` est échantillonné sur une grille de nx × nz sommets espacés
+ * de `step` (le sommet (i, j) est en (i·step, j·step)) ; la fonction renvoie la surface couvrant
+ * `field ≥ iso`, découpée case de grille par case de grille (marching squares « plein ») :
+ *   { xz: Float32Array (2 par sommet), index: number[] (triangles), count }.
+ * Les sommets sont SOUDÉS : un coin de grille et un point de traversée d'arête sont partagés par les
+ * cases voisines (clé = indice de coin ou d'arête), donc aucune fente ne peut apparaître.
+ * Le parcours des quatre coins dans le sens trigonométrique vu du dessus (+Y) donne des polygones
+ * convexes (triangle à hexagone) qu'un éventail triangule sans recouvrement, y compris au point selle.
+ */
+export function contourMesh(field, nx, nz, step, iso) {
+  const total = nx * nz;
+  const keyed = new Map();
+  const xs = [], zs = [];
+  const index = [];
+  const poly = [];
+
+  const corner = (i, j) => {
+    const key = j * nx + i;
+    let v = keyed.get(key);
+    if (v === undefined) {
+      v = xs.length;
+      keyed.set(key, v);
+      xs.push(i * step); zs.push(j * step);
+    }
+    return v;
+  };
+  const crossing = (i1, j1, i2, j2) => {
+    // Clé canonique : arête repérée par son extrémité de plus petit indice, + son axe.
+    const swap = j2 * nx + i2 < j1 * nx + i1;
+    const ia = swap ? i2 : i1, ja = swap ? j2 : j1;
+    const ib = swap ? i1 : i2, jb = swap ? j1 : j2;
+    const key = total * (ia === ib ? 2 : 1) + ja * nx + ia;
+    let v = keyed.get(key);
+    if (v === undefined) {
+      const fa = field[ja * nx + ia], fb = field[jb * nx + ib];
+      const d = fb - fa;
+      const t = Math.abs(d) < 1e-9 ? 0.5 : clamp01((iso - fa) / d);
+      v = xs.length;
+      keyed.set(key, v);
+      xs.push((ia + (ib - ia) * t) * step); zs.push((ja + (jb - ja) * t) * step);
+    }
+    return v;
+  };
+
+  for (let j = 0; j < nz - 1; j++) {
+    for (let i = 0; i < nx - 1; i++) {
+      // Coins dans le sens trigonométrique vu du dessus : (i,j) → (i,j+1) → (i+1,j+1) → (i+1,j).
+      const ci = [i, i, i + 1, i + 1], cj = [j, j + 1, j + 1, j];
+      const f0 = field[j * nx + i], f1 = field[(j + 1) * nx + i];
+      const f2 = field[(j + 1) * nx + i + 1], f3 = field[j * nx + i + 1];
+      const inMask = (f0 >= iso ? 1 : 0) | (f1 >= iso ? 2 : 0) | (f2 >= iso ? 4 : 0) | (f3 >= iso ? 8 : 0);
+      if (inMask === 0) continue;
+      if (inMask === 15) {
+        const a = corner(i, j), b = corner(i, j + 1), c = corner(i + 1, j + 1), d = corner(i + 1, j);
+        index.push(a, b, c, a, c, d);
+        continue;
+      }
+      poly.length = 0;
+      for (let k = 0; k < 4; k++) {
+        const k2 = (k + 1) & 3;
+        const inK = (inMask >> k) & 1, inN = (inMask >> k2) & 1;
+        if (inK) poly.push(corner(ci[k], cj[k]));
+        if (inK !== inN) poly.push(crossing(ci[k], cj[k], ci[k2], cj[k2]));
+      }
+      for (let k = 1; k + 1 < poly.length; k++) index.push(poly[0], poly[k], poly[k + 1]);
+    }
+  }
+
+  const xz = new Float32Array(xs.length * 2);
+  for (let v = 0; v < xs.length; v++) { xz[v * 2] = xs[v]; xz[v * 2 + 1] = zs[v]; }
+  return { xz, index, count: xs.length };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Hachures du mode daltonien (partagées par la terre et l'eau)
 // ---------------------------------------------------------------------------------------------
 
-/** Déclarations communes aux shaders de sol : valeur du calque par instance et position monde. */
+/** Déclarations communes aux shaders de sol : valeur du calque par sommet et position monde. */
 const HATCH_VERTEX_PARS = /* glsl */`
 attribute float aLayer;
 varying float vLayer;
@@ -363,7 +570,7 @@ if ( uPattern > 0.5 && vLayer >= 0.0 ) {
 }
 `;
 
-/** Corps de vertex commun : position monde de la case et valeur du calque (après `begin_vertex`). */
+/** Corps de vertex commun : position monde du sommet et valeur du calque (après `begin_vertex`). */
 const HATCH_VERTEX_BODY = /* glsl */`
 {
 	vec4 hp = vec4( position, 1.0 );
@@ -506,35 +713,30 @@ export function createLandMaterial(shared = { uPattern: { value: 0 } }) {
 const WATER_VERTEX_PARS = /* glsl */`
 uniform float uTime;
 attribute vec2 aFlow;
-attribute vec4 aBanks;
 attribute vec2 aStyle;
+attribute float aShore;
 attribute float aQuality;
 varying vec2 vWaterPos;
-varying vec2 vLocalPos;
 varying vec2 vFlow;
-varying vec4 vBanks;
 varying vec2 vStyle;
+varying float vShore;
 varying float vQuality;
 `;
 
 const WATER_VERTEX_BODY = /* glsl */`
 vec3 transformed = vec3( position );
 {
-	vec4 wp = vec4( position, 1.0 );
-	#ifdef USE_INSTANCING
-		wp = instanceMatrix * wp;
-	#endif
-	wp = modelMatrix * wp;
+	vec4 wp = modelMatrix * vec4( position, 1.0 );
 	vWaterPos = wp.xz;
-	vLocalPos = position.xz;
 	vFlow = aFlow;
-	vBanks = aBanks;
 	vStyle = aStyle;
+	vShore = aShore;
 	vQuality = aQuality;
-	// Ondulation douce : deux fréquences croisées, fonction de la position monde (continue d'une case à l'autre).
+	// Ondulation douce : deux fréquences croisées, fonction de la position monde (continue d'un bout
+	// à l'autre de la nappe) et ÉTEINTE sur le rivage, pour que le bord reste glissé sous la berge.
 	float w1 = sin( wp.x * 6.1 + wp.z * 2.3 + uTime * 1.9 );
 	float w2 = sin( wp.x * 2.7 - wp.z * 5.3 - uTime * 1.3 );
-	transformed.y += aStyle.x * ( 0.6 * w1 + 0.4 * w2 );
+	transformed.y += aStyle.x * ( 0.6 * w1 + 0.4 * w2 ) * smoothstep( 0.0, 0.18, aShore );
 }
 `;
 
@@ -542,22 +744,26 @@ const WATER_FRAGMENT_PARS = /* glsl */`
 uniform float uTime;
 uniform vec3 uMurky;
 uniform vec3 uShallow;
+uniform float uFade;
 varying vec2 vWaterPos;
-varying vec2 vLocalPos;
 varying vec2 vFlow;
-varying vec4 vBanks;
 varying vec2 vStyle;
+varying float vShore;
 varying float vQuality;
 ${NOISE_GLSL}
 `;
 
 /**
- * Corps du fragment, inséré après `color_fragment`. Étape 5 : tout est VOLONTAIREMENT DISCRET — les
- * bandes de courant sont trois fois plus faibles et plus larges, le scintillement est à peine perceptible,
- * l'écume est une ombre claire au bord. Le sens du courant reste lisible, il n'attire plus l'œil.
+ * Corps du fragment, inséré après `color_fragment`. Tout est VOLONTAIREMENT DISCRET — les bandes de
+ * courant sont faibles et larges, le scintillement est à peine perceptible, l'écume est une ombre
+ * claire au bord. Le sens du courant reste lisible, il n'attire plus l'œil.
+ * Depuis le maillage d'eau sinueux, l'écume, le haut-fond et le fondu des zones humides ne lisent plus
+ * un masque de côtés de case : ils lisent `vShore`, la DISTANCE AU RIVAGE en unités monde. Le contour
+ * étant déjà sinueux, un bruit continu suffit à le rendre irrégulier à toutes les échelles.
  */
 const WATER_FRAGMENT_BODY = /* glsl */`
 {
+	float shore = max( vShore, 0.0 );
 	// Bandes claires qui défilent dans le sens du courant (FLOW_SPEED u/s) ; nulles sur l'eau dormante (aStyle.y = 0).
 	float along = dot( vWaterPos, vFlow );
 	float across = vWaterPos.x * vFlow.y - vWaterPos.y * vFlow.x;
@@ -567,23 +773,15 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	float sx = sin( vWaterPos.x * 5.5 + uTime * 1.1 + sin( vWaterPos.y * 2.1 + uTime * 0.4 ) * 1.5 );
 	float sz = sin( vWaterPos.y * 4.3 - uTime * 0.9 + sin( vWaterPos.x * 1.7 - uTime * 0.3 ) * 1.6 );
 	float shimmer = smoothstep( 0.72, 1.0, sx * sz ) * 0.028;
-	// Écume : fin liseré clair le long des côtés bordés de terre (nord = z local −0,5, est = x local +0,5).
-	float edge = 0.085 + 0.02 * sin( ( vWaterPos.x + vWaterPos.y ) * 5.0 + uTime * 0.9 );
-	float foam = 0.0;
-	foam = max( foam, vBanks.x * ( 1.0 - smoothstep( 0.0, edge, 0.5 + vLocalPos.y ) ) );
-	foam = max( foam, vBanks.y * ( 1.0 - smoothstep( 0.0, edge, 0.5 - vLocalPos.x ) ) );
-	foam = max( foam, vBanks.z * ( 1.0 - smoothstep( 0.0, edge, 0.5 - vLocalPos.y ) ) );
-	foam = max( foam, vBanks.w * ( 1.0 - smoothstep( 0.0, edge, 0.5 + vLocalPos.x ) ) );
-	foam *= 0.6 + 0.2 * sin( uTime * 1.3 + along * 3.0 );
-	// HAUT-FOND : large frange pâle le long des berges, au contour ONDULÉ par un bruit en coordonnées
-	// monde. C'est elle qui casse la ligne d'eau rectiligne de la grille : on lit une rive, pas un bord de case.
-	float dN = mix( 1.0, 0.5 + vLocalPos.y, vBanks.x );
-	float dE = mix( 1.0, 0.5 - vLocalPos.x, vBanks.y );
-	float dS = mix( 1.0, 0.5 - vLocalPos.y, vBanks.z );
-	float dW = mix( 1.0, 0.5 + vLocalPos.x, vBanks.w );
-	float bankDist = min( min( dN, dE ), min( dS, dW ) );
-	float wobble = ( ttNoise( vWaterPos * 2.4 ) * 0.6 + ttNoise( vWaterPos * 6.3 ) * 0.4 - 0.5 ) * 0.17;
-	float shallow = 1.0 - smoothstep( 0.0, 0.26, bankDist + wobble );
+	// Bruit de rive, continu en coordonnées monde : il brouille écume et haut-fond sans jamais
+	// dessiner de limite de case.
+	float wobble = ( ttNoise( vWaterPos * 2.4 ) * 0.6 + ttNoise( vWaterPos * 6.3 ) * 0.4 - 0.5 );
+	// Écume : fin liseré clair le long du rivage, qui respire.
+	float edge = 0.075 + 0.025 * sin( ( vWaterPos.x + vWaterPos.y ) * 5.0 + uTime * 0.9 );
+	float foam = ( 1.0 - smoothstep( 0.0, edge, shore + wobble * 0.05 ) ) * ( 0.6 + 0.2 * sin( uTime * 1.3 + along * 3.0 ) );
+	// HAUT-FOND : large frange pâle le long des berges, au contour ondulé. C'est elle qui fait lire une
+	// rive plutôt qu'un bord de nappe.
+	float shallow = 1.0 - smoothstep( 0.0, 0.3, shore + wobble * 0.17 );
 	// Eau polluée : la couleur de base glisse vers le vert trouble, les reflets s'éteignent, des voiles
 	// d'algues apparaissent (deux ondes lentes), proportionnellement a la pollution (aQuality).
 	float q = clamp( vQuality, 0.0, 1.0 );
@@ -593,35 +791,41 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	diffuseColor.rgb = mix( diffuseColor.rgb, uShallow, shallow * 0.3 * ( 1.0 - 0.7 * q ) );
 	float light = clamp( bands + shimmer + foam * 0.22, 0.0, 0.35 ) * ( 1.0 - 0.6 * q );
 	diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), light );
+	// Fondu du bord (pellicule des zones humides seulement : uFade = 0 sur l'eau profonde, opaque).
+	if ( uFade > 0.0 ) diffuseColor.a *= smoothstep( 0.0, uFade, shore + wobble * 0.06 );
 }
 `;
 
 /**
- * Matériau partagé par toute l'eau : { material, uniforms } ; `uniforms.uTime.value` est l'horloge (s).
- * La couleur vient de `instanceColor` (terrain ou calque), un léger éclat propre éclaircit l'eau.
+ * Matériau de l'eau : { material, uniforms } ; `uniforms.uTime.value` est l'horloge (s). La couleur
+ * vient des couleurs de sommets (terrain ou calque), un léger éclat propre éclaircit l'eau.
+ * `shared` permet de partager `uTime` et `uPattern` entre l'eau profonde et la pellicule des zones
+ * humides ; `options.fade` (> 0) fond le bord de la nappe (zones humides), `options.transparent`
+ * demande le mélange. Les deux matériaux compilent LE MÊME programme.
  */
-export function createWaterMaterial(shared = {}) {
+export function createWaterMaterial(shared = {}, options = {}) {
   const uniforms = {
-    uTime: { value: 0 },
+    uTime: shared.uTime || { value: 0 },
     uMurky: { value: new THREE.Color(WATER_MURKY) },
     uShallow: { value: new THREE.Color(WATER_SHALLOW) },
     uPattern: shared.uPattern || { value: 0 },
+    uFade: { value: options.fade || 0 },
   };
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
+    vertexColors: true,
     emissive: new THREE.Color(PALETTE.river).multiplyScalar(0.18),
+    transparent: Boolean(options.transparent),
+    depthWrite: !options.transparent,
   });
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = uniforms.uTime;
-    shader.uniforms.uMurky = uniforms.uMurky;
-    shader.uniforms.uShallow = uniforms.uShallow;
-    shader.uniforms.uPattern = uniforms.uPattern;
+    for (const name of Object.keys(uniforms)) shader.uniforms[name] = uniforms[name];
     shader.vertexShader = WATER_VERTEX_PARS + HATCH_VERTEX_PARS
       + shader.vertexShader.replace('#include <begin_vertex>', WATER_VERTEX_BODY + HATCH_VERTEX_BODY);
     shader.fragmentShader = WATER_FRAGMENT_PARS + HATCH_FRAGMENT_PARS
       + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + WATER_FRAGMENT_BODY + HATCH_FRAGMENT_BODY);
   };
-  material.customProgramCacheKey = () => 'tiletown-water-5';
+  material.customProgramCacheKey = () => 'tiletown-water-6';
   return { material, uniforms };
 }
 
@@ -663,70 +867,43 @@ export function createGround() {
   // Hachures du mode daltonien : un seul interrupteur pour la terre et l'eau.
   const patternUniform = { value: 0 };
   const { material: landMaterial, uniforms: landUniforms } = createLandMaterial({ uPattern: patternUniform });
-  // Plan d'eau 1 × 1 à 2 × 2 segments (neuf sommets) : assez pour que l'ondulation se voie.
-  const waterTemplate = new THREE.PlaneGeometry(1, 1, 2, 2);
-  waterTemplate.rotateX(-Math.PI / 2);
   const { material: waterMaterial, uniforms } = createWaterMaterial({ uPattern: patternUniform });
+  // Pellicule des zones humides : même programme, mais le bord se fond dans la terre.
+  const { material: filmMaterial } = createWaterMaterial(
+    { uPattern: patternUniform, uTime: uniforms.uTime },
+    { fade: WETLAND_FADE, transparent: true },
+  );
   const riverColor = new THREE.Color(PALETTE.river);
   const skirtTopColor = new THREE.Color(PALETTE.soil).multiplyScalar(1.12);
   const skirtBottomColor = new THREE.Color(PALETTE.soil).multiplyScalar(0.70);
 
   let land = null;    // maillage soudé du terrain (+ jupe du socle)
-  let water = null;   // rivière + lacs
-  let film = null;    // zones humides
+  let water = null;   // maillage soudé de la rivière et des lacs
+  let film = null;    // maillage soudé des zones humides
   let world = null;
-  /** Par case : index d'instance dans `water` (≥ 0), −1 sinon. */
-  let waterSlots = null;
-  /** Par case : index d'instance dans `film` (zone humide), −1 sinon. */
-  let filmSlots = null;
   /** Couleurs de terrain par case (linéaires), référence pour les calques. */
   let colors = null;
   /** Grille de sommets du terrain : sub = subdivision, nx/nz = nombre de sommets par axe. */
   let grid = null;
+  /** Nappes d'eau : { mesh, xz (2 par sommet), mask (cases sources), tint } pour les mises à jour. */
+  let sheets = [];
   /** Valeurs du calque actif normalisées (0 à 1) par case, ou null : conservées pour les hachures. */
   let layerField = null;
   /** Qualité de l'eau par case (0 à 1), ou null : conservée d'un monde à l'autre. */
   let qualityField = null;
   /** Texture du liseré de grille (cases désignées par setGridHint). */
   let hintTexture = null;
-  const stats = { tiles: 0, land: 0, water: 0, wetland: 0, hills: 0, drawables: 0, pattern: 0, vertices: 0, triangles: 0, subdiv: SUBDIV };
+  const stats = {
+    tiles: 0, land: 0, water: 0, wetland: 0, hills: 0, drawables: 0, pattern: 0,
+    vertices: 0, triangles: 0, waterVertices: 0, waterTriangles: 0, subdiv: SUBDIV,
+  };
 
   const color = new THREE.Color();
   const tint = new THREE.Color();
-  const matrix = new THREE.Matrix4();
 
   /** Teinte de la pellicule des zones humides : la couleur de la case, à moitié vers l'eau courante. */
   function filmTint(out, src) {
     return out.copy(src).lerp(riverColor, 0.5);
-  }
-
-  /** InstancedMesh d'eau avec ses attributs par instance (aFlow, aBanks, aStyle, aLayer, aQuality). */
-  function createWaterMesh(name, count) {
-    const m = Math.max(1, count);
-    const geometry = waterTemplate.clone();
-    geometry.setAttribute('aFlow', new THREE.InstancedBufferAttribute(new Float32Array(m * 2), 2));
-    geometry.setAttribute('aBanks', new THREE.InstancedBufferAttribute(new Float32Array(m * 4), 4));
-    geometry.setAttribute('aStyle', new THREE.InstancedBufferAttribute(new Float32Array(m * 2), 2));
-    geometry.setAttribute('aLayer', new THREE.InstancedBufferAttribute(new Float32Array(m).fill(-1), 1));
-    geometry.setAttribute('aQuality', new THREE.InstancedBufferAttribute(new Float32Array(m), 1));
-    const mesh = new THREE.InstancedMesh(geometry, waterMaterial, m);
-    mesh.name = name;
-    mesh.count = count;
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    mesh.visible = count > 0;
-    return mesh;
-  }
-
-  /** Écrit les attributs d'une instance d'eau. */
-  function writeWaterAttributes(mesh, k, style, flow, mask) {
-    const a = mesh.geometry.attributes;
-    const f = flowVector(flow);
-    a.aFlow.array[k * 2] = f[0]; a.aFlow.array[k * 2 + 1] = f[1];
-    const b = bankVector(mask);
-    for (let c = 0; c < 4; c++) a.aBanks.array[k * 4 + c] = b[c];
-    a.aStyle.array[k * 2] = style[0]; a.aStyle.array[k * 2 + 1] = style[1];
   }
 
   // -------------------------------------------------------------------------------------------
@@ -755,8 +932,7 @@ export function createGround() {
   /** Construit le maillage soudé du terrain : nappe lissée + jupe du socle + fond. */
   function buildLand() {
     const { cols, rows } = world;
-    const sub = cols * rows > SUBDIV_LIMIT ? 3 : SUBDIV;
-    const nx = cols * sub + 1, nz = rows * sub + 1;
+    const { sub, nx, nz } = grid;
     const topCount = nx * nz;
     const ring = 2 * (nx + nz) - 4;            // sommets du bord de la nappe
     const total = topCount + ring * 2 + 4;     // + jupe (haut/bas) + fond
@@ -843,12 +1019,104 @@ export function createGround() {
     land.castShadow = true;
     land.receiveShadow = true;
     land.frustumCulled = false;
-    grid = { sub, nx, nz, topCount };
     stats.vertices = total;
     stats.triangles = indices.length / 3;
   }
 
-  /** Couleurs de sommet de la nappe : échantillonnage lissé du champ de couleurs par case. */
+  // -------------------------------------------------------------------------------------------
+  // Nappes d'eau soudées (rivière + lacs, zones humides)
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * Construit UNE nappe d'eau : extraction de la ligne de niveau du champ, puis attributs par sommet.
+   * `spec` = { name, material, field(x, z), mask (1 par case source), iso, levelAt(x, z), flow, tinted }.
+   */
+  function buildSheet(spec) {
+    const { sub, nx, nz } = grid;
+    const samples = new Float32Array(nx * nz);
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) samples[j * nx + i] = spec.field(i / sub, j / sub);
+    }
+    const { xz, index, count } = contourMesh(samples, nx, nz, 1 / sub, spec.iso);
+
+    const position = new Float32Array(count * 3);
+    const normal = new Float32Array(count * 3);
+    const aShore = new Float32Array(count);
+    const aFlow = new Float32Array(count * 2);
+    const aStyle = new Float32Array(count * 2);
+    for (let v = 0; v < count; v++) {
+      const x = xz[v * 2], z = xz[v * 2 + 1];
+      position[v * 3] = x; position[v * 3 + 1] = spec.levelAt(x, z); position[v * 3 + 2] = z;
+      normal[v * 3 + 1] = 1;
+      aShore[v] = (spec.field(x, z) - 0.5) / FIELD_SLOPE;
+      if (spec.flow) {
+        let fx = sampleSmoothN(spec.flow, 2, 0, world.cols, world.rows, x, z);
+        let fz = sampleSmoothN(spec.flow, 2, 1, world.cols, world.rows, x, z);
+        const len = Math.hypot(fx, fz);
+        if (len > 0.25) { fx /= len; fz /= len; }
+        aFlow[v * 2] = fx; aFlow[v * 2 + 1] = fz;
+      }
+      aStyle[v * 2] = sampleSmoothN(spec.style, 2, 0, world.cols, world.rows, x, z);
+      aStyle[v * 2 + 1] = sampleSmoothN(spec.style, 2, 1, world.cols, world.rows, x, z);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    geometry.setAttribute('aShore', new THREE.BufferAttribute(aShore, 1));
+    geometry.setAttribute('aFlow', new THREE.BufferAttribute(aFlow, 2));
+    geometry.setAttribute('aStyle', new THREE.BufferAttribute(aStyle, 2));
+    geometry.setAttribute('aLayer', new THREE.BufferAttribute(new Float32Array(count).fill(-1), 1));
+    geometry.setAttribute('aQuality', new THREE.BufferAttribute(new Float32Array(count), 1));
+    geometry.setIndex(index);
+    geometry.computeBoundingSphere();
+
+    const mesh = new THREE.Mesh(geometry, spec.material);
+    mesh.name = spec.name;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    mesh.visible = index.length > 0;
+    return { mesh, xz, count, mask: spec.mask, tinted: Boolean(spec.tinted), triangles: index.length / 3 };
+  }
+
+  /** Champ par case étalé sur la terre voisine puis échantillonné sur les sommets d'une nappe. */
+  function writeSheetScalar(sheet, values, attrName, fallback) {
+    const { cols, rows } = world;
+    const attr = sheet.mesh.geometry.attributes[attrName];
+    if (!attr) return;
+    const spread = new Float32Array(cols * rows);
+    if (values) spread.set(values.subarray ? values.subarray(0, cols * rows) : values.slice(0, cols * rows));
+    else spread.fill(fallback);
+    spreadFromMask(spread, 1, sheet.mask, cols, rows, fallback);
+    for (let v = 0; v < sheet.count; v++) {
+      attr.array[v] = sampleSmooth(spread, cols, rows, sheet.xz[v * 2], sheet.xz[v * 2 + 1]);
+    }
+    attr.needsUpdate = true;
+  }
+
+  /** Couleurs par case (linéaires) étalées sur la terre voisine puis fondues sur les sommets. */
+  function writeSheetColors(sheet, src) {
+    const { cols, rows } = world;
+    const attr = sheet.mesh.geometry.attributes.color;
+    const rgb = Float32Array.from(src.subarray ? src.subarray(0, cols * rows * 3) : src.slice(0, cols * rows * 3));
+    if (sheet.tinted) {
+      for (let i = 0; i < cols * rows; i++) {
+        if (!sheet.mask[i]) continue;
+        color.setRGB(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+        filmTint(tint, color).toArray(rgb, i * 3);
+      }
+    }
+    spreadFromMask(rgb, 3, sheet.mask, cols, rows, [riverColor.r, riverColor.g, riverColor.b]);
+    for (let v = 0; v < sheet.count; v++) {
+      const x = sheet.xz[v * 2], z = sheet.xz[v * 2 + 1];
+      for (let c = 0; c < 3; c++) attr.array[v * 3 + c] = sampleSmoothN(rgb, 3, c, cols, rows, x, z);
+    }
+    attr.needsUpdate = true;
+  }
+
+  /** Couleurs de sommet de la nappe de terre : échantillonnage lissé du champ de couleurs par case. */
   function writeVertexColors(src) {
     if (!land || !grid || !world) return;
     const { cols, rows } = world;
@@ -867,9 +1135,9 @@ export function createGround() {
     attr.needsUpdate = true;
   }
 
-  /** Valeurs du calque par sommet de la nappe (−1 hors calque) + attributs d'instance de l'eau. */
+  /** Valeurs du calque par sommet de la terre (−1 hors calque) et de chaque nappe d'eau. */
   function writeLayerField(field) {
-    if (!world || !land || !water || !grid) return;
+    if (!world || !land || !grid) return;
     const { cols, rows } = world;
     const { sub, nx, nz } = grid;
     const attr = land.geometry.attributes.aLayer;
@@ -882,28 +1150,13 @@ export function createGround() {
       }
     }
     attr.needsUpdate = true;
-    const waterAttr = water.geometry.attributes.aLayer;
-    const filmAttr = film.geometry.attributes.aLayer;
-    for (let i = 0; i < cols * rows; i++) {
-      const v = field ? (i < field.length ? field[i] : 0) : -1;
-      if (waterSlots[i] >= 0) waterAttr.array[waterSlots[i]] = v;
-      if (filmSlots[i] >= 0) filmAttr.array[filmSlots[i]] = v;
-    }
-    waterAttr.needsUpdate = true; filmAttr.needsUpdate = true;
+    for (const sheet of sheets) writeSheetScalar(sheet, field, 'aLayer', -1);
   }
 
   /** Écrit l'attribut `aQuality` (pollution de l'eau, 0 à 1) sur l'eau profonde et les zones humides. */
   function writeQualityField(field) {
-    if (!world || !water || !film) return;
-    const n = world.cols * world.rows;
-    const waterAttr = water.geometry.attributes.aQuality;
-    const filmAttr = film.geometry.attributes.aQuality;
-    for (let i = 0; i < n; i++) {
-      const v = field ? (i < field.length ? field[i] : 0) : 0;
-      if (waterSlots[i] >= 0) waterAttr.array[waterSlots[i]] = v;
-      if (filmSlots[i] >= 0) filmAttr.array[filmSlots[i]] = v;
-    }
-    waterAttr.needsUpdate = true; filmAttr.needsUpdate = true;
+    if (!world) return;
+    for (const sheet of sheets) writeSheetScalar(sheet, field, 'aQuality', 0);
   }
 
   function clear() {
@@ -914,6 +1167,7 @@ export function createGround() {
     }
     land = water = film = null;
     grid = null;
+    sheets = [];
     stats.drawables = 0;
   }
 
@@ -922,22 +1176,14 @@ export function createGround() {
     world = nextWorld;
     const { cols, rows, tiles } = world;
     const n = cols * rows;
-    waterSlots = new Int32Array(n).fill(-1);
-    filmSlots = new Int32Array(n).fill(-1);
     colors = new Float32Array(n * 3);
 
+    const waterMask = new Uint8Array(n);
+    const marshMask = new Uint8Array(n);
+    const flow = new Float32Array(n * 2);
+    const waterStyle = new Float32Array(n * 2);
+    const marshStyle = new Float32Array(n * 2);
     let landCount = 0, waterCount = 0, wetCount = 0, hillCount = 0;
-    for (let i = 0; i < n; i++) {
-      const t = tiles[i];
-      if (t && isWaterTerrain(t.terrain)) waterCount++; else landCount++;
-      if (t && t.terrain === 'hill') hillCount++;
-      if (t && isShallowWater(t.terrain)) wetCount++;
-    }
-
-    water = createWaterMesh('water', waterCount);
-    film = createWaterMesh('wetland-film', wetCount);
-
-    let wi = 0, fi = 0;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
@@ -946,36 +1192,71 @@ export function createGround() {
         color.set(groundColorHex(terrain));
         color.toArray(colors, i * 3);
         if (isWaterTerrain(terrain)) {
-          composeScaled(matrix, x + 0.5, WATER_LEVEL, y + 0.5, 1, 1, 1);
-          water.setMatrixAt(wi, matrix);
-          water.setColorAt(wi, color);
-          writeWaterAttributes(water, wi, WATER_STYLES[terrain] || WATER_STYLES.lake, t ? t.flow : null, bankMask(world, x, y));
-          waterSlots[i] = wi;
-          wi++;
-        } else if (isShallowWater(terrain)) {
-          composeScaled(matrix, x + 0.5, WETLAND_FILM_LEVEL, y + 0.5, 1, 1, 1);
-          film.setMatrixAt(fi, matrix);
-          film.setColorAt(fi, filmTint(tint, color));
-          writeWaterAttributes(film, fi, WATER_STYLES.wetland, null, 0);
-          filmSlots[i] = fi;
-          fi++;
+          waterCount++;
+          waterMask[i] = 1;
+          const v = flowVector(t ? t.flow : null);
+          flow[i * 2] = v[0]; flow[i * 2 + 1] = v[1];
+          const style = WATER_STYLES[terrain] || WATER_STYLES.lake;
+          waterStyle[i * 2] = style[0]; waterStyle[i * 2 + 1] = style[1];
+        } else {
+          landCount++;
+        }
+        if (terrain === 'hill') hillCount++;
+        if (isShallowWater(terrain)) {
+          wetCount++;
+          marshMask[i] = 1;
+          marshStyle[i * 2] = WATER_STYLES.wetland[0]; marshStyle[i * 2 + 1] = WATER_STYLES.wetland[1];
         }
       }
     }
-    for (const mesh of [water, film]) {
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      for (const name of ['aFlow', 'aBanks', 'aStyle']) mesh.geometry.attributes[name].needsUpdate = true;
-    }
+    // Courant et style débordent d'une case sur la terre voisine : la nappe les lit jusque sous la berge.
+    spreadFromMask(flow, 2, waterMask, cols, rows, 0);
+    spreadFromMask(waterStyle, 2, waterMask, cols, rows, WATER_STYLES.lake);
+    spreadFromMask(marshStyle, 2, marshMask, cols, rows, WATER_STYLES.wetland);
 
+    const sub = cols * rows > SUBDIV_LIMIT ? 3 : SUBDIV;
+    grid = { sub, nx: cols * sub + 1, nz: rows * sub + 1 };
     buildLand();
+
+    const waterSheet = buildSheet({
+      name: 'water',
+      material: waterMaterial,
+      mask: waterMask,
+      flow,
+      style: waterStyle,
+      // La nappe déborde un peu sous la berge : son bord est masqué par la terre, qui est déjà
+      // au-dessus du niveau de l'eau là où il passe. Ni filet de terre nue, ni z-fighting.
+      iso: 0.5 - WATER_OVERLAP,
+      field: (x, z) => waterField(world, x, z),
+      levelAt: () => WATER_LEVEL,
+    });
+    const filmSheet = buildSheet({
+      name: 'wetland-film',
+      material: filmMaterial,
+      mask: marshMask,
+      flow: null,
+      style: marshStyle,
+      iso: 0.5,
+      tinted: true,
+      field: (x, z) => marshField(world, x, z),
+      // La pellicule épouse le fond de la cuvette creusée par `heightAt` : toujours 6 mm au-dessus
+      // du sol, donc jamais enfouie ni flottante, et visiblement EN CREUX dans la prairie.
+      levelAt: (x, z) => heightAt(world, x, z) + WETLAND_FILM_LEVEL,
+    });
+    water = waterSheet.mesh;
+    film = filmSheet.mesh;
+    sheets = [waterSheet, filmSheet];
+
     writeVertexColors(colors);
+    for (const sheet of sheets) writeSheetColors(sheet, colors);
     setGridHint(null);
 
     group.add(land, water, film);
     stats.tiles = n; stats.land = landCount; stats.water = waterCount; stats.wetland = wetCount; stats.hills = hillCount;
-    stats.drawables = 1 + (waterCount > 0 ? 1 : 0) + (wetCount > 0 ? 1 : 0);
-    stats.subdiv = grid.sub;
+    stats.waterVertices = waterSheet.count + filmSheet.count;
+    stats.waterTriangles = waterSheet.triangles + filmSheet.triangles;
+    stats.drawables = 1 + (waterSheet.triangles > 0 ? 1 : 0) + (filmSheet.triangles > 0 ? 1 : 0);
+    stats.subdiv = sub;
     // Les champs d'écologie survivent à la reconstruction du monde (calque actif, qualité de l'eau).
     writeLayerField(layerField);
     if (qualityField) writeQualityField(qualityField);
@@ -1044,19 +1325,12 @@ export function createGround() {
 
   /** Applique des couleurs par case (Float32Array linéaire, 3 par case) ou restaure les terrains. */
   function setTileColors(rgb) {
-    if (!world || !land || !water) return;
+    if (!world || !land) return;
     const src = rgb || colors;
-    const n = world.cols * world.rows;
     // Calque affiché : les finitions du paysage s'effacent pour ne pas salir les couleurs du calque.
     landUniforms.uFinish.value = rgb ? 0.3 : 1;
     writeVertexColors(src);
-    for (let i = 0; i < n; i++) {
-      color.setRGB(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]);
-      if (waterSlots[i] >= 0) water.setColorAt(waterSlots[i], color);
-      if (filmSlots[i] >= 0) film.setColorAt(filmSlots[i], filmTint(tint, color));
-    }
-    if (water.instanceColor) water.instanceColor.needsUpdate = true;
-    if (film.instanceColor) film.instanceColor.needsUpdate = true;
+    for (const sheet of sheets) writeSheetColors(sheet, src);
   }
 
   /** Fait avancer l'eau de `dt` secondes (rien d'autre à faire : l'ondulation et les bandes sont dans le shader). */
@@ -1066,10 +1340,10 @@ export function createGround() {
 
   function dispose() {
     clear();
-    waterTemplate.dispose();
     if (hintTexture) { hintTexture.dispose(); hintTexture = null; }
     landMaterial.dispose();
     waterMaterial.dispose();
+    filmMaterial.dispose();
   }
 
   return {
@@ -1086,8 +1360,10 @@ export function createGround() {
     /** Fixe l'horloge de l'eau (captures déterministes). */
     setTime(t) { uniforms.uTime.value = Number.isFinite(t) ? t : 0; },
     get time() { return uniforms.uTime.value; },
-    /** Matériau de l'eau (débogage, mesure). */
+    /** Matériau de l'eau profonde (débogage, mesure). */
     get waterMaterial() { return waterMaterial; },
+    /** Matériau de la pellicule des zones humides (débogage, mesure). */
+    get filmMaterial() { return filmMaterial; },
     /** Matériau et réglages du terrain (débogage, mesure). */
     get landMaterial() { return landMaterial; },
     get landUniforms() { return landUniforms; },
