@@ -18,6 +18,7 @@
 // Toute information de la barre se lit aussi au toucher : chaque jauge est un bouton (fiche plus tard).
 
 import { el, clear, fmt, setText, signed } from './dom.js';
+import { icon } from './icons.js';
 
 export const FAMILIES = Object.freeze([
   { id: 'habitat', label: 'Habitat', title: 'Habitat' },
@@ -90,6 +91,7 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
         title: label,
         onclick: () => { buzz(6); onGauge?.(id); },
       },
+      icon(({population:'people',happiness:'smile',nature:'leaf',money:'coin'})[id], 'gauge-icon'),
       el('span.gauge-label', text),
       value,
     );
@@ -100,7 +102,7 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
   const dateMonth = el('span.date-month', 'mars');
   const dateYear = el('span.date-year', 'an 1');
   const dateNode = el('div.hud-date', { 'aria-live': 'polite' }, dateSeason, el('span.date-sep', '·'), dateMonth, el('span.date-sep', '·'), dateYear);
-  const speedGlyph = el('span.speed-glyph', { 'aria-hidden': 'true' }, '▶');
+  const speedGlyph = el('span.speed-glyph', { 'aria-hidden': 'true' }, icon('play'));
   const speedLabel = el('span.speed-text', '×1');
   let speed = 1;
   const speedBtn = el(
@@ -128,7 +130,8 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
     if (v.happiness !== undefined) setText(gauges.happiness.value, `${Math.round(v.happiness)} %`);
     if (v.nature !== undefined) setText(gauges.nature.value, `${Math.round(v.nature)} %`);
     if (v.money !== undefined) {
-      setText(gauges.money.value, `${fmt(v.money)} $`);
+      setText(gauges.money.value, Math.abs(v.money) >= 10000 ? `${(v.money/1000).toLocaleString('fr-FR',{maximumFractionDigits:1})} k$` : `${fmt(v.money)} $`);
+      gauges.money.node.setAttribute('aria-label', `Argent : ${fmt(v.money)} dollars`);
       gauges.money.node.classList.toggle('is-negative', v.money < 0);
     }
     if (v.delta !== undefined) {
@@ -149,7 +152,7 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
   function setSpeed(sp) {
     speed = sp;
     speedBtn.classList.toggle('is-paused', !sp);
-    speedGlyph.textContent = sp ? '▶' : '⏸';
+    speedGlyph.replaceChildren(icon(sp ? 'play' : 'pause'));
     setText(speedLabel, speedText(sp));
     speedBtn.setAttribute('aria-label', sp ? `Vitesse ${speedText(sp)} — toucher pour changer` : 'En pause — toucher pour reprendre');
   }
@@ -172,7 +175,7 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
             onTab?.(f.id);
           },
         },
-        el('span.tab-ico', { 'aria-hidden': 'true' }),
+        el('span.tab-ico', { 'aria-hidden': 'true' }, icon(({habitat:'house',activity:'shop',services:'heart',infrastructure:'bolt',nature:'leaf',demolish:'hammer',layers:'layers'})[f.id])),
         el('span.tab-label', label),
       ),
     );
@@ -251,6 +254,7 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
   setSpeed(1);
 
   return {
+    element: hud,
     setGauges,
     setDate,
     setSpeed,
@@ -264,6 +268,6 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
       return !!banner;
     },
     /** Hauteurs couvertes par la barre du haut et, en bas, par les onglets et la barre d'action (px CSS). */
-    insets: () => ({ top: hud.offsetHeight, bottom: tabbar.offsetHeight + (action ? action.offsetHeight : 0) }),
+    insets: () => ({ top: hud.getBoundingClientRect().bottom + 75, bottom: tabbar.offsetHeight + (action?.offsetHeight || document.querySelector('.quick-build')?.offsetHeight || 0) + 20 }),
   };
 }

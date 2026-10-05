@@ -32,13 +32,16 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/tiletown/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = 'cd8436a578b6';
-// 77 fichiers, 2.87 Mo ; installés d'emblée (core) : 77 fichiers, 2.87 Mo
+const VERSION = '839b0b1af5f1';
+// 102 fichiers, 14.08 Mo ; installés d'emblée (core) : 99 fichiers, 3.01 Mo
 const PRECACHE = [
-  ["index.html", 'ba45c97e6a0c6161', 29672, 'core'],
+  ["index.html", '1203fcc4c64affc8', 29672, 'core'],
   ["manifest.webmanifest", 'd781b7f56357c6a9', 1194, 'core'],
-  ["dist/game.2fc136e242.js", 'cbfaf168f4c058d2', 948122, 'core'],
-  ["dist/game.c9d4ef38d1.css", 'c9d4ef38d12ac842', 28842, 'core'],
+  ["dist/game.dbbd1adab4.js", 'c7e6f446a69012dc', 981089, 'core'],
+  ["dist/game.9f5553ebee.css", '9f5553ebeeca3c6b', 44337, 'core'],
+  ["assets/audio/apple-cider.mp3", '9c971dd5effc7eb6', 3198684, 'lazy'],
+  ["assets/audio/chill-out.mp3", '07c46ada49152e6b', 4154522, 'lazy'],
+  ["assets/audio/exploring-town.mp3", '395cec8735528ee1', 4256957, 'lazy'],
   ["assets/fonts/Nunito-latin-ext.woff2", '2c8d792869818ecb', 35588, 'core'],
   ["assets/fonts/Nunito-latin.woff2", 'ba344451eab25b21', 39128, 'core'],
   ["assets/icons/apple-touch-icon.png", '89a7440dadb00696', 4356, 'core'],
@@ -112,6 +115,28 @@ const PRECACHE = [
   ["assets/models/wastewater.glb", '828f751f42a0dd60', 24956, 'core'],
   ["assets/models/water-tower.glb", '01101f10c10d9c5d', 13216, 'core'],
   ["assets/models/wind-turbine.glb", '397b8abb2d3dd77a', 12056, 'core'],
+  ["assets/previews/clinic.webp", '95ffb20d7470ac93', 4356, 'core'],
+  ["assets/previews/compost.webp", '3f59115ad338808c', 5982, 'core'],
+  ["assets/previews/factory.webp", 'e69b365a0f544428', 5744, 'core'],
+  ["assets/previews/field.webp", '5e24a381bae29c71', 6150, 'core'],
+  ["assets/previews/hedge.webp", 'c93e6d91cb71ab4a', 2290, 'core'],
+  ["assets/previews/house.webp", '3169b3c321c4b87b', 5108, 'core'],
+  ["assets/previews/market.webp", '57d4750e09ba1db2', 6056, 'core'],
+  ["assets/previews/office.webp", '2d8c2450a2f76081', 8554, 'core'],
+  ["assets/previews/orchard.webp", '66021957194a60dc', 2844, 'core'],
+  ["assets/previews/park.webp", 'eef5784384c2bab4', 5678, 'core'],
+  ["assets/previews/power-plant.webp", '2820d0fa2eaf864b', 5070, 'core'],
+  ["assets/previews/school.webp", '06ce699c405ab692', 4378, 'core'],
+  ["assets/previews/shop.webp", 'd96d5a40831fafaa', 5134, 'core'],
+  ["assets/previews/solar.webp", '618cd21775ccdc3c', 5418, 'core'],
+  ["assets/previews/townhall.webp", 'a0bc32db5dd89134', 4188, 'core'],
+  ["assets/previews/tram-stop.webp", '50dab143bcaeb1f0', 4218, 'core'],
+  ["assets/previews/tree-planting.webp", '66021957194a60dc', 2844, 'core'],
+  ["assets/previews/wastewater.webp", '35339f24f37a4252', 4636, 'core'],
+  ["assets/previews/water-tower.webp", '929558c562074310', 4016, 'core'],
+  ["assets/previews/wetland-restored.webp", 'c93e6d91cb71ab4a', 2290, 'core'],
+  ["assets/previews/wildlife-crossing.webp", 'f50f48869f17dd89', 5066, 'core'],
+  ["assets/previews/wind-turbine.webp", 'b0595f2ddaf59df5', 2398, 'core'],
 ];
 // </precache>
 

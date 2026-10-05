@@ -374,7 +374,7 @@ test('createGround : eau profonde et pellicule des zones humides, attributs aFlo
   // Couleurs : la pellicule prend la couleur de la case tirée vers l'eau courante ; les calques la suivent.
   const c = new THREE.Color();
   film.getColorAt(0, c);
-  const wet = new THREE.Color('#7fb89a'), river = new THREE.Color('#5fb3d9');
+  const wet = new THREE.Color('#91b397'), river = new THREE.Color('#6fbcc1');
   assert.ok(near(c.r, (wet.r + river.r) / 2, 1e-3) && near(c.b, (wet.b + river.b) / 2, 1e-3));
   const rgb = new Float32Array(16 * 3).fill(0.5);
   ground.setTileColors(rgb);

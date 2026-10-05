@@ -361,6 +361,8 @@ export function createGame({ seed = 1, cols, rows, starterTown = true, money = S
   const game = {
     version: GAME_VERSION,
     seed,
+    mode: 'career',
+    journey: {claimed: []},
     world,
     eco: createEcology(world),
     clock: 0,
@@ -913,6 +915,9 @@ export function serialize(game) {
     streaks: { ...game.streaks },
     unlocked: Array.from(game.unlocked),
     natureBaseline: game.natureBaseline,
+    mode: game.mode || 'career',
+    career: game.career ? structuredClone(game.career) : null,
+    journey: structuredClone(game.journey || {claimed: []}),
     log: game.log.map((e) => ({ ...e })),
     undo: null,
     stats: structuredClone(game.stats),
@@ -963,6 +968,9 @@ export function deserialize(obj) {
   const eco = obj.version >= 2 && obj.eco ? reviveEcology(obj.eco, world) : createEcology(world);
   const game = {
     version: GAME_VERSION,
+    mode: obj.mode === 'sandbox' ? 'sandbox' : 'career',
+    ...(obj.career ? {career: structuredClone(obj.career)} : {}),
+    journey: obj.journey && Array.isArray(obj.journey.claimed) ? structuredClone(obj.journey) : {claimed: []},
     seed: obj.seed ?? world.seed ?? 1,
     world,
     eco,

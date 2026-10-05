@@ -66,10 +66,12 @@ function measureInPage(label) {
     .map((n) => ({ state: label, sel: `${n.tagName.toLowerCase()}${n.id ? `#${n.id}` : ''}${n.className ? `.${String(n.className).trim().split(/\s+/).join('.')}` : ''}`, w: n.getBoundingClientRect().width, h: n.getBoundingClientRect().height }))
     .filter((t) => t.w < 47.99 || t.h < 47.99);
   const fs = (sel) => [...document.querySelectorAll(sel)].filter(vis).map((n) => parseFloat(getComputedStyle(n).fontSize));
-  const size = (sel) => { const n = document.querySelector(sel); return n && vis(n) ? [n.getBoundingClientRect().width, n.getBoundingClientRect().height] : null; };
+  // Les transformations CSS peuvent rendre 47.999969 pour une cible de 48 px : précision au millième.
+  const dimensions = (n) => [n.getBoundingClientRect().width, n.getBoundingClientRect().height].map(v => Math.round(v * 1000) / 1000);
+  const size = (sel) => { const n = document.querySelector(sel); return n && vis(n) ? dimensions(n) : null; };
   const tabbar = document.querySelector('#tabbar');
   const hud = document.querySelector('#hud');
-  const box = (sel) => [...document.querySelectorAll(sel)].filter(vis).map((n) => [n.getBoundingClientRect().width, n.getBoundingClientRect().height]);
+  const box = (sel) => [...document.querySelectorAll(sel)].filter(vis).map(dimensions);
   return {
     label,
     // Écologie (étape 4) : calques, fiche Nature, carnet des espèces
@@ -160,6 +162,7 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
       await page.goto(`http://127.0.0.1:${port}/dev.html?stats=1&seed=7&nosw&new=1`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => (window.__tiletown && window.__tiletown.ready) || document.documentElement.classList.contains('boot-failed'), null, { timeout: 60000 }).catch(() => {});
+      if (await page.locator('#welcome-play').count()) await page.click('#welcome-play');
       const states = [];
       // 1. Feuille du catalogue ouverte (cartes, barres de demande).
       await page.click('#tabbar .tab--habitat').catch(() => {});
@@ -227,7 +230,7 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
       assert.ok(m.cards.length >= 1 && m.cards.every((h) => h >= 64), `${s.name} : cartes ≥ 64 px (${m.cards})`);
       assert.equal(m.tabs, 7, `${s.name} : sept onglets`);
       assert.ok(m.tabbarH >= 56, `${s.name} : barre d'onglets ${m.tabbarH} px < 56`);
-      assert.ok(m.hudH >= 48 && m.hudH <= 140, `${s.name} : barre du haut ${m.hudH} px`);
+      assert.ok(m.hudH >= 48 && m.hudH <= 190, `${s.name} : bandeau de marque et jauges ${m.hudH} px (maximum 190)`);
       assert.ok(m.gaugeValues.length === 4 && m.gaugeValues.every((v) => v >= 18), `${s.name} : chiffres des jauges ≥ 18 px (${m.gaugeValues})`);
       assert.ok(m.canvasSize && m.canvasSize[0] <= s.width * 2 + 2, `${s.name} : pixel ratio du canvas plafonné à 2 (${m.canvasSize})`);
       if (ready) {

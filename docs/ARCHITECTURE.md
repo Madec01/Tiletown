@@ -411,3 +411,12 @@ Diagnostic : **l'aspect cubique vient du terrain et de l'organisation du décor*
 ### 11.5 Critères (étape 5)
 
 `tools/play-career.mjs` : démarrer une carrière neuve → vallée vierge avec la seule mairie, bulle du tutoriel visible ; suivre les trois premières leçons par gestes réels ; vérifier l'avancement des objectifs ; forcer l'atteinte des objectifs et vérifier l'écran de fin avec ses étoiles ; vérifier que le niveau suivant s'ouvre et que le catalogue débloqué est conservé ; recharger et retrouver la carrière. Plus : `node --test tests/` vert, build à jour, et les captures des variantes visuelles.
+
+
+### Livraison de la refonte du 2026-10-05
+
+- Le sol de terre utilise désormais un mesh subdivisé unique, avec interpolation des hauteurs et couleurs (`terrain-mesh.js`). `surfaceHeight` garde l'altitude au centre d'une case ; `heightAt` fournit la surface continue des collines. Les calques écrivent les couleurs et hachures sur des plages de sommets ; revenir au calque neutre restaure la palette continue. L'eau reste instanciée. Une grille de cinq cases autour du fantôme est visible uniquement pendant la construction.
+- Les arbres feuillus ont des couronnes arrondies (`soft-trees.js`) intégrées au batching existant. Les modèles de bâtiments libres sont conservés, avec toitures recolorées et un décor groupé (`scenery.js`). Les aperçus du catalogue utilisent exactement ce pipeline de modèles.
+- `career.js` gère cinq niveaux définis dans `data/levels.js`, la mairie seule au départ, les étoiles, les niveaux ouverts et les bâtiments persistants. `journey.js` gère huit étapes guidées et leurs primes ; il s'agit d'un carnet de missions, sans séquence de dix bulles bloquantes. Les objectifs de niveau et le résultat à trois ans sont visibles dans l'interface.
+- `experience.js` orchestre accueil, raccourcis, carnet, carte de carrière, bilan et réglages. `audio.js` déverrouille musique et effets après un geste et mémorise les préférences. Les MP3 sont chargés et cachés à la demande, sans alourdir le précache initial.
+- Contrôles reproductibles : `npm test`, `npm run check`, `npm run review:mobile`. Le parcours navigateur couvre aussi le passage à la vallée suivante et la reprise des étoiles après rechargement.

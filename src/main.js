@@ -41,13 +41,17 @@ import { createNatureSheet } from './ui/nature-sheet.js';
 import { createSpeciesBook } from './ui/species-book.js';
 import { createStats, statsWanted } from './ui/stats.js';
 import { createGestures } from './ui/gestures.js';
-import { $ } from './ui/dom.js';
+import { $, el } from './ui/dom.js';
+import { createAudio } from './audio.js';
+import { createExperience } from './ui/experience.js';
+import { claimGoal, startMode, finishJourney } from './core/journey.js';
+import { createCareer, startLevel, finishCareer } from './core/career.js';
 
 const DEFAULT_SEED = 12345;
 const WORLD_COLS = 12;
 const WORLD_ROWS = 16;
 /** Vue de jeu par défaut : largeur visible en îlots (la vue d'ensemble se cadre toute seule). */
-const GAME_ZOOM = 8;
+const GAME_ZOOM = 9;
 const IDLE_FPS = 30;
 const INTERACT_AFTER_MS = 300; // on reste à 60 i/s un instant après le dernier geste
 const STATS_EVERY_MS = 500;
@@ -208,6 +212,8 @@ async function main() {
 
   // ── 1. Réglages et interface ───────────────────────────────────────────────────
   app.a11y = initA11y();
+  app.audio = createAudio();
+  document.addEventListener('pointerdown', () => app.audio.unlock(), { once: true });
   const vibrate = (n) => app.a11y.vibrate(n);
   app.toasts = createToasts($('#toasts'));
   app.stats = createStats($('#stats'), { visible: statsWanted(location.search, dev) });
@@ -255,6 +261,7 @@ async function main() {
   }
 
   let sizeKey = '';
+  let lastViewportWidth = 0;
   function resizeScene() {
     if (!app.renderer) return;
     const rect = stage.getBoundingClientRect();
@@ -265,6 +272,8 @@ async function main() {
     if (key !== sizeKey) {
       sizeKey = key;
       app.renderer.resize(w, h, dpr);
+      if (lastViewportWidth && (lastViewportWidth >= 900) !== (w >= 900)) homeView();
+      lastViewportWidth = w;
       poke();
     }
     updateInsets();
@@ -297,7 +306,7 @@ async function main() {
     // Une graine imposée dans l'adresse qui diffère de la sauvegarde : nouvelle vallée (débogage, mesures).
     if (saved && (!hasSeedParam(search) || saved.seed === seedParam)) { game = saved; restored = true; }
   }
-  if (!game) game = createGame({ seed: seedParam, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true });
+  if (!game) game = startLevel(createCareer(), 'vallee-1', {seed:hasSeedParam(search)?seedParam:undefined});
   let seed = game.seed ?? seedParam;
   // Acteurs : habitants, véhicules, faune (simulation pure, affichée par le rendu ; non sauvegardés).
   let actors = createActors(game.world, seed);
@@ -309,6 +318,7 @@ async function main() {
     app.hud.setGauges(gaugesOf(game));
     app.hud.setDate(calendar(game));
     app.hud.setSpeed(game.speed);
+    app.experience?.refresh();
   };
   syncHud();
   boot.progress(0.3);
@@ -324,10 +334,16 @@ async function main() {
   boot.progress(0.92);
 
   // ── 3 bis. Feuilles, catalogue, pose, fiche ─────────────────────────────────────
+  // Les paramètres de création ne doivent pas remplacer la sauvegarde au rechargement.
+  // Nettoyer l'entrée de base avant d'empiler l'historique des panneaux.
+  const cleanUrl = new URL(location.href);
+  cleanUrl.searchParams.delete('new');
+  cleanUrl.searchParams.delete('seed');
+  history.replaceState(history.state, '', cleanUrl);
   const back = createBackStack({ onBack: () => onBack() });
   app.sheets = createSheets($('#sheet-layer'), {
     vibrate,
-    onChange: (id) => { if (id) back.hold('sheet'); else back.release('sheet'); syncTabs(); },
+    onChange: (id) => { if (id) back.hold('sheet'); else back.release('sheet'); syncTabs(); updateInsets(); },
   });
 
   /** Remplace l'état de partie ; pousse le monde au rendu s'il a changé ; met l'interface à jour ; sauvegarde. */
@@ -345,6 +361,7 @@ async function main() {
     if (meta.kind) {
       storage.saveGame(game);
       lastSavedMonth = game.month;
+      if (meta.kind === 'place') app.audio.effect('build');
     }
     return game;
   }
@@ -412,6 +429,7 @@ async function main() {
   /** Onglet allumé : la feuille ouverte, sinon l'outil Démolir, sinon la famille de la tuile en main. */
   function syncTabs() {
     const sheet = app.sheets.current;
+    document.body.classList.toggle('is-building', app.placement.state !== 'idle');
     let active = null;
     if (sheet && sheet !== 'tile') active = sheet === 'nature' || sheet === 'species' ? null : sheet;
     else if (app.layers?.kind && app.layers.kind !== 'none') active = 'layers';
@@ -446,6 +464,12 @@ async function main() {
       if (app.placement.tool === 'demolish') app.placement.drop();
       app.natureSheet.open();
       syncTabs();
+    } else {
+      const s = game.stats;
+      const titles = {population:'Les habitants',happiness:'Le bonheur',money:'Le budget de la ville'};
+      const rows = id === 'population' ? [['Habitants',Math.round(s.population||0)],['Capacité des logements',Math.round(s.capacity||0)],['Emplois',Math.round(s.jobs||0)]] : id === 'money' ? [['Trésorerie',Math.round(game.money)+' $'],['Revenu mensuel net',Math.round(monthlyDelta(s))+' $']] : [['Bonheur',Math.round(s.happiness||0)+' %'],['Nature',Math.round(s.nature||0)+' %']];
+      const body = el('div.settings-body',...rows.map(([k,v])=>el('div.metric-row',el('span',k),el('strong',v))),el('p.sheet-hint',id==='happiness'?'Rapprochez logements, commerces et services. Des espaces verts et des ressources suffisantes rendent les habitants heureux.':id==='population'?'Offrez des logements, des emplois et des ressources : les familles s’installent progressivement.':'Les recettes et l’entretien sont comptabilisés chaque mois. Les objectifs du carnet offrent des primes.'));
+      app.sheets.open({id:'gauge-'+id,title:titles[id],content:body});
     }
   }
 
@@ -468,7 +492,7 @@ async function main() {
   /** Vue de jeu : rapprochée (≈ GAME_ZOOM îlots de large), centrée sur la mairie. */
   function homeView() {
     const c = centerOf(game.world);
-    r.camera.lookAt(c.x, c.y, GAME_ZOOM, { insets: insetsNow() });
+    r.camera.lookAt(c.x, c.y, stage.clientWidth >= 900 ? 18 : GAME_ZOOM, { insets: insetsNow() });
     viewMode = 'home';
   }
 
@@ -567,6 +591,10 @@ async function main() {
     const res = advance(game, dt);
     if (!res || !res.game || res.game === before) return;
     game = res.game;
+    if (res.events?.some(e => e.type === 'departures' || e.type === 'exodus')) {
+      game = { ...game, journey: { ...game.journey, hadExodus: true } };
+    }
+    game = finishCareer(finishJourney(game));
     if (game.world !== before.world) { r.setWorld(game.world); poke(); }
     if (game.month !== before.month) {
       syncHud();
@@ -612,10 +640,10 @@ async function main() {
     lastRender = now;
     const tu = performance.now();
     stepGame(simDt);
-    if (game.speed > 0) updateActors(actors, game.world, simDt * game.speed);
+    if (game.speed > 0 && !app.a11y.reducedMotion()) updateActors(actors, game.world, simDt * game.speed);
     updateMs = performance.now() - tu;
     const t0 = performance.now();
-    r.render(Math.min(MAX_FRAME_DT, dtMs / 1000));
+    r.render(app.a11y.reducedMotion() ? 0 : Math.min(MAX_FRAME_DT, dtMs / 1000));
     app.stats.frame(performance.now() - t0);
     if (now - lastHud >= HUD_EVERY_MS) {
       lastHud = now;
@@ -660,14 +688,15 @@ async function main() {
     app.toasts.show({ key: 'gl', kind: 'success', text: 'Affichage rétabli.' });
   });
 
-  // Première image (vue de jeu centrée sur la mairie, ou vue d'ensemble avec ?view=all), puis la page de chargement s'efface.
-  {
+  // Première image (vue de jeu centrée sur la mairie, ou vue d'ensemble avec ?view=all).
+  function initialView() {
     const q = new URLSearchParams(search);
     const z = Number(q.get('zoom'));
     if (q.get('view') === 'all') fitView();
     else if (Number.isFinite(z) && z > 0) { const c = centerOf(game.world); r.camera.lookAt(c.x, c.y, z, { insets: insetsNow() }); }
     else homeView();
   }
+  initialView();
   r.render(0);
   app.stats.update(r.stats());
   start();
@@ -685,11 +714,12 @@ async function main() {
 
   // ── Prêt ──────────────────────────────────────────────────────────────────────
   const nowSeconds = () => performance.now() / 1000;
-  function newGame(newSeed = seed) {
+  function newGame(newSeed = seed, replacement = null) {
     app.placement.drop();
     app.sheets.close('new');
+    app.toasts.clearAll();
     storage.clearGame();
-    game = createGame({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true });
+    game = replacement || createGame({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true });
     seed = game.seed ?? newSeed;
     actors = createActors(game.world, seed);
     r.setWorld(game.world);
@@ -701,6 +731,33 @@ async function main() {
     poke();
     return game;
   }
+
+  app.experience = createExperience({
+    root: $('#ui'), app, getGame, applyGame, audio: app.audio, restored, homeView, fitView,
+    onResize: () => { insetsKey = ''; updateInsets(); poke(); },
+    zoom: factor => { r.camera.zoomAt(factor,stage.clientWidth/2,stage.clientHeight/2);poke(); },
+    pause: on => applyGame(setSpeed(game,on?0:1),{silent:true}),
+    claim: () => { applyGame(claimGoal(game),{kind:'claim'}); app.placement.refresh(); },
+    startGame: (mode) => {
+      if (mode === 'career') {
+        const next = startLevel(createCareer(), 'vallee-1', { seed: hasSeedParam(search) ? seedParam : undefined });
+        newGame(next.seed, next);
+      } else {
+        newGame(Math.floor(Math.random() * 1000000));
+        game = startMode(game, 'sandbox');
+      }
+      storage.saveGame(game);
+      syncHud();
+    },
+    openLevel: id => {
+      const next = startLevel(game.career || createCareer(), id);
+      newGame(next.seed, next);
+      storage.saveGame(game);
+      syncHud();
+    },
+  });
+  insetsKey = ''; updateInsets(); initialView();
+  app.experience.welcome();
 
   window.__tiletown = {
     ready: true,
@@ -795,6 +852,8 @@ async function main() {
     /** Nouvelle partie (graine) sans recharger : utile aux mesures. */
     regenerate: (newSeed) => newGame(newSeed).world,
     newGame,
+    experience: app.experience,
+    audio: app.audio,
     fitView,
     homeView,
   };
@@ -807,4 +866,4 @@ async function main() {
   }
 }
 
-main().catch((err) => boot.fail(err));
+if (typeof window !== 'undefined') main().catch((err) => boot.fail(err));

@@ -1,5 +1,5 @@
-// Sol de la vallée : une `InstancedMesh` de boîtes 1 × 1 (une par case de terre) colorées par terrain
-// via `instanceColor`, les collines en boîtes plus hautes, un socle sous la carte (diorama), et l'EAU
+// Sol de la vallée : une surface continue subdivisée, colorée par sommet, avec collines raccordées,
+// berges en pente, un socle sous la carte (diorama), et l'EAU
 // ANIMÉE (docs/ARCHITECTURE.md §8.3) : une `InstancedMesh` de plans 1 × 1 pour la rivière et les lacs
 // (surface à y = −0,05) et une autre, mince pellicule posée sur la terre, pour les zones humides (eau peu
 // profonde). Les deux partagent un `MeshLambertMaterial` modifié par `onBeforeCompile` : ondulation de la
@@ -18,6 +18,8 @@
 // nord = −Z, est = +X.
 
 import * as THREE from 'three';
+import { continuousHeight, makeTerrain } from './terrain-mesh.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { PALETTE } from '../data/palette.js';
 import { TERRAINS } from '../data/terrain.js';
 import { hashUnit, lerp, composeScaled } from './util.js';
@@ -63,7 +65,7 @@ const FLOW_VECTORS = Object.freeze({ N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0
 /** Couleur (« #rrggbb ») d'un terrain. */
 export function terrainColorHex(terrainId) {
   const def = TERRAINS[terrainId];
-  return (def && PALETTE[def.color]) || UNKNOWN_TERRAIN_COLOR;
+  return ({grass:'#95b56f',meadow:'#a5bf80',forest:'#83a366',river:'#6fbcc1',lake:'#5aaab5',wetland:'#91b397',hill:'#b1b298',field:'#debf76'})[terrainId] || (def && PALETTE[def.color]) || UNKNOWN_TERRAIN_COLOR;
 }
 
 /** Vrai si la case se rend comme une étendue d'eau profonde (rivière, lac). La zone humide reste de la terre. */
@@ -112,6 +114,8 @@ export function hillHeight(world, x, y) {
 }
 
 /** Altitude de la surface sur laquelle poser un décor ou un bâtiment en (x, y). */
+export function heightAt(world, x, z) { return continuousHeight(world, x, z, hillHeight, WATER_LEVEL); }
+
 export function surfaceHeight(world, x, y) {
   const tile = world.tiles[y * world.cols + x];
   if (!tile) return 0;
@@ -177,7 +181,7 @@ const HATCH_VERTEX_BODY = /* glsl */`
  * { material, uniforms } ; `uniforms.uPattern.value` vaut 0 ou 1.
  */
 export function createLandMaterial(uniforms = { uPattern: { value: 0 } }) {
-  const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uPattern = uniforms.uPattern;
     shader.vertexShader = HATCH_VERTEX_PARS + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + HATCH_VERTEX_BODY);
@@ -244,11 +248,11 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	float along = dot( vWaterPos, vFlow );
 	float across = vWaterPos.x * vFlow.y - vWaterPos.y * vFlow.x;
 	float phase = ( along - uTime * ${FLOW_SPEED.toFixed(3)} ) * 12.566 + sin( across * 4.0 + uTime * 0.6 ) * 0.8;
-	float bands = smoothstep( 0.55, 0.98, sin( phase ) ) * 0.12 * vStyle.y; // bandes douces, lisibles sans dominer
+	float bands = smoothstep( 0.55, 0.98, sin( phase ) ) * 0.025 * vStyle.y; // bandes douces, lisibles sans dominer
 	// Scintillement : deux ondes croisées, lentes et gauchies l'une par l'autre (pas de grille régulière), sur toute eau.
 	float sx = sin( vWaterPos.x * 9.0 + uTime * 1.5 + sin( vWaterPos.y * 3.1 + uTime * 0.5 ) * 1.7 );
 	float sz = sin( vWaterPos.y * 7.0 - uTime * 1.1 + sin( vWaterPos.x * 2.3 - uTime * 0.4 ) * 1.9 );
-	float shimmer = smoothstep( 0.6, 1.0, sx * sz ) * 0.07;
+	float shimmer = smoothstep( 0.6, 1.0, sx * sz ) * 0.018;
 	// Écume : fin liseré clair le long des côtés bordés de terre (nord = z local −0,5, est = x local +0,5).
 	float edge = 0.075 + 0.02 * sin( ( vWaterPos.x + vWaterPos.y ) * 9.0 + uTime * 1.4 );
 	float foam = 0.0;
@@ -263,7 +267,7 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	float algae = smoothstep( 0.35, 1.0, sin( vWaterPos.x * 2.1 + uTime * 0.17 ) * sin( vWaterPos.y * 1.7 - uTime * 0.13 ) ) * q * 0.25;
 	diffuseColor.rgb = mix( diffuseColor.rgb, uMurky, q * ${WATER_MURKY_MIX.toFixed(3)} );
 	diffuseColor.rgb = mix( diffuseColor.rgb, uMurky * 0.8, algae );
-	float light = clamp( bands + shimmer + foam * 0.5, 0.0, 0.6 ) * ( 1.0 - 0.6 * q );
+	float light = clamp( bands + shimmer + foam * 0.14, 0.0, 0.6 ) * ( 1.0 - 0.6 * q );
 	diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), light );
 }
 `;
@@ -310,7 +314,10 @@ export function createGround() {
   const group = new THREE.Group();
   group.name = 'ground';
 
-  const landTemplate = new THREE.BoxGeometry(1, 1, 1);
+  const gridMaterial = new THREE.LineBasicMaterial({ color: '#fff5db', transparent: true, opacity: 0.38, depthWrite: false });
+  const gridHint = new THREE.LineSegments(new THREE.BufferGeometry(), gridMaterial);
+  gridHint.name = 'construction-grid'; gridHint.visible = false; group.add(gridHint);
+  let gridKey = '';
   // Hachures du mode daltonien : un seul interrupteur pour la terre et l'eau.
   const patternUniform = { value: 0 };
   const { material: landMaterial } = createLandMaterial({ uPattern: patternUniform });
@@ -318,15 +325,16 @@ export function createGround() {
   const waterTemplate = new THREE.PlaneGeometry(1, 1, 2, 2);
   waterTemplate.rotateX(-Math.PI / 2);
   const { material: waterMaterial, uniforms } = createWaterMaterial({ uPattern: patternUniform });
-  const baseMaterial = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE.soil).multiplyScalar(0.72) });
-  const baseGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const riverColor = new THREE.Color(PALETTE.river);
+  const baseMaterial = new THREE.MeshLambertMaterial({ color: new THREE.Color('#bda885') });
+  const baseGeometry = new RoundedBoxGeometry(1, 1, 1, 2, 0.035);
+  const riverColor = new THREE.Color(terrainColorHex('river'));
 
   let land = null;
   let water = null;   // rivière + lacs
   let film = null;    // zones humides
   let base = null;
   let world = null;
+  let terrainMesh = null;
   /** Par case : index d'instance dans `land` (≥ 0) ou dans `water` (codé −(i + 1)). */
   let slots = null;
   /** Par case : index d'instance dans `film` (zone humide), −1 sinon. */
@@ -378,6 +386,7 @@ export function createGround() {
   }
 
   function clear() {
+    gridHint.visible = false; gridKey = '';
     for (const mesh of [land, water, film, base]) {
       if (!mesh) continue;
       group.remove(mesh);
@@ -405,13 +414,15 @@ export function createGround() {
       if (t && isShallowWater(t.terrain)) wetCount++;
     }
 
-    const landGeometry = landTemplate.clone();
-    landGeometry.setAttribute('aLayer', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, landCount)).fill(-1), 1));
-    land = new THREE.InstancedMesh(landGeometry, landMaterial, Math.max(1, landCount));
-    land.name = 'land';
-    land.castShadow = true;    // les collines et les berges portent une ombre
-    land.receiveShadow = true;
-    land.frustumCulled = false;
+    terrainMesh = makeTerrain(world,(x,z)=>heightAt(world,x,z),terrainColorHex);
+    land = new THREE.Mesh(terrainMesh.geometry,landMaterial);
+    land.name = 'land'; land.receiveShadow = true; land.castShadow = false;
+    // Accès par case partagé avec les calques ; aucune reconstruction pour une mise à jour d'écologie.
+    land.setColorAt = (slot,c) => {
+      const range=terrainMesh.ranges[slot], attr=land.geometry.attributes.color;
+      for(let v=range.start;v<range.start+range.count;v++)attr.setXYZ(v,c.r,c.g,c.b);
+      attr.needsUpdate=true;
+    };
     water = createWaterMesh('water', waterCount);
     film = createWaterMesh('wetland-film', wetCount);
 
@@ -431,11 +442,6 @@ export function createGround() {
           slots[i] = -(wi + 1);
           wi++;
         } else {
-          const top = terrain === 'hill' ? hillHeight(world, x, y) : 0;
-          const h = top + LAND_THICKNESS;
-          composeScaled(matrix, x + 0.5, top - h / 2, y + 0.5, 1, h, 1);
-          land.setMatrixAt(li, matrix);
-          land.setColorAt(li, color);
           slots[i] = li;
           li++;
           if (isShallowWater(terrain)) {
@@ -450,7 +456,6 @@ export function createGround() {
       }
     }
     land.count = landCount;
-    land.instanceMatrix.needsUpdate = true;
     if (land.instanceColor) land.instanceColor.needsUpdate = true;
     for (const mesh of [water, film]) {
       mesh.instanceMatrix.needsUpdate = true;
@@ -483,7 +488,7 @@ export function createGround() {
     for (let i = 0; i < n; i++) {
       const v = field ? (i < field.length ? field[i] : 0) : -1;
       const s = slots[i];
-      if (s >= 0) landAttr.array[s] = v; else waterAttr.array[-s - 1] = v;
+      if (s >= 0) { const r=terrainMesh.ranges[s];landAttr.array.fill(v,r.start,r.start+r.count); } else waterAttr.array[-s - 1] = v;
       if (filmSlots[i] >= 0) filmAttr.array[filmSlots[i]] = v;
     }
     landAttr.needsUpdate = true; waterAttr.needsUpdate = true; filmAttr.needsUpdate = true;
@@ -540,10 +545,10 @@ export function createGround() {
     for (let i = 0; i < n; i++) {
       const s = slots[i];
       color.setRGB(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]);
-      if (s >= 0) land.setColorAt(s, color); else water.setColorAt(-s - 1, color);
+      if (s >= 0) { if(rgb)land.setColorAt(s,color); } else water.setColorAt(-s - 1, color);
       if (filmSlots[i] >= 0) film.setColorAt(filmSlots[i], filmTint(tint, color));
     }
-    if (land.instanceColor) land.instanceColor.needsUpdate = true;
+    if (!rgb) {land.geometry.attributes.color.array.set(terrainMesh.base);land.geometry.attributes.color.needsUpdate=true;}
     if (water.instanceColor) water.instanceColor.needsUpdate = true;
     if (film.instanceColor) film.instanceColor.needsUpdate = true;
   }
@@ -553,9 +558,28 @@ export function createGround() {
     if (Number.isFinite(dt) && dt > 0) uniforms.uTime.value += dt;
   }
 
+  /** Repère discret autour du doigt, uniquement pendant la construction. */
+  function setGridHint(cell) {
+    if (!cell || !world) { gridHint.visible = false; gridKey = ''; return; }
+    const key = `${cell.x},${cell.y}`;
+    if (key === gridKey) return;
+    gridKey = key;
+    const x0 = Math.max(0, cell.x - 2), x1 = Math.min(world.cols, cell.x + 3);
+    const z0 = Math.max(0, cell.y - 2), z1 = Math.min(world.rows, cell.y + 3);
+    const points = [];
+    const point = (x, z) => points.push(x, heightAt(world, x, z) + 0.025, z);
+    for (let x = x0; x <= x1; x++) for (let z = z0; z < z1; z += 0.25) { point(x, z); point(x, z + 0.25); }
+    for (let z = z0; z <= z1; z++) for (let x = x0; x < x1; x += 0.25) { point(x, z); point(x + 0.25, z); }
+    gridHint.geometry.dispose();
+    gridHint.geometry = new THREE.BufferGeometry();
+    gridHint.geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    gridHint.visible = true;
+  }
+
   function dispose() {
     clear();
-    for (const g of [landTemplate, waterTemplate, baseGeometry]) g.dispose();
+    gridHint.geometry.dispose(); gridMaterial.dispose();
+    for (const g of [waterTemplate, baseGeometry]) g.dispose();
     for (const m of [landMaterial, waterMaterial, baseMaterial]) m.dispose();
   }
 
@@ -563,6 +587,8 @@ export function createGround() {
     group,
     stats,
     setWorld,
+    setGridHint,
+    heightAt: (x,z) => world ? heightAt(world,x,z) : 0,
     update,
     setLayerValues,
     setLayerPattern,

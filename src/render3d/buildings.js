@@ -18,7 +18,7 @@ const DEG = Math.PI / 180;
 const QUARTER = Math.PI / 2;
 
 /** Emplacements de 3 arbres dans une case (relatifs au centre), tournés d'un quart de tour au hasard. */
-const TREE_SLOTS = Object.freeze([[-0.22, -0.2], [0.21, -0.23], [0.02, 0.23]]);
+const TREE_SLOTS = Object.freeze([[-0.30, -0.24], [0.29, -0.18], [0.06, 0.32]]);
 /** Emplacements des fleurs et buissons clairsemés. */
 const SCATTER_SLOTS = Object.freeze([[-0.26, 0.12], [0.22, -0.26], [0.1, 0.27], [-0.2, -0.24], [0.28, 0.08]]);
 
@@ -115,7 +115,7 @@ export function collectPlacements(world, options = {}) {
             out.push({
               id: pickModel(list, h(10 + k)),
               x: cx + dx + (h(40 + k) - 0.5) * 0.08, y: ground, z: cz + dz + (h(50 + k) - 0.5) * 0.08,
-              yaw: h(20 + k) * Math.PI * 2, scale: lerp(0.85, 1.1, h(30 + k)), tile: i,
+              yaw: h(20 + k) * Math.PI * 2, scale: lerp(0.6, 1.06, h(30 + k)), tile: i,
             });
           }
           break;
@@ -124,7 +124,7 @@ export function collectPlacements(world, options = {}) {
           const count = 2 + Math.floor(h(2) * 2); // 2 ou 3 touffes de fleurs
           for (let k = 0; k < count; k++) {
             const [dx, dz] = rotateSlot(SCATTER_SLOTS[k], q);
-            out.push({ id: pickModel(list, h(10 + k)), x: cx + dx, y: ground, z: cz + dz, yaw: h(20 + k) * Math.PI * 2, scale: lerp(0.8, 1.1, h(30 + k)), tile: i });
+            out.push({ id: pickModel(list, h(10 + k)), x: cx + dx, y: ground, z: cz + dz, yaw: h(20 + k) * Math.PI * 2, scale: lerp(0.42, 0.68, h(30 + k)), tile: i });
           }
           break;
         }
@@ -134,10 +134,10 @@ export function collectPlacements(world, options = {}) {
           break;
         }
         case 'hill': {
-          const count = h(2) < 0.5 ? 1 : 2;
+          const count = 1;
           for (let k = 0; k < count; k++) {
             const [dx, dz] = count === 1 ? [0, 0] : rotateSlot([-0.18 + k * 0.36, (k ? -1 : 1) * 0.12], q);
-            out.push({ id: pickModel(list, h(10 + k)), x: cx + dx, y: ground, z: cz + dz, yaw: h(20 + k) * Math.PI * 2, scale: lerp(0.8, 1.3, h(30 + k)), tile: i });
+            out.push({ id: pickModel(list, h(10 + k)), x: cx + dx, y: ground, z: cz + dz, yaw: h(20 + k) * Math.PI * 2, scale: lerp(0.6, 0.9, h(30 + k)), tile: i });
           }
           break;
         }

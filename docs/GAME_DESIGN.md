@@ -370,3 +370,15 @@ Questions encore ouvertes :
 - **Anno 2070 / Cities Skylines** : écobilan unique avec bonus positif, vent dominant, eaux usées en aval.
 - **Carcassonne** : adjacence, zones fermées.
 - **Six Sided Streets** : rendements décroissants entre doublons voisins.
+
+## 13. Parcours livré avec la refonte du 2026-10-05
+
+Cette première aventure utilise un **objectif actif à la fois**, dans un carnet de huit étapes : quartier supplémentaire, commerce supplémentaire, éolienne, école, deux forêts, château d’eau, 150 habitants, puis bonheur ≥ 65 avec nature ≥ 70. Les récompenses vont de 100 à 300 $ et se réclament explicitement. Leur état est sauvegardé ; une prime ne peut être réclamée deux fois.
+
+La carrière commence avec **la mairie seule**. Cinq vallées se débloquent successivement avec au moins une étoile : première vallée (120 habitants, nature 70), rivière (180 habitants, nature 75, eau saine 75), bocage (180 habitants, nature 80, trois champs cultivés), coteaux (250 habitants, nature 75), grande vallée (350 habitants, nature 75). Les graines, dimensions, budgets et nouveaux bâtiments sont centralisés dans `src/data/levels.js`.
+
+À 36 mois, le temps s’arrête sur un bilan. La première étoile exige tous les objectifs de la vallée ; la deuxième ajoute une nature d’au moins 80 ; la troisième ajoute un objectif supérieur de population, un bonheur d’au moins 65 et l’absence d’exode. Les deux étoiles supplémentaires exigent aussi la réussite des objectifs principaux. Le meilleur résultat et les bâtiments débloqués sont conservés lors des changements de vallée. La carte des vallées est accessible depuis le carnet, les réglages et le bilan.
+
+Le score indicatif reste `nature × prospérité / 100`, avec `prospérité = 0,6 × min(100, population / 3) + 0,4 × bonheur`. Les anciennes parties sans carrière utilisent les seuils conjoints de nature et prospérité 40, 55 et 70. La condition initialement envisagée de 50 % de terrain bâti n’est pas appliquée. Le résultat est figé ; « Continuer ma vallée » passe en mode libre.
+
+Le **mode libre** ouvre toutes les constructions avec un budget de 100 000 $ et sans bilan forcé à trois ans. L’économie et les besoins des habitants continuent de fonctionner. Il ne promet pas un budget infini.

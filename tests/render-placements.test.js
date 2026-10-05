@@ -56,7 +56,7 @@ test('collectPlacements : bâtiments au centre de leur case, orientés en degré
   for (const t of forest) {
     assert.ok(/^(tree|pine)-/.test(t.id), t.id);
     assert.ok(t.x > 1 && t.x < 2 && t.z > 0 && t.z < 1, 'dans la case (1, 0)');
-    assert.ok(t.scale > 0.8 && t.scale < 1.2);
+    assert.ok(t.scale >= 0.6 && t.scale <= 1.06);
   }
   // Prairie : fleurs clairsemées ; champ : une culture ; colline : rochers posés au sommet ; eau : rien
   assert.ok(p.filter((x) => x.tile === 2).every((x) => x.id === 'flowers') && p.filter((x) => x.tile === 2).length >= 2);

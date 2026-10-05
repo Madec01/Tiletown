@@ -15,6 +15,7 @@
 // 30 au repos). Perte de contexte WebGL : rendu suspendu puis repris à la restauration.
 
 import * as THREE from 'three';
+import { createScenery } from './scenery.js';
 import { PALETTE } from '../data/palette.js';
 import * as Camera from './camera.js';
 import { loadModels } from './models.js';
@@ -33,7 +34,7 @@ const SUN_DISTANCE = 40;
 
 /**
  * Crée le rendu. options : { manifestUrl = 'assets/models/manifest.json', pixelRatioMax = 2,
- * shadows = true, shadowMapSize = 2048, markings = true, background = PALETTE.wallCream,
+ * shadows = true, shadowMapSize = 2048, markings = true, background = '#e1ead6',
  * modelFor (bâtiment → identifiant de modèle), strategy ('batched' | 'instanced' | 'auto'),
  * fetch (injection pour les tests), yaw / pitch (radians) }.
  * Rejette seulement si WebGL2 est indisponible.
@@ -45,7 +46,7 @@ export async function createRenderer(canvas, options = {}) {
     shadows = true,
     shadowMapSize = 2048,
     markings = true,
-    background = PALETTE.wallCream,
+    background = '#e1ead6',
   } = options;
 
   let renderer;
@@ -63,7 +64,8 @@ export async function createRenderer(canvas, options = {}) {
   renderer.setPixelRatio(Math.min(pixelRatioMax, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1) || 1));
   renderer.shadowMap.enabled = shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoftShadowMap a disparu en r186
-  renderer.toneMapping = THREE.NoToneMapping;     // couleurs de la palette fidèles
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;     // couleurs de la palette fidèles
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const multiDraw = renderer.extensions.has('WEBGL_multi_draw');
@@ -75,13 +77,13 @@ export async function createRenderer(canvas, options = {}) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(background);
 
-  const hemi = new THREE.HemisphereLight(0xfff4e4, 0x9fcf8a, 1.4);
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
+  const hemi = new THREE.HemisphereLight(0xfff5e5, 0xb4c9a3, 1.65);
+  const sun = new THREE.DirectionalLight(0xffefcf, 2.8);
   sun.castShadow = shadows;
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
-  sun.shadow.radius = 2;
+  sun.shadow.radius = 3;
   scene.add(hemi, sun, sun.target);
 
   // --- Caméra -------------------------------------------------------------------------------
@@ -122,6 +124,8 @@ export async function createRenderer(canvas, options = {}) {
   // --- Contenu ------------------------------------------------------------------------------
   const models = await loadModels(manifestUrl, { fetch: options.fetch });
   const ground = createGround();
+  const scenery = createScenery();
+  scene.add(scenery.group);
   const buildings = createBuildings(models, { strategy, modelFor: options.modelFor, shadows });
   const roads = createRoads(models, { markings });
   // Effets animés (étape 2) : fumée des cheminées, pales des éoliennes ; l'eau animée vit dans ground.
@@ -242,6 +246,7 @@ export async function createRenderer(canvas, options = {}) {
       ghost.setWorld(world);
       animating = true; // vallée vivante : eau, fumée, pales, acteurs
       ground.setWorld(world);
+      scenery.setWorld(world);
       buildings.setWorld(world);
       roads.setWorld(world);
       fitShadow();
@@ -315,6 +320,11 @@ export async function createRenderer(canvas, options = {}) {
 
     /** Demande explicitement une nouvelle image (après un changement externe). */
     invalidate() { dirty = true; },
+    setEvening(on) {
+      sun.color.set(on ? '#ffc68a' : '#ffefcf'); sun.intensity = on ? 1.7 : 2.8;
+      hemi.color.set(on ? '#c5c6f2' : '#fff5e5'); hemi.intensity = on ? 1.2 : 1.65;
+      scene.background.set(on ? '#c9d0d7' : background); dirty = true;
+    },
     /** Fournit l'état des acteurs à afficher (objet de src/core/actors.js, mis à jour par l'appelant). */
     setActors(next) { actors = next || null; dirty = true; },
     /** Animation en cours : redessine à chaque appel de `render` (acteurs, étape 2). */
@@ -323,7 +333,7 @@ export async function createRenderer(canvas, options = {}) {
      * Fantôme de pose (§9.2) : { x, y, tileId, ok: true | false | 'warn', path: [{ kind, x, y, value }], yaw (degrés),
      * level, variant, modelId } ; null le cache. Un seul objet mis à jour sans reconstruire le monde.
      */
-    setGhost(g) { ghost.set(g || null); dirty = true; },
+    setGhost(g) { ghost.set(g || null); ground.setGridHint(g || null); dirty = true; },
     /** Cases marquées d'un cadre jaune (sélection, fiche) : [{ x, y }] ; null ou [] efface. */
     setHighlight(cells) { ghost.setHighlight(cells || null); dirty = true; },
     get needsRender() { return dirty || animating; },
@@ -389,6 +399,7 @@ export async function createRenderer(canvas, options = {}) {
       buildings.dispose();
       roads.dispose();
       ground.dispose();
+      scenery.dispose();
       models.dispose();
       if (sun.shadow.map) sun.shadow.map.dispose();
       renderer.dispose();

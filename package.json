@@ -12,7 +12,9 @@
     "measure": "node tools/measure.mjs",
     "preview-models": "node tools/preview-models.mjs",
     "make-icons": "node tools/make-icons.mjs",
-    "print-world": "node tools/print-world.js"
+    "print-world": "node tools/print-world.js",
+    "review:mobile": "node tools/review-mobile.mjs",
+    "render-previews": "node tools/render-previews.mjs"
   },
   "dependencies": {
     "three": "0.186.1"
