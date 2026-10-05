@@ -4,29 +4,30 @@ Toute ressource du dépôt est sous licence libre compatible avec une publicatio
 
 ## Modèles 3D (`assets/models/*.glb`, `assets/models/manifest.json`)
 
-La plupart des modèles dérivent des kits ci-dessous, créés et distribués par **Kenney** (www.kenney.nl) sous **Creative Commons Zero (CC0 1.0)** : usage personnel, éducatif et commercial libre, sans obligation de crédit (crédit volontaire). Texte de licence : `assets/models/LICENSE-kenney.txt`. Ils sont normalisés par `tools/import-models.js` (échelle, orientation, assemblages, compression meshopt) et **recolorés par rôle** : l'import devine le rôle de chaque aplat (toiture, façade, soubassement, menuiserie, vitrage, végétation, tronc, roche, métal, sol, accent) d'après sa couleur d'origine, sa hauteur dans la boîte englobante et l'orientation de ses faces, puis tire une teinte dans la sous-palette de ce rôle (`src/data/palette.js`). Les couleurs sont cuites en couleurs de sommets : les GLB publiés ne contiennent plus aucune texture.
+Une partie des modèles dérive des kits ci-dessous, créés et distribués par **Kenney** (www.kenney.nl) sous **Creative Commons Zero (CC0 1.0)** : usage personnel, éducatif et commercial libre, sans obligation de crédit (crédit volontaire). Texte de licence : `assets/models/LICENSE-kenney.txt`. Ils sont normalisés par `tools/import-models.js` (échelle, orientation, assemblages, compression meshopt) et **recolorés par rôle** : l'import devine le rôle de chaque aplat (toiture, façade, soubassement, menuiserie, vitrage, végétation, tronc, roche, métal, sol, accent) d'après sa couleur d'origine, sa hauteur dans la boîte englobante et l'orientation de ses faces, puis tire une teinte dans la sous-palette de ce rôle (`src/data/palette.js`). Les couleurs sont cuites en couleurs de sommets : les GLB publiés ne contiennent plus aucune texture.
 
 Toutes les pièces géométriques **créées par Tiletown** (rues étroites sur les arêtes, dalles, bassins, tas de compost, mâts, **famille d'arbres arrondis**, **détails de caractère des bâtiments**) sont des créations du projet, sous **CC0**.
 
 | Ressource | Auteur | Adresse | Licence | Utilisée pour |
 |---|---|---|---|---|
 | City Kit Roads 2.1 | Kenney | https://kenney.nl/assets/city-kit-roads | CC0 1.0 | `road-straight`, `road-corner`, `road-t`, `road-cross`, `road-crosswalk`, `bridge` |
-| City Kit Suburban 2.0 | Kenney | https://kenney.nl/assets/city-kit-suburban | CC0 1.0 | `house-a` à `house-f` (six silhouettes : maison en L, maison à étage, toit plat, pignon frontal, cube, maison longue) |
-| City Kit Commercial 2.1 | Kenney | https://kenney.nl/assets/city-kit-commercial | CC0 1.0 | `building-small-a/b/c`, `building-tall-a/b/c`, `shop-a/b/c`, `office-a/b` |
+| City Kit Suburban 2.0 | Kenney | https://kenney.nl/assets/city-kit-suburban | CC0 1.0 | anciens modèles de maisons, remplacés par les créations Tiletown ci-dessous |
+| City Kit Commercial 2.1 | Kenney | https://kenney.nl/assets/city-kit-commercial | CC0 1.0 | anciens modèles de ville, remplacés par les créations Tiletown ci-dessous |
 | City Kit Industrial 2.0 | Kenney | https://kenney.nl/assets/city-kit-industrial | CC0 1.0 | `factory-a/b/c`, `wind-turbine`, `solar`, `power-plant`, `compost`, `water-tower`, `wastewater` |
 | Nature Kit | Kenney | https://kenney.nl/assets/nature-kit | CC0 1.0 | `flowers`, `rock-a/b`, `crop-wheat`, `crop-corn`, fleurs du `park` (les arbres, arbustes et touffes d'herbe sont désormais des modèles Tiletown, ci-dessous) |
 | Train Kit | Kenney | https://kenney.nl/assets/train-kit | CC0 1.0 | `tram`, rails du `tram-stop` |
 | Car Kit 3.1 | Kenney | https://kenney.nl/assets/car-kit | CC0 1.0 | `car-a`, `car-b`, `truck`, `bus` (camionnette, provisoire) |
-| Fantasy Town Kit 2.0 | Kenney | https://kenney.nl/assets/fantasy-town-kit | CC0 1.0 | `market` (étals, charrette, banc, lanterne), fontaine et banc du `park`, banc et lanterne du `tram-stop` |
-| Modular Buildings | Kenney | https://kenney.nl/assets/modular-buildings | CC0 1.0 | `school`, `clinic`, `townhall` (assemblages) |
+| Fantasy Town Kit 2.0 | Kenney | https://kenney.nl/assets/fantasy-town-kit | CC0 1.0 | fontaine et banc du `park`, banc et lanterne du `tram-stop` |
+| Modular Buildings | Kenney | https://kenney.nl/assets/modular-buildings | CC0 1.0 | anciens assemblages civiques, remplacés par les créations Tiletown ci-dessous |
 | Mini Characters | Kenney | https://kenney.nl/assets/mini-characters | CC0 1.0 | téléchargé en réserve pour les habitants ; les habitants du jeu sont finalement des pantins Tiletown (`citizen-a/b/c`, ci-dessous) ; aucun GLB produit |
 
-### Modèles créés par Tiletown (`tools/model-map.js` + `tools/import-models.js`)
+### Modèles créés par Tiletown (`tools/model-map.js`, `tools/architecture.js`, `tools/import-models.js`)
 
 Ces modèles ne viennent d'aucun kit : ils sont construits en primitives (boîtes biseautées, cylindres à normales lisses, ellipsoïdes irréguliers) aux couleurs de la palette, puis exportés en GLB. Création du projet, **CC0**.
 
 | Ressource | Auteur | Adresse | Licence | Détail |
 |---|---|---|---|---|
+| Architecture de bourg : `house-a/b/c/d/e/f`, `building-small-a/b/c`, `building-tall-a/b/c`, `shop-a/b/c`, `office-a/b`, `townhall`, `school`, `clinic`, `market` | création du projet | `tools/architecture.js` | CC0 1.0 | 21 GLB originaux : façades et vitrages, volets, balcons fleuris, toits à pans et mansardes, auvents, terrasses, équipements civiques ; primitives exportées et compressées par le pipeline, sans texture externe |
 | Famille d'arbres arrondis : `tree-round-s/m/l`, `tree-tall-s/m/l`, `pine-s/m/l`, `shrub-a/b`, `grass-tuft-a/b`, `sapling`, plus les identifiants historiques `tree-a/b/c`, `pine-a/b`, `bush` | création du projet | ce dépôt | CC0 | houppiers en deux à quatre ellipsoïdes lisses et légèrement déformés, troncs fuselés et un peu penchés, verts voisins tirés dans `FOLIAGE_COLORS` ; 28 à 306 triangles par modèle |
 | Détails de caractère des bâtiments : débords de toiture, corniches, cheminées, porches, lucarnes, édicules de toit | création du projet | ce dépôt | CC0 | boîtes **biseautées** posées après mise à l'échelle, repérées sur une tranche de hauteur du modèle |
 | Rues étroites sur les arêtes : `road-edge-straight`, `road-edge-node-2/3/4` | création du projet | ce dépôt | CC0 | chaussée, trottoirs et pointillés en primitives |

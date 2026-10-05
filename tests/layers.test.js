@@ -29,9 +29,9 @@ test('layers : quatre calques (air, eau, faune, sols) et leurs rampes', () => {
     const d = Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
     assert.ok(d > 0.25, `${kind} : rampe trop plate (${d.toFixed(3)})`);
   }
-  // L'air part de la roche claire de la palette (sol « pur » qui ne crie pas).
-  assert.equal(LAYER_RAMPS.air[0], PALETTE.rockLight);
-  assert.equal(LAYER_RAMPS.water[0], PALETTE.river);
+  // Les vues analytiques se distinguent de la palette naturelle.
+  assert.notEqual(LAYER_RAMPS.air[0], PALETTE.grass);
+  assert.notEqual(LAYER_RAMPS.water[1], PALETTE.river);
   // Le calque des sols existe bien, et il est distinct de celui de l'air (sinon on les confond).
   assert.ok(LAYER_RAMPS.soil[0] !== LAYER_RAMPS.air[0] && LAYER_RAMPS.soil[1] !== LAYER_RAMPS.air[1]);
   assert.ok(LAYER_BLEND > 0.5 && LAYER_BLEND <= 1);
@@ -177,9 +177,18 @@ test('layers : layerColors — mélange avec le terrain, bornes et valeurs hors 
   assert.throws(() => layerColors('bruit', values, base), /Calque inconnu/);
 });
 
-test('layers : le calque des sols colore du pâle au foncé (fertilité lisible sur l’herbe)', () => {
+test('layers : le calque des sols distingue terre épuisée et sol fertile', () => {
   const base = new Float32Array([...linear(PALETTE.grass), ...linear(PALETTE.grass)]);
   const out = layerColors('soil', new Float32Array([0, 100]), base);
-  const sum = (i) => out[i * 3] + out[i * 3 + 1] + out[i * 3 + 2];
-  assert.ok(sum(0) > sum(1), 'un sol épuisé est plus clair qu’un sol fertile');
+  assert.ok(out[0] > out[1], 'un sol épuisé est brun');
+  assert.ok(out[4] > out[3], 'un sol fertile est vert');
+});
+
+test('mesures écologiques sous 1 : restent sur une échelle fixe de 100', () => {
+  const values = new Float32Array([0, 0.2, 0.8]);
+  const normalized = normalizeLayerValues(values, null, 100);
+  assert.ok(near(normalized[2], 0.008));
+  const base = new Float32Array(9);
+  const colors = layerColors('air', values, base, 100);
+  assert.ok(Math.abs(colors[0] - colors[6]) < 0.01, '0,8 de pollution reste proche de l’air pur');
 });

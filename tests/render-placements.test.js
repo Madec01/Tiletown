@@ -364,9 +364,9 @@ test('layerColors : none → null, valeurs 0-100 ou 0-1, mélange avec la couleu
   assert.equal(valueScale(new Float32Array([0.2, 40])), 100);
   const air = layerColors('air', new Float32Array([0, 100]), base);
   assert.equal(air.length, 6);
-  // Case 0 (air pur) : vers le gris clair ; case 1 (irrespirable) : vers le brun, plus rouge que vert
-  assert.ok(air[0] > base[0] && air[1] > 0.3, 'gris clair');
-  assert.ok(air[3] > air[4], 'brun : rouge > vert');
+  // Case 0 (air pur) : turquoise ; case 1 (irrespirable) : rouge.
+  assert.ok(air[1] > air[0] && air[2] > air[0], 'turquoise : vert et bleu > rouge');
+  assert.ok(air[3] > air[4], 'pollution : rouge > vert');
   const fauna = layerColors('fauna', new Float32Array([0, 1]), base);
   const saturation = (c, i) => c[i * 3 + 1] - Math.max(c[i * 3], c[i * 3 + 2]);
   assert.ok(saturation(fauna, 1) > saturation(fauna, 0), 'faune riche : vert plus vif (plus saturé) que faune pauvre');

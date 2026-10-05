@@ -37,7 +37,8 @@ src/
     ground.js             sol : InstancedMesh des cases colorées par terrain, eau
     buildings.js          îlots : une InstancedMesh (ou BatchedMesh) par modèle
     roads.js              bandes de rue et carrefours sur les arêtes
-    layers.js             calques air / eau / faune par couleurs d'instances
+    layers.js             rampes, légendes et normalisation des quatre calques
+    analysis.js           coloration géographique partagée du sol, des bâtiments et des rues
     actors.js             habitants, animaux, véhicules animés (étape 2)
   ui/
     gestures.js           toucher bref, appui long, glisser, pincer (adapté de Seve)
@@ -425,3 +426,13 @@ Diagnostic : **l'aspect cubique vient du terrain et de l'organisation du décor*
 - Les écrans titre, carte et résultat ainsi que les objectifs et le tutoriel utilisent les composants de `main`. Le résultat arrive quand les objectifs sont atteints ou après trois ans ; il permet aussi de continuer la même vallée en mode libre. La fin est sauvegardée et restaurée après rechargement.
 - `experience.js` apporte l’habillage mobile, les raccourcis de construction, le carnet et les réglages. `audio.js` déverrouille musique et effets après un geste, et mémorise les préférences. Les trois MP3 sont chargés et cachés à la demande.
 - Contrôles reproductibles : `npm test`, `npm run check`, `npm run review:mobile`, `node tools/play-career.mjs`. Les parcours couvrent la pose tactile, les primes, les trois premières leçons, le passage à la vallée suivante et la reprise des étoiles après rechargement.
+
+
+### Calques lisibles et architecture de bourg — 2026-10-05
+
+- `analysis.js` partage une texture RGBA de la taille de la carte entre les matériaux du sol, de l’eau, des rues et des bâtiments. Le shader retrouve la case depuis la position mondiale, y compris pour les instances et les `BatchedMesh`. L’éclairage conserve du relief ; les hachures restent disponibles. Aucun appel de dessin supplémentaire pour le calque.
+- Les données du moteur sont toujours interprétées sur **0 à 100**, y compris lorsque toutes les valeurs sont inférieures à 1. Air : turquoise → rouge ; eau : bleu → rouge ; faune : sable → vert ; sols : brun → vert. Couper le calque restaure la palette naturelle.
+- `ui/layers.js` laisse une légende au-dessus de la carte, avec bornes et moyenne ; le toucher d’une case affiche sa valeur. La légende disparaît pendant l’ouverture d’une feuille et laisse les deux outils flottants accessibles à 360 px. Le bouton « Voir la carte colorée » referme le sélecteur.
+- `tools/architecture.js` définit 21 modèles originaux exportés en GLB : six maisons, six immeubles, trois commerces, deux bureaux, mairie, école, clinique et marché. Le pipeline accepte les profils convexes extrudés (pignons, mansardes et portes cintrées). Les identifiants existants sont conservés ; les variantes supplémentaires sont reliées au catalogue. Un import partiel conserve les textes de licence si les kits bruts sont absents.
+- Emprise des bâtiments : environ 0,65 unité après l’échelle de rendu de 0,76. Rues de 0,24 unité, trottoirs compris 0,32 ; caméra mobile à 6,5 unités de largeur. Les 22 aperçus de construction sont rendus depuis les GLB courants.
+- `npm run review:layers` compare les pixels réellement dessinés, suit les boutons tactiles des quatre calques, vérifie les valeurs 0 / 0,8 / 100, les hachures, le retour aux couleurs naturelles et la disposition à 360 px. Les captures sont produites dans `artifacts/layers/`.

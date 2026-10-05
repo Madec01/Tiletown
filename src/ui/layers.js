@@ -25,8 +25,8 @@ import { el, clear, setText } from './dom.js';
 /** Les quatre choix principaux, dans l'ordre d'affichage (deux colonnes de grands boutons). */
 export const LAYER_CHOICES = Object.freeze([
   Object.freeze({ id: 'none', label: 'Aucun', hint: 'La vallée telle qu’elle est' }),
-  Object.freeze({ id: 'air', label: 'Air', hint: 'Clair : l’air est pur ; brun : il est chargé' }),
-  Object.freeze({ id: 'water', label: 'Eau', hint: 'Bleu : l’eau est claire ; vert sale : polluée' }),
+  Object.freeze({ id: 'air', label: 'Air', hint: 'Turquoise : air pur ; rouge : air pollué' }),
+  Object.freeze({ id: 'water', label: 'Eau', hint: 'Bleu : eau claire ; rouge : eau polluée' }),
   Object.freeze({ id: 'fauna', label: 'Faune', hint: 'Plus c’est vert, plus la vie est riche' }),
 ]);
 
@@ -41,10 +41,10 @@ export const LAYER_KINDS = Object.freeze([...LAYER_CHOICES.map((c) => c.id), SOI
  * `LAYER_RAMPS` de src/render3d/layers.js, recopiées ici pour que ce module reste testable sans three.js).
  */
 export const LAYER_INFO_FALLBACK = Object.freeze({
-  air: Object.freeze({ kind: 'air', label: 'Pollution de l’air', unit: '', min: 0, max: 100, minLabel: 'pur', maxLabel: 'irrespirable', stops: Object.freeze(['#c9c4b8', '#7a4a30']) }),
-  water: Object.freeze({ kind: 'water', label: 'Qualité de l’eau', unit: '', min: 0, max: 100, minLabel: 'claire', maxLabel: 'polluée', stops: Object.freeze(['#5fb3d9', '#6f8a3a']) }),
-  fauna: Object.freeze({ kind: 'fauna', label: 'Biodiversité', unit: '', min: 0, max: 100, minLabel: 'peu de vie', maxLabel: 'vie riche', stops: Object.freeze(['#d6e9bf', '#1f8a3c']) }),
-  soil: Object.freeze({ kind: 'soil', label: 'Fertilité des sols', unit: '', min: 0, max: 100, minLabel: 'épuisé', maxLabel: 'fertile', stops: Object.freeze(['#e8d8c0', '#8b5a3c']) }),
+  air: Object.freeze({ kind: 'air', label: 'Pollution de l’air', unit: '', min: 0, max: 100, minLabel: 'pur', maxLabel: 'irrespirable', stops: Object.freeze(['#3dc8b2', '#d94c48']) }),
+  water: Object.freeze({ kind: 'water', label: 'Qualité de l’eau', unit: '', min: 0, max: 100, minLabel: 'claire', maxLabel: 'polluée', stops: Object.freeze(['#36afe0', '#d75845']) }),
+  fauna: Object.freeze({ kind: 'fauna', label: 'Biodiversité', unit: '', min: 0, max: 100, minLabel: 'peu de vie', maxLabel: 'vie riche', stops: Object.freeze(['#dcb87a', '#28905d']) }),
+  soil: Object.freeze({ kind: 'soil', label: 'Fertilité des sols', unit: '', min: 0, max: 100, minLabel: 'épuisé', maxLabel: 'fertile', stops: Object.freeze(['#bb7953', '#8bbe46']) }),
 });
 
 /** Vrai si `kind` est un calque connu ('none' compris). */
@@ -152,6 +152,7 @@ export function createLayers({ sheets, renderer = null, getGame = null, pill = n
   // ── Pastille du calque actif (en haut de l'écran, hors de la feuille) ────────
   let pillMain = null;
   let pillLabel = null;
+  const mapLegend = el('div.analysis-legend');
   if (pill) {
     pillLabel = el('span.layer-pill-text', '');
     pillMain = el(
@@ -163,6 +164,7 @@ export function createLayers({ sheets, renderer = null, getGame = null, pill = n
     clear(pill).append(
       pillMain,
       el('button.layer-pill-x', { type: 'button', 'aria-label': 'Couper le calque', onclick: () => { buzz(8); set('none'); } }, '✕'),
+      mapLegend,
     );
     pill.hidden = true;
   }
@@ -170,12 +172,22 @@ export function createLayers({ sheets, renderer = null, getGame = null, pill = n
   function syncPill() {
     if (!pill) return;
     const on = kind !== 'none';
+    document.body.classList.toggle('has-analysis', on);
     pill.hidden = !on;
     pill.classList.toggle('is-on', on);
     if (on) {
       pill.dataset.layer = kind;
       setText(pillLabel, pillText(kind));
       pillMain?.setAttribute('aria-label', `${pillText(kind)} — toucher pour en changer`);
+      const info = layerInfoOf(kind, r);
+      const bounds = boundsText(info);
+      const values = valuesOf(kind);
+      const mean = values ? Math.round(Array.from(values).reduce((a, b) => a + b, 0) / values.length) : 0;
+      mapLegend.replaceChildren(
+        el('span.analysis-gradient', { style: { background: gradientCss(info) } }),
+        el('div.analysis-bounds', el('span', bounds.min), el('span', bounds.max)),
+        el('span.analysis-hint', `Moyenne ${mean}/100 · Touchez une case pour sa valeur`),
+      );
     } else {
       delete pill.dataset.layer;
     }
@@ -278,6 +290,7 @@ export function createLayers({ sheets, renderer = null, getGame = null, pill = n
       makeButton(SOIL_CHOICE, { big: false }),
       legendBox,
       patternBtn,
+      el('button.btn.btn--wide', { type: 'button', onclick: () => close() }, 'Voir la carte colorée'),
       el('p.sheet-hint', 'Un seul calque à la fois. Il reste allumé quand la feuille se referme : la pastille en haut de l’écran le rappelle.'),
     );
   }
@@ -332,6 +345,7 @@ export function createLayers({ sheets, renderer = null, getGame = null, pill = n
   /** Le mois a avancé (ou le monde a changé) : le calque allumé est redessiné avec le tableau à jour. */
   function refresh() {
     if (kind !== 'none') applyToRenderer();
+    syncPill();
     if (sheets?.isOpen('layers')) renderLegend();
   }
 
@@ -343,6 +357,14 @@ export function createLayers({ sheets, renderer = null, getGame = null, pill = n
     set,
     setPattern,
     refresh,
+    describeAt(x, y) {
+      const game = getGame?.(), values = valuesOf(kind);
+      if (!game || !values) return null;
+      const value = Math.round(values[y * game.world.cols + x]);
+      const info = layerInfoOf(kind, r);
+      const stop = info.stops[Math.min(2, Math.floor(value / 34))];
+      return `${info.label} : ${value}/100 · ${stop?.label || ''}`;
+    },
     isOpen: () => !!sheets?.isOpen('layers'),
     get kind() {
       return kind;

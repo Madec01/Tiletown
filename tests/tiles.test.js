@@ -9,8 +9,8 @@ import { PALETTE } from '../src/data/palette.js';
 
 /** Liste partagée avec l'agent des modèles (tools/import-models.js) : rien d'autre ne doit être référencé. */
 const SHARED_MODEL_IDS = [
-  'house-a', 'house-b', 'house-c', 'building-small-a', 'building-small-b', 'building-tall-a', 'building-tall-b',
-  'shop-a', 'shop-b', 'office-a', 'factory-a', 'factory-b', 'school', 'clinic', 'market', 'townhall', 'tram-stop',
+  'house-a', 'house-b', 'house-c', 'house-d', 'house-e', 'house-f', 'building-small-a', 'building-small-b', 'building-small-c', 'building-tall-a', 'building-tall-b', 'building-tall-c',
+  'shop-a', 'shop-b', 'shop-c', 'office-a', 'office-b', 'factory-a', 'factory-b', 'school', 'clinic', 'market', 'townhall', 'tram-stop',
   'wastewater', 'wind-turbine', 'solar', 'power-plant', 'compost', 'water-tower',
   'park', 'tree-a', 'tree-b', 'tree-c', 'pine-a', 'pine-b', 'bush', 'flowers', 'rock-a', 'rock-b', 'crop-wheat', 'crop-corn',
   'road-straight', 'road-corner', 'road-t', 'road-cross', 'road-crosswalk', 'bridge',
@@ -75,8 +75,8 @@ test('tiles : chaque modèle référencé est dans la liste partagée, un jeu de
   assert.equal(new Set(MODEL_IDS).size, MODEL_IDS.length);
   for (const id of Object.values(ROAD_MODELS)) assert.ok(allowed.has(id));
   for (const id of VEHICLE_MODELS) assert.ok(allowed.has(id));
-  assert.deepEqual(TILE_BY_ID.house.models[1], ['house-a', 'house-b', 'house-c']);
-  assert.deepEqual(TILE_BY_ID.house.models[3], ['building-tall-a', 'building-tall-b']);
+  assert.deepEqual(TILE_BY_ID.house.models[1], ['house-a', 'house-b', 'house-c', 'house-d', 'house-e', 'house-f']);
+  assert.deepEqual(TILE_BY_ID.house.models[3], ['building-tall-a', 'building-tall-b', 'building-tall-c']);
 });
 
 test('tiles : terrains permis valides, défrichement cohérent avec terrain.js', () => {
@@ -131,7 +131,7 @@ test('tiles : aides sur les cases (bâti, emplois, habitants, modèle)', () => {
   assert.equal(jobsOfTile(house), 0);
   assert.equal(jobsOfTile({ ...grass, building: { type: 'shop', level: 1, variant: 0, yaw: 0 } }), 15);
   assert.equal(jobsOfTile({ ...grass, building: { type: 'townhall', level: 1, variant: 0, yaw: 0 } }), 20);
-  assert.equal(modelOfBuilding(house.building), 'building-small-a', 'variant 4 sur 2 modèles → le premier');
+  assert.equal(modelOfBuilding(house.building), 'building-small-b', 'variant 4 sur 3 modèles → le deuxième');
   assert.equal(modelOfBuilding({ type: 'house', level: 1, variant: 2 }), 'house-c');
   assert.equal(modelOfBuilding({ type: 'school', level: 1, variant: 7 }), 'school');
   assert.deepEqual(URBAN_FAMILIES, ['habitat', 'activity', 'services', 'infrastructure']);

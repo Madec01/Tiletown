@@ -37,10 +37,10 @@ const TAU = Math.PI * 2;
 const QUARTER = Math.PI / 2;
 
 /**
- * Les îlots bâtis sont modélisés à 0,85 u d'emprise ; on les ramène à ≈ 0,58 u pour dégager la rue
+ * Les îlots bâtis sont modélisés à 0,85 u d'emprise ; on les ramène à ≈ 0,65 u pour dégager la rue
  * (chaussée + trottoirs) ET la bande de parcelle qui relie le bâtiment au sol (jardin, haie, allée).
  */
-export const BUILDING_SCALE = 0.64;
+export const BUILDING_SCALE = 0.76;
 
 /** Demi-côté de la parcelle d'un îlot bâti (bande claire entre le trottoir et le bâtiment). */
 export const LOT_HALF = 0.31;

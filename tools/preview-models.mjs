@@ -131,6 +131,14 @@ for (let i = 0; i < IDS.length; i++) {
     });
     scene.add(obj);
     const b = new THREE.Box3().setFromObject(obj);
+    if (!TOP) {
+      // Les immeubles hauts doivent rester entiers dans la planche de contrôle.
+      const half = Math.max(0.95, (b.max.y - b.min.y + Math.max(b.max.x - b.min.x, b.max.z - b.min.z)) * 0.55);
+      camera.left = -half; camera.right = half; camera.top = half; camera.bottom = -half;
+      const target = new THREE.Vector3(0, (b.max.y - b.min.y) * 0.45, 0);
+      camera.position.copy(new THREE.Vector3(1, 1.15, 1.6).normalize().multiplyScalar(12).add(target));
+      camera.lookAt(target); camera.updateProjectionMatrix();
+    }
     box = { min: [b.min.x, b.min.y, b.min.z].map((v) => +v.toFixed(3)), max: [b.max.x, b.max.y, b.max.z].map((v) => +v.toFixed(3)) };
     const fp = entry.footprint || [1, 1];
     const tol = 0.03;

@@ -31,9 +31,9 @@ export const EDGE_PATH = 1;
 export const EDGE_STREET = 2;
 export const EDGE_BRIDGE = 3;
 
-export const ROAD_WIDTH = 0.3;
+export const ROAD_WIDTH = 0.24;
 export const ROAD_THICKNESS = 0.02;
-export const SIDEWALK_WIDTH = 0.4;
+export const SIDEWALK_WIDTH = 0.32;
 export const SIDEWALK_THICKNESS = 0.012;
 export const PATH_WIDTH = 0.16;
 export const PATH_THICKNESS = 0.015;
@@ -376,7 +376,7 @@ function buildFallbackGeometries({ markings, colors }) {
 
 /**
  * Crée le rendu des rues. options : { markings = true, useEdgeModels = false, abords = true }.
- * Par défaut les rues sont des géométries procédurales continues (chaussée 0,30 u, trottoirs
+ * Par défaut les rues sont des géométries procédurales continues (chaussée 0,24 u, trottoirs
  * arrondis aux nœuds, virages en arc) ; les pièces GLB « road-edge-* » du manifeste restent
  * disponibles avec `useEdgeModels: true`.
  * API : { group, setWorld(world), stats, dispose() }.
