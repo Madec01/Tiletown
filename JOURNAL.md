@@ -15,6 +15,13 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 3 lancée : poser des tuiles et faire tourner le temps
+
+- Décision de l'utilisateur : étape 3 (le prototype devient un jeu) avant les systèmes nature et le son.
+- Sauvegarde : branche `backup/avant-etape3-2026-10-05`.
+- Contrat écrit dans `docs/ARCHITECTURE.md` §9 : état de partie pur (`createGame`, `advance`, `monthTick`, `canPlace`, `place`, `demolish`, `undoLast`, `serialize`…), fantôme et surbrillance dans le rendu (`setGhost`, `setHighlight`), interface (catalogue, pose en deux temps, HUD, vitesse, fiche, stockage local), parcours automatisé `tools/play.mjs` comme critère.
+- Trois chantiers parallèles : logique de partie (avec `tools/simulate.js` pour l'équilibrage), fantôme 3D, interface et intégration.
+
 ## 2026-10-04 (suite) — Étape 2 livrée : la vallée animée
 
 - **Modèles animés** (`tools/import-animated.js`, `tools/build-fauna.js`, `tools/preview-animated.mjs`) : cerf, renard, vache (Quaternius, squelettes 42-51 os, clips Idle/Walk/Gallop/Eating ; fichiers pris sur des miroirs GitHub octet-identiques, le Drive officiel étant saturé), canard, abeille, chouette (Gobkit, piste concaténée découpée en idle/attack/dead/walk) ; pantins maison en primitives : habitants (3 variantes), héron, loutre, hirondelle, cycliste. 13 modèles, 0,99 Mo. Pas de mouton (Farm Animals en FBX seulement). Licences : `LICENSE-quaternius.txt`, `LICENSE-gobkit.txt` (le champ copyright des GLB Gobkit est vide ; la CC0 est dans leur LICENSE.txt).

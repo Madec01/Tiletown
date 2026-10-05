@@ -201,3 +201,63 @@ scene.add(fx.group);  fx.dispose()
 ### 8.4 Critères du prototype (étape 2)
 
 Mesurés par `tools/measure.mjs` (scénario « vallée animée », 60 habitants + 20 véhicules + 24 animaux + fumée) : ≤ 60 appels de dessin, ≤ 200 000 triangles, mise à jour CPU (`updateActors` + `layer.update` + `fx.update`) < 4 ms par image (indicatif sous SwiftShader), précache < 6 Mo, aucune erreur, et une vérification que les acteurs bougent (au moins 35 % des acteurs déplacés entre deux relevés à 2 s d'écart : les pauses des habitants, les cerfs à l'arrêt et les chouettes perchées font partie du tableau).
+
+## 9. Partie, temps, pose et démolition (étape 3 : le prototype devient un jeu)
+
+### 9.1 État de partie (`src/core/game.js`, pur)
+
+```js
+game = {
+  version: 1, seed, world,                 // world : §3 (tuiles, arêtes, trafic)
+  clock: 12.5,                             // secondes écoulées dans le mois courant (au temps de jeu)
+  month: 0,                                // mois écoulés depuis le début (0 = mars, an 1) ; saison = floor(month / 3) % 4 (0 printemps … 3 hiver), année = floor(month / 12) + 1
+  speed: 1,                                // 0 (pause), 0.5, 1, 2, 4 ; 1 mois = 30 s de jeu à vitesse 1 (MONTH_SECONDS = 30)
+  money: 500,
+  stats: { population, capacity, jobs, happiness, nature, energy: { need, have }, water: { need, have }, food: { need, have }, income, upkeep },
+  demand: { habitat, activity, services },  // 0..1 : boussole du catalogue (ce qui manque)
+  unlocked: ['house', 'shop', 'field', 'park', 'tree-planting', ...],   // entrées du catalogue disponibles
+  natureBaseline: 83,                      // cases de nature native au départ (pour la jauge Nature provisoire)
+  log: [ { month, type, text } ],          // derniers événements (≤ 50)
+  undo: null | { game: <copie avant la dernière pose>, until: <clock absolu> }   // annulation possible 10 s
+}
+```
+
+Fonctions pures (chacune renvoie un nouvel objet ; `world` n'est recopié que s'il change) :
+
+- `createGame({ seed, cols, rows, starterTown })` → `game` (monde généré, rues reconstruites, trafic calculé, stats initiales).
+- `advance(game, dtSeconds)` → `{ game, events }` : avance l'horloge de `dt × speed` ; à chaque mois franchi appelle `monthTick` ; `events` cumule les événements des mois franchis (0, 1 ou plusieurs).
+- `monthTick(game)` → `{ game, events }` : encaisse recettes et entretien (GAME_DESIGN §6.4 : recettes par saison encaissées par tiers chaque mois, entretien 5/10/20 $ par niveau + 2 $ par segment de rue), arrivées et départs d'habitants (vers la capacité, +10 % de l'écart et au moins 2 si bonheur ≥ 40 ; exode −10 % si bonheur < 30 deux saisons de suite), recalcul des stats et de la demande ; **fin de saison** (mois multiple de 3) : évolutions (§6.7), événement `season` ; **fin d'année** : événement `year`. Faillite : événement `broke` si `money < −200` deux saisons de suite (pas de défaite bloquante dans ce prototype).
+- `computeStats(game)` → `stats` : population, capacité (20/45/80 par niveau de quartier), emplois, énergie / eau / nourriture (produit vs consommé, catalogue), bonheur = 50 + moyenne des adjacences des quartiers (§6.6) + services − 10 par ressource en déficit − chômage (population > emplois × 1,2 → −10) ; `nature` provisoire = 60 % part de nature native conservée + 40 % part de cases de forêt/zone humide/prairie (l'écologie réelle arrive à l'étape 3 bis).
+- `computeDemand(game)` → `{ habitat, activity, services }` dans [0, 1].
+- `canPlace(game, x, y, tileId)` → `{ ok, cost, clearing, path, reason }` : catalogue débloqué, terrain permis (§4 `terrains`), case libre, défrichement (`clearingCost` de `terrain.js` : interdit = null), raccordement (`connectTile` ; coût des arêtes à construire : 10 $ par segment, pont 40 $), argent suffisant ; `reason` ∈ `locked | terrain | occupied | money | unreachable | out_of_bounds`.
+- `place(game, x, y, tileId)` → `{ ok, game, cost, events }` : pose le bâtiment (famille nature : change le terrain, `native: false`), applique le tracé de raccordement, `rebuildRoads`, `computeTraffic`, oriente le bâtiment (`faceTowardRoad`), débite, mémorise `undo` (10 s), recalcule les stats.
+- `demolish(game, x, y)` → `{ ok, game, cost }` : 10 $ ; le terrain devient `grass` (`native: false`) ; la mairie est indestructible.
+- `undoLast(game)` → `game` (si `undo` encore valide) ; `setSpeed(game, speed)` ; `cycleSpeed(game)` (0 → 0,5 → 1 → 2 → 4 → 0).
+- `describeTile(game, x, y)` → `{ terrainLabel, building: { label, level, family } | null, conditions: [ { label, met } ] (prochaine évolution), yields: { income, upkeep, jobs, capacity } }`.
+- `serialize(game)` → objet JSON (tableaux typés convertis en tableaux) ; `deserialize(obj)` → `game` (versionné, migrations) ; `calendar(game)` → `{ month, season, seasonLabel, year, monthLabel }`.
+
+Constantes dans `src/data/balance.js` : `MONTH_SECONDS = 30`, `SPEEDS = [0, 0.5, 1, 2, 4]`, `START_MONEY = 500`, `UNDO_SECONDS = 10`, coûts de rue, capacités par niveau, seuils de bonheur.
+
+### 9.2 Rendu : fantôme et surbrillance (`src/render3d/ghost.js`, via `renderer.js`)
+
+```js
+r.setGhost({ x, y, tileId, ok: true | false | 'warn', path: [ { kind, x, y, value } ] } | null);
+// modèle du catalogue en translucide (teinte verte / rouge / jaune), posé sur la case, orienté vers la rue la plus proche ;
+// tracé de raccordement en pointillés sur les arêtes ; anneau de surbrillance sous la case.
+r.setHighlight([ { x, y } ] | null);      // cases marquées (sélection, fiche)
+```
+
+Le fantôme est **un seul objet** (Mesh translucide + segments) mis à jour sans reconstruire le monde ; `setWorld` reste le chemin de mise à jour après une pose (reconstruction complète, suffisante à cette taille).
+
+### 9.3 Interface (`src/ui`)
+
+- `catalog.js` : feuille coulissante par famille (onglets existants), cartes (nom, prix, icône de famille, cadenas si verrouillé, grisée si trop cher), barres de demande en tête ; tap sur une carte → `hand = tileId`, la feuille se replie.
+- `placement.js` : machine à états `idle | hand | ghost | confirm` : tap sur une case avec une tuile en main → fantôme via `canPlace` ; tap ailleurs → le fantôme se déplace ; tap sur la même case ou bouton ✓ → `place` ; bouton ✕ ou retour arrière → lâcher ; outil Démolir : fantôme rouge sur la case puis confirmation ; bandeau « Annuler » pendant 10 s après une pose.
+- `hud.js` : jauges depuis `game.stats` (Population, Bonheur, Nature, Argent avec delta mensuel), date depuis `calendar(game)`, bouton pause / vitesse qui cycle `SPEEDS` et affiche ×½ ×1 ×2 ×4 ou ⏸.
+- `sheet-tile.js` : fiche d'une case (appui long) : `describeTile` + bouton Démolir.
+- `storage.js` : sauvegarde locale (`localStorage`, clé `tiletown.save`), à chaque mois et après chaque pose ; chargement au démarrage ; `?new=1` repart de zéro ; try/catch partout (navigation privée).
+- `main.js` : boucle : `advance(game, dt)` chaque image (dt plafonné à 0,1 s), événements → toasts et bilans, `r.setWorld` quand `game.world` change de référence, `updateActors` avec `dt × speed`, HUD toutes les 250 ms.
+
+### 9.4 Critères (étape 3)
+
+Un parcours automatisé Playwright (`tools/play.mjs`) : charger, sélectionner une carte du catalogue, poser une maison sur une case libre (l'argent baisse du prix, une rue de ceinture apparaît), poser une forêt plantée, démolir, annuler, passer la vitesse à ×4 et attendre un mois (recettes encaissées, événement de saison au 3e mois), recharger la page (la partie est restaurée). Cibles tactiles ≥ 48 px ; 0 erreur console ; appels de dessin ≤ 60 avec le fantôme affiché.
