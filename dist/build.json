@@ -1,7 +1,7 @@
 {
-  "id": "db60ef727f2b",
+  "id": "b74aa44f46c2",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.f6b12ae2d8.js",
+  "js": "dist/game.c36792d89c.js",
   "css": "dist/game.1e639b33dd.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -130,7 +130,7 @@
     "src/render3d/camera.js": "da87199cdecbd096",
     "src/render3d/effects.js": "e2049ddb416229d3",
     "src/render3d/ghost.js": "cc1630910515ffa6",
-    "src/render3d/ground.js": "1b5cb585e4ef86b2",
+    "src/render3d/ground.js": "11df5d46f98bd51b",
     "src/render3d/layers.js": "96ef7b2072b52e68",
     "src/render3d/models.js": "a5fcdb14b9757dbc",
     "src/render3d/puppet-pose.js": "27b68f8a88c21886",
@@ -164,6 +164,14 @@
   },
   "history": [
     {
+      "id": "b74aa44f46c2",
+      "files": [
+        "dist/game.c36792d89c.js",
+        "dist/game.c36792d89c.js.map",
+        "dist/game.1e639b33dd.css"
+      ]
+    },
+    {
       "id": "db60ef727f2b",
       "files": [
         "dist/game.f6b12ae2d8.js",
@@ -192,14 +200,6 @@
       "files": [
         "dist/game.db6e59a33b.js",
         "dist/game.db6e59a33b.js.map",
-        "dist/game.bec0a58485.css"
-      ]
-    },
-    {
-      "id": "426db7c31abf",
-      "files": [
-        "dist/game.297cfcc2bf.js",
-        "dist/game.297cfcc2bf.js.map",
         "dist/game.bec0a58485.css"
       ]
     }

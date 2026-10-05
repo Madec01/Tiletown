@@ -120,6 +120,24 @@ parallèle de TERRAIN — `src/render3d/ground.js`, `renderer.js`, `camera.js` �
   facettes (seules les pièces ajoutées par Tiletown sont biseautées) ; `crop-wheat`, `crop-corn`,
   `rock-a/b` et `flowers` restent des modèles de kit non retravaillés.
 
+## 2026-10-05 — Étape 5 livrée : carrière, tutoriel et refonte visuelle
+
+**Carrière et tutoriel.** La partie commence sur une vallée vierge avec la seule mairie. Cinq niveaux (vallée, rivière, bocage, coteau, grande vallée) avec objectifs et trois étoiles chacun, catalogue débloqué cumulatif, écran titre, carte des niveaux, bandeau d'objectifs, écran de fin, sauvegarde séparée de la carrière. Tutoriel de dix leçons guidées, jamais bloquantes, avec halo sur l'élément visé. Simulation du niveau 1 : 151 habitants, nature 82, aucun exode, deux étoiles.
+
+**Refonte visuelle, d'après le plan de l'utilisateur (§11.4).**
+1. *Terrain continu* : la terre n'est plus une grille de boîtes mais un maillage soudé tiré d'un champ de hauteur lissé. Collines en dômes cohérents sur plusieurs cases, berges en pente, couleurs fondues d'une case à l'autre, grain continu en coordonnées monde, ombres de contact, socle épaissi. La grille n'apparaît plus que localement pendant la pose (`setGridHint`).
+2. *Rivière sinueuse* : le rivage est la ligne de niveau d'un champ de présence d'eau, extraite en marching squares, avec arrondi des coudes et serpentement. Virage maximal ramené de 90° à 36°. Lit et berge sortent du même champ : plus de trou ni de débordement possible.
+3. *Arbres* : feuillages en ellipsoïdes lisses (deux à quatre volumes), troncs fuselés penchés, trois tailles par essence, 14 modèles nouveaux.
+4. *Bâtiments* : huit silhouettes nouvelles, toits ardoise, terracotta et brun, façades crème et pastel, cheminées, débords, porches, lucarnes en volumes biseautés.
+5. *Palette par rôle* : chaque aplat est classé (toiture, façade, menuiserie, vitrage, feuillage, tronc, roche, métal) et tiré dans sa sous-palette, au lieu de la teinte la plus proche.
+6. *Placement* : semis continu en coordonnées monde avec champ de couverture, débordement borné, clairières, plaques de feuillus et de résineux, lisières garnies d'arbustes, vent de ± 2°.
+7. *Abords* : chaussée et trottoir resserrés et adoucis, coins arrondis, virages en arc, parcelle sous chaque îlot, allée d'entrée, jardins, arbres de rue.
+8. *Lumière et eau* : soleil plus bas et plus chaud, ombres douces, bandes de courant trois fois plus faibles, haut-fond pâle le long des berges.
+
+**Vérifications** : 258 tests, les trois parcours automatisés au complet (20, 17 et 17 étapes), build à jour, 3,01 Mo hors ligne, 26 appels de dessin et 146 000 triangles sur la carte de jeu.
+
+**Limites** : la carte de charge 24 × 24 dépasse le budget de triangles (1,53 million) ; berge raide aux coudes concaves ; roseaux de bordure non posés ; `bus` toujours provisoire ; police de titre Baloo 2 absente du dépôt (Nunito utilisée).
+
 ## 2026-10-05 — Étape 5 lancée : carrière, tutoriel et beauté
 
 - Retours de l'utilisateur : « on démarre directement avec une ville, il faut une carrière avec tuto » et « le jeu n'est pas très beau ».

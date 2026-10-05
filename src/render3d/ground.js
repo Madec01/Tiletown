@@ -13,6 +13,8 @@
 //   - champ par case (1 dans l'eau, 0 sur la terre), interpolé en smootherstep comme les hauteurs :
 //     les coudes à angle droit du tracé de `worldgen` deviennent des virages doux, et la largeur reste
 //     d'une case en moyenne (le niveau 0,5 tombe exactement sur la frontière des cases en ligne droite) ;
+//   - un ARRONDI DES COUDES (`CORNER_ROUNDING`) reprend, dans la seule bande de transition, une version
+//     floutée du champ : ce qui reste d'angle dans le tracé de `worldgen` s'y rabote ;
 //   - un SERPENTEMENT continu en coordonnées monde (`SHORE_WOBBLE`, ≈ 0,12 unité) déplace le rivage,
 //     fenêtré pour ne jamais toucher le centre des cases : la rivière reste donc continue d'un bout à
 //     l'autre (le champ vaut exactement 1 le long de la ligne qui joint les centres d'eau) et aucune
@@ -88,12 +90,26 @@ export const SHORE_WOBBLE = 0.12;
 /** Échelles (en cases) des deux octaves du serpentement : une grande houle, un grain fin. */
 export const SHORE_WOBBLE_SCALE = Object.freeze([3.1, 1.25]);
 /**
+ * ARRONDI DES COUDES : part du champ, dans la bande de transition seulement, reprise d'une version
+ * FLOUTÉE du champ par case (noyau 3 × 3, puis remise à l'échelle pour qu'une rive droite ne bouge
+ * pas d'un pouce). Le flou rabote les angles du tracé de `worldgen` ; la fenêtre (`wobbleWindow`)
+ * garantit qu'il ne touche jamais le centre des cases, donc aucune des garanties exactes du champ.
+ */
+export const CORNER_ROUNDING = 1;
+
+/**
+ * Serpentement des ZONES HUMIDES : plus ample et plus découpé que celui de la rivière. Une nappe de
+ * marais n'a pas de largeur à tenir — son bord doit franchement baver dans la prairie, en digitations.
+ */
+export const MARSH_WOBBLE = 0.34;
+export const MARSH_WOBBLE_SCALE = Object.freeze([1.35, 0.6]);
+/**
  * Marge d'extraction de la nappe d'eau SOUS la berge (en unités de champ) : le bord du maillage d'eau
  * passe un peu avant le rivage, là où la terre est déjà au-dessus du niveau de l'eau et le masque.
  */
 export const WATER_OVERLAP = 0.08;
 /** Largeur du fondu du bord de la pellicule des zones humides (unités monde). */
-export const WETLAND_FADE = 0.16;
+export const WETLAND_FADE = 0.22;
 
 /** Amplitude de l'ondulation de l'eau profonde (u). */
 export const WAVE_AMPLITUDE = 0.015;
@@ -264,9 +280,40 @@ function getField(world) {
   }
   // La profondeur du lit s'étale sur la terre voisine : au bord d'un lac, le lit plonge comme un lac.
   spreadFromMask(depth, 1, water, cols, rows, riverDepth, 2);
-  f = { cols, rows, base, flat: spread, wet, marsh, depth, water, seed: (world.seed | 0) };
+  f = {
+    cols, rows, base, flat: spread, wet, marsh, depth, water, seed: (world.seed | 0),
+    wetRound: roundedField(wet, cols, rows), marshRound: roundedField(marsh, cols, rows),
+  };
   FIELDS.set(world, f);
   return f;
+}
+
+/** Noyau du flou d'arrondi des coudes (centre, côtés, diagonales) et bornes de remise à l'échelle. */
+const ROUND_ORTH = 0.25, ROUND_DIAG = 0.125;
+const ROUND_NORM = 1 + 4 * ROUND_ORTH + 4 * ROUND_DIAG;
+const ROUND_LO = (ROUND_ORTH + 2 * ROUND_DIAG) / ROUND_NORM;    // case de terre au bord d'une rive droite
+const ROUND_HI = (1 + 2 * ROUND_ORTH) / ROUND_NORM;             // case d'eau au cœur d'une rive droite
+
+/**
+ * Version FLOUTÉE d'un champ 0/1 par case, remise à l'échelle sur [0, 1] d'après une rive droite :
+ * là où la rive est droite elle redonne le champ d'origine, là où le tracé fait un angle droit elle
+ * le rabote. C'est ce qui transforme les coudes en escalier de `worldgen` en virages doux.
+ */
+function roundedField(src, cols, rows) {
+  const out = new Float32Array(cols * rows);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const w = dx === 0 && dy === 0 ? 1 : (dx === 0 || dy === 0 ? ROUND_ORTH : ROUND_DIAG);
+          sum += w * src[clampInt(y + dy, 0, rows - 1) * cols + clampInt(x + dx, 0, cols - 1)];
+        }
+      }
+      out[y * cols + x] = clamp01((sum / ROUND_NORM - ROUND_LO) / (ROUND_HI - ROUND_LO));
+    }
+  }
+  return out;
 }
 
 /** Échantillonnage lissé (smootherstep) d'un champ centré sur les cases, en coordonnées monde. */
@@ -337,10 +384,13 @@ function spreadFromMask(values, comps, mask, cols, rows, fallback, passes = 2) {
  * Serpentement du rivage, dans [−1, 1] : deux octaves de bruit continu en coordonnées monde. La grande
  * houle domine, pour que les deux rives d'une rivière bougent ensemble plutôt que de la pincer.
  */
-function shoreNoise(seed, x, z, k) {
-  const a = valueNoise(seed, x / SHORE_WOBBLE_SCALE[0], z / SHORE_WOBBLE_SCALE[0], k);
-  const b = valueNoise(seed, x / SHORE_WOBBLE_SCALE[1], z / SHORE_WOBBLE_SCALE[1], k + 1);
-  return ((a - 0.5) * 1.4 + (b - 0.5) * 0.6);
+function shoreNoise(seed, x, z, k, scales) {
+  const a = valueNoise(seed, x / scales[0], z / scales[0], k);
+  const b = valueNoise(seed, x / scales[1], z / scales[1], k + 1);
+  // Gain : un bruit de valeur lissé n'approche jamais ses bornes, il faut l'étirer puis l'écrêter
+  // pour que l'amplitude annoncée (`SHORE_WOBBLE`) soit celle qu'on voit vraiment sur le rivage.
+  const n = (a - 0.5) * 2.6 + (b - 0.5) * 1.1;
+  return n < -1 ? -1 : n > 1 ? 1 : n;
 }
 
 /**
@@ -355,12 +405,17 @@ function wobbleWindow(f0) {
   return 1 - smootherstep((Math.abs(f0 - 0.5) - 0.12) / 0.33);
 }
 
-/** Champ brut + serpentement, commun à l'eau profonde et aux zones humides. */
-function wobbledField(values, f, x, z, key) {
+/**
+ * Champ brut + arrondi des coudes + serpentement, commun à l'eau profonde et aux zones humides.
+ * Les deux corrections sont multipliées par la même fenêtre : elles n'agissent QUE dans la bande de
+ * transition, jamais au centre des cases — c'est ce qui garde toutes les garanties exactes du champ.
+ */
+function wobbledField(values, rounded, f, x, z, key, wobble, scales) {
   const f0 = sampleSmooth(values, f.cols, f.rows, x, z);
   const w = wobbleWindow(f0);
   if (w <= 0) return f0;
-  return f0 + SHORE_WOBBLE * FIELD_SLOPE * w * shoreNoise(f.seed ^ key, x, z, key);
+  const round = sampleSmooth(rounded, f.cols, f.rows, x, z);
+  return f0 + w * (CORNER_ROUNDING * (round - f0) + wobble * FIELD_SLOPE * shoreNoise(f.seed ^ key, x, z, key, scales));
 }
 
 /**
@@ -370,18 +425,30 @@ function wobbledField(values, f, x, z, key) {
  */
 export function waterField(world, x, z) {
   const f = getField(world);
-  return wobbledField(f.wet, f, x, z, 0x1ea0);
+  return wobbledField(f.wet, f.wetRound, f, x, z, 0x1ea0, SHORE_WOBBLE, SHORE_WOBBLE_SCALE);
 }
 
 /** Même champ pour les zones humides (contour propre, décalé du précédent par une autre graine). */
 export function marshField(world, x, z) {
   const f = getField(world);
-  return wobbledField(f.marsh, f, x, z, 0x6a5d);
+  return wobbledField(f.marsh, f.marshRound, f, x, z, 0x6a5d, MARSH_WOBBLE, MARSH_WOBBLE_SCALE);
 }
 
-/** Distance signée au rivage, en unités monde : > 0 dans l'eau, 0 sur la ligne d'eau, < 0 sur la terre. */
+/**
+ * Distance signée au rivage, en unités monde : > 0 dans l'eau, 0 sur la ligne d'eau, < 0 sur la terre.
+ * Le champ n'est pas une distance (il sature à 0 et à 1 au centre des cases) : on le redresse par une
+ * cubique impaire qui respecte À LA FOIS la pente du champ au rivage (`FIELD_SLOPE`, pour que l'écume
+ * et le haut-fond aient la largeur annoncée) et la demi-largeur d'une case au cœur de l'eau (0,5).
+ */
 export function shoreDistance(world, x, z) {
-  return (waterField(world, x, z) - 0.5) / FIELD_SLOPE;
+  return fieldToDistance(waterField(world, x, z));
+}
+
+const SHORE_D1 = 1 / (2 * FIELD_SLOPE);       // pente au rivage
+const SHORE_D3 = 0.5 - SHORE_D1;              // pour que le centre d'une case d'eau soit à 0,5
+function fieldToDistance(f) {
+  const g = Math.max(-1, Math.min(1, (f - 0.5) * 2));
+  return SHORE_D1 * g + SHORE_D3 * g * g * g;
 }
 
 /** Vrai si le point continu (x, z) est dans l'eau profonde (du bon côté de la ligne de niveau). */
@@ -495,6 +562,10 @@ export function contourMesh(field, nx, nz, step, iso) {
       const fa = field[ja * nx + ia], fb = field[jb * nx + ib];
       const d = fb - fa;
       const t = Math.abs(d) < 1e-9 ? 0.5 : clamp01((iso - fa) / d);
+      // Traversée exactement sur un coin (valeur du champ égale au niveau) : on REND CE COIN, sinon
+      // deux sommets distincts se retrouveraient à la même place et le maillage ne serait plus soudé.
+      if (t <= 1e-7) return corner(ia, ja);
+      if (t >= 1 - 1e-7) return corner(ib, jb);
       v = xs.length;
       keyed.set(key, v);
       xs.push((ia + (ib - ia) * t) * step); zs.push((ja + (jb - ja) * t) * step);
@@ -1048,7 +1119,7 @@ export function createGround() {
       const x = xz[v * 2], z = xz[v * 2 + 1];
       position[v * 3] = x; position[v * 3 + 1] = spec.levelAt(x, z); position[v * 3 + 2] = z;
       normal[v * 3 + 1] = 1;
-      aShore[v] = (spec.field(x, z) - 0.5) / FIELD_SLOPE;
+      aShore[v] = fieldToDistance(spec.field(x, z));
       if (spec.flow) {
         let fx = sampleSmoothN(spec.flow, 2, 0, world.cols, world.rows, x, z);
         let fz = sampleSmoothN(spec.flow, 2, 1, world.cols, world.rows, x, z);
@@ -1070,7 +1141,7 @@ export function createGround() {
     geometry.setAttribute('aLayer', new THREE.BufferAttribute(new Float32Array(count).fill(-1), 1));
     geometry.setAttribute('aQuality', new THREE.BufferAttribute(new Float32Array(count), 1));
     geometry.setIndex(index);
-    geometry.computeBoundingSphere();
+    if (count > 0) geometry.computeBoundingSphere();
 
     const mesh = new THREE.Mesh(geometry, spec.material);
     mesh.name = spec.name;
@@ -1085,7 +1156,7 @@ export function createGround() {
   function writeSheetScalar(sheet, values, attrName, fallback) {
     const { cols, rows } = world;
     const attr = sheet.mesh.geometry.attributes[attrName];
-    if (!attr) return;
+    if (!attr || sheet.count === 0) return;
     const spread = new Float32Array(cols * rows);
     if (values) spread.set(values.subarray ? values.subarray(0, cols * rows) : values.slice(0, cols * rows));
     else spread.fill(fallback);
@@ -1100,6 +1171,7 @@ export function createGround() {
   function writeSheetColors(sheet, src) {
     const { cols, rows } = world;
     const attr = sheet.mesh.geometry.attributes.color;
+    if (sheet.count === 0) return;
     const rgb = Float32Array.from(src.subarray ? src.subarray(0, cols * rows * 3) : src.slice(0, cols * rows * 3));
     if (sheet.tinted) {
       for (let i = 0; i < cols * rows; i++) {
