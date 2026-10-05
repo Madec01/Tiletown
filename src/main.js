@@ -66,7 +66,7 @@ const DEFAULT_SEED = 12345;
 const WORLD_COLS = 12;
 const WORLD_ROWS = 16;
 /** Vue de jeu par défaut : largeur visible en îlots (la vue d'ensemble se cadre toute seule). */
-const GAME_ZOOM = 9;
+const GAME_ZOOM = 6.5;
 const IDLE_FPS = 30;
 const INTERACT_AFTER_MS = 300; // on reste à 60 i/s un instant après le dernier geste
 const STATS_EVERY_MS = 500;
@@ -485,6 +485,7 @@ async function main() {
     describeTile: describeGameTile,
     /** Orientation du fantôme (degrés) : vers la rue la plus proche, tracé de raccordement compris. */
     previewYaw(g, x, y, res) {
+      if (Number.isFinite(res?.yaw)) return res.yaw;
       try {
         const w = res && Array.isArray(res.path) && res.path.length ? applyPath(g.world, res.path) : g.world;
         return faceTowardRoad(w, x, y, centerOf(g.world));
@@ -506,7 +507,7 @@ async function main() {
   // ── 3 ter. Écologie : calques, fiche Nature, carnet des espèces (docs/ARCHITECTURE.md §10.4) ───
   app.layers = createLayers({
     sheets: app.sheets, renderer: r, getGame, pill: $('#layer-pill'), vibrate, toasts: app.toasts,
-    onChange: () => { syncTabs(); poke(); },
+    onChange: () => { r.setHighlight(null); syncTabs(); poke(); },
   });
   const ecoOps = { speciesSummary };
   app.speciesBook = createSpeciesBook({
@@ -874,6 +875,13 @@ async function main() {
     if (app.placement.tap(hit)) { poke(); return; }
     if (!hit) {
       app.toasts.show({ key: 'tile', text: 'Hors de la vallée', duration: 1500 });
+      return;
+    }
+    const analysis = app.layers.describeAt(hit.x, hit.y);
+    if (analysis) {
+      r.setHighlight([{ x: hit.x, y: hit.y }]);
+      app.toasts.show({ key: 'tile', text: analysis, duration: 3500 });
+      poke();
       return;
     }
     const d = describeTile(game.world, hit.x, hit.y);

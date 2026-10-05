@@ -2,7 +2,7 @@
 
 City builder cosy en tuiles, en 3D basse définition au rendu lisse, dans le navigateur et d'abord sur téléphone.
 
-Construis la ville la plus prospère possible sans sacrifier la vallée qui l'accueille : l'air, l'eau et la faune comptent autant que l'argent et la population. Chaque tuile est un îlot avec une spécialité ou un morceau de nature ; les rues se tracent toutes seules entre les îlots.
+Construis la ville la plus prospère possible sans sacrifier la vallée qui l'accueille : l'air, l'eau et la faune comptent autant que l'argent et la population. Chaque tuile est une parcelle ; les îlots réunissent 4 à 6 bâtiments autour de jardins partagés, avec des rues automatiques sur leur périmètre.
 
 - Conception du jeu : [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md)
 - Version téléphone : [`docs/MOBILE.md`](docs/MOBILE.md)
@@ -21,6 +21,8 @@ Un paysage 3D continu, des arbres arrondis, un catalogue illustré et trois musi
 
 La capture montre le mode libre.
 
+Les rues résidentielles, plus étroites, desservent plusieurs parcelles. Les jardins intérieurs disposent de passages piétons, de plantations et de bancs. [Voir le quartier témoin](docs/captures/quartier-six-batiments-412.png).
+
 ### Développement et validation
 
 ```sh
@@ -31,6 +33,7 @@ python3 -m http.server 8000
 npm test
 npm run check
 npm run review:mobile
+npm run review:blocks
 ```
 
 Ouvrir `http://localhost:8000`. Les tests de navigateur et les rendus d’aperçus demandent Chromium (`npx playwright install chromium`). `npm run render-previews` régénère les 22 miniatures à partir des modèles GLB. Les captures du parcours sont écrites dans `artifacts/review/`.

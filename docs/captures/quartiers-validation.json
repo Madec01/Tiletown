@@ -1,0 +1,85 @@
+{
+  "block": {
+    "id": 14,
+    "x": 7,
+    "y": 5,
+    "width": 3,
+    "height": 2,
+    "horizontal": true
+  },
+  "placements": [
+    {
+      "x": 7,
+      "y": 5,
+      "id": "house",
+      "cost": 100,
+      "streets": 4,
+      "yaw": 270
+    },
+    {
+      "x": 8,
+      "y": 5,
+      "id": "house",
+      "cost": 80,
+      "streets": 2,
+      "yaw": 180
+    },
+    {
+      "x": 9,
+      "y": 5,
+      "id": "house",
+      "cost": 70,
+      "streets": 1,
+      "yaw": 180
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "id": "house",
+      "cost": 60,
+      "streets": 0,
+      "yaw": 270
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "id": "house",
+      "cost": 80,
+      "streets": 2,
+      "yaw": 0
+    },
+    {
+      "x": 9,
+      "y": 6,
+      "id": "shop",
+      "cost": 90,
+      "streets": 1,
+      "yaw": 0
+    }
+  ],
+  "roads": {
+    "path": 4,
+    "street": 11,
+    "bridge": 0,
+    "total": 11
+  },
+  "savedAndReloaded": true,
+  "errors": [],
+  "migration": {
+    "previousCommit": "eb10d1c167eaeda8ea27abbd73c1d1fa107703eb",
+    "seedRange": [
+      1,
+      150
+    ],
+    "cities": 150,
+    "failures": [],
+    "buildingsPerCity": [
+      131,
+      159
+    ],
+    "roadReductionPercent": [
+      55.4,
+      62.7
+    ]
+  }
+}

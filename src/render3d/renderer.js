@@ -15,6 +15,7 @@
 // 30 au repos). Perte de contexte WebGL : rendu suspendu puis repris à la restauration.
 
 import * as THREE from 'three';
+import { createAnalysis } from './analysis.js';
 import { PALETTE } from '../data/palette.js';
 import * as Camera from './camera.js';
 import { loadModels } from './models.js';
@@ -148,6 +149,7 @@ export async function createRenderer(canvas, options = {}) {
   let layer = { kind: 'none', values: null, pattern: false };
   /** Valeurs du calque normalisées (0 à 1), réutilisées d'un mois à l'autre pour les hachures. */
   let layerNorm = null;
+  const analysis = createAnalysis();
   /** Dernier état d'écologie reçu : champs par case (brume, teinte de l'eau) et espèces présentes. */
   let ecology = { air: null, water: null };
   let ecoSpecies = { species: null, patches: null };
@@ -180,12 +182,14 @@ export async function createRenderer(canvas, options = {}) {
   }
 
   function applyLayer() {
+    for (const group of [ground.group, buildings.group, roads.group]) analysis.attach(group);
+    analysis.set(world, layer.kind, layer.values);
     const base = ground.baseColors();
-    const colors = base ? layerColors(layer.kind, layer.values, base) : null;
+    const colors = base ? layerColors(layer.kind, layer.values, base, 100) : null;
     ground.setTileColors(colors);
     // Hachures du mode daltonien : la même valeur, normalisée, en attribut d'instance du sol.
     const active = layer.kind && layer.kind !== 'none' && layer.values;
-    layerNorm = active ? normalizeLayerValues(layer.values, layerNorm) : null;
+    layerNorm = active ? normalizeLayerValues(layer.values, layerNorm, 100) : null;
     ground.setLayerValues(layerNorm);
     dirty = true;
   }
@@ -283,6 +287,7 @@ export async function createRenderer(canvas, options = {}) {
     /** Mode daltonien : hachures diagonales par bandes de valeur, en plus de la couleur. */
     setLayerPattern(on) {
       layer.pattern = Boolean(on);
+      analysis.setPattern(on);
       ground.setLayerPattern(layer.pattern);
       dirty = true;
     },
@@ -416,6 +421,7 @@ export async function createRenderer(canvas, options = {}) {
       roads.dispose();
       ground.dispose();
       models.dispose();
+      analysis.dispose();
       if (sun.shadow.map) sun.shadow.map.dispose();
       renderer.dispose();
     },

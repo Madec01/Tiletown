@@ -19,11 +19,13 @@
 // `collectRoadPlacements` est pure : testable sous Node.
 
 import * as THREE from 'three';
+import { isAvenue, courtyards } from '../core/blocks.js';
+import { edgesOfTile } from '../core/grid.js';
 import { PALETTE } from '../data/palette.js';
 import { paintGeometry, mergeParts } from './models.js';
 import { composeMatrix, disposeObject } from './util.js';
 import { LAND_THICKNESS } from './ground.js';
-import { LOT_HALF, entrySide } from './buildings.js';
+import { entrySide } from './buildings.js';
 import { TILE_BY_ID } from '../data/tiles.js';
 
 export const EDGE_NONE = 0;
@@ -31,12 +33,15 @@ export const EDGE_PATH = 1;
 export const EDGE_STREET = 2;
 export const EDGE_BRIDGE = 3;
 
-export const ROAD_WIDTH = 0.3;
+export const ROAD_WIDTH = 0.26;
+export const LOCAL_ROAD_WIDTH = 0.18;
+export const LOCAL_SIDEWALK_WIDTH = 0.26;
 export const ROAD_THICKNESS = 0.02;
-export const SIDEWALK_WIDTH = 0.4;
+export const SIDEWALK_WIDTH = 0.34;
 export const SIDEWALK_THICKNESS = 0.012;
-export const PATH_WIDTH = 0.16;
-export const PATH_THICKNESS = 0.015;
+export const PATH_WIDTH = 0.12;
+// Au-dessus des pelouses partagées (0,015), pour éviter des surfaces coplanaires.
+export const PATH_THICKNESS = 0.02;
 export const BRIDGE_DECK_TOP = 0.07;
 /** Épaisseur de la parcelle (bande claire sous l'îlot) et de l'allée d'entrée. */
 export const LOT_THICKNESS = 0.015;
@@ -45,11 +50,6 @@ export const DRIVEWAY_THICKNESS = 0.017;
 export const TRAFFIC_ORANGE = 3;
 export const TRAFFIC_RED = 6;
 
-/** Demi-largeurs, employées partout dans la construction des pièces. */
-const RW = ROAD_WIDTH / 2;
-const SW = SIDEWALK_WIDTH / 2;
-/** Longueur d'une bande de rue : l'arête moins la place des deux pièces de nœud. */
-const STRIP_LENGTH = 1 - 2 * SW;
 /** Rayon d'arrondi des coins de trottoir exposés (bout de rue, extérieur d'un virage). */
 const SIDEWALK_RADIUS = 0.075;
 /** Rayon du liseré d'herbe qui arrondit l'angle du trottoir là où deux rues se rejoignent. */
@@ -89,7 +89,7 @@ const NODE_BY_MASK = Object.freeze({
  * Un monde sans `edges` donne des listes vides.
  */
 export function collectRoadPlacements(world) {
-  const result = { streets: [], paths: [], bridges: [], streetNodes: [], pathNodes: [], lots: [], driveways: [] };
+  const result = { streets: [], paths: [], bridges: [], streetNodes: [], pathNodes: [], lots: [], driveways: [], benches: [] };
   const edges = world && world.edges;
   if (!edges || !edges.h || !edges.v) return result;
   const { cols, rows } = world;
@@ -101,7 +101,7 @@ export function collectRoadPlacements(world) {
     for (let x = 0; x < cols; x++) {
       const v = edges.h[y * cols + x];
       if (!v) continue;
-      const item = { x: x + 0.5, z: y, horizontal: true, traffic: traffic && traffic.h ? traffic.h[y * cols + x] || 0 : 0 };
+      const item = { x: x + 0.5, z: y, horizontal: true, main: isAvenue(world, { kind: 'h', index: y * cols + x }), traffic: traffic && traffic.h ? traffic.h[y * cols + x] || 0 : 0 };
       if (v === EDGE_PATH) result.paths.push(item);
       else if (v === EDGE_BRIDGE) result.bridges.push(item);
       else result.streets.push(item);
@@ -111,7 +111,7 @@ export function collectRoadPlacements(world) {
     for (let x = 0; x <= cols; x++) {
       const v = edges.v[y * (cols + 1) + x];
       if (!v) continue;
-      const item = { x, z: y + 0.5, horizontal: false, traffic: traffic && traffic.v ? traffic.v[y * (cols + 1) + x] || 0 : 0 };
+      const item = { x, z: y + 0.5, horizontal: false, main: isAvenue(world, { kind: 'v', index: y * (cols + 1) + x }), traffic: traffic && traffic.v ? traffic.v[y * (cols + 1) + x] || 0 : 0 };
       if (v === EDGE_PATH) result.paths.push(item);
       else if (v === EDGE_BRIDGE) result.bridges.push(item);
       else result.streets.push(item);
@@ -128,7 +128,9 @@ export function collectRoadPlacements(world) {
       if (streetMask) {
         const [shape, quarter] = NODE_BY_MASK[streetMask];
         const degree = (streetMask & 1) + ((streetMask >> 1) & 1) + ((streetMask >> 2) & 1) + ((streetMask >> 3) & 1);
-        result.streetNodes.push({ x: cx, z: cy, degree, mask: streetMask, shape, quarter });
+        const main = [[n,'v', (cy-1)*(cols+1)+cx], [e,'h',cy*cols+cx], [s,'v',cy*(cols+1)+cx], [w,'h',cy*cols+cx-1]]
+          .some(([value, kind, index]) => value >= EDGE_STREET && isAvenue(world, { kind, index }));
+        result.streetNodes.push({ x: cx, z: cy, degree, mask: streetMask, shape, quarter, main });
       }
       const pathMask = (n === EDGE_PATH ? BR_N : 0) | (e === EDGE_PATH ? BR_E : 0)
         | (s === EDGE_PATH ? BR_S : 0) | (w === EDGE_PATH ? BR_W : 0);
@@ -148,17 +150,28 @@ export function collectRoadPlacements(world) {
         const def = TILE_BY_ID[tile.building.type];
         const family = def ? def.family : 'habitat';
         if (family === 'nature') continue;            // la nature plantée n'a ni parcelle ni allée
-        // Un quartier a un jardin jusqu'au bord de la chaussée (pas de trottoir devant chez soi) ;
-        // les autres familles gardent leur trottoir et n'ont qu'une bande de parcelle.
+        // Le sol rejoint le voisin sans rue ; il s'arrête au trottoir lorsqu'une rue passe.
         const kind = family === 'habitat' ? 'garden' : family === 'infrastructure' ? 'gravel' : 'paved';
-        result.lots.push({ x: x + 0.5, z: y + 0.5, tile: y * cols + x, kind });
+        const margin = (value, kind, index) => value >= EDGE_STREET
+          ? (isAvenue(world, { kind, index }) ? SIDEWALK_WIDTH : LOCAL_SIDEWALK_WIDTH) / 2 : 0;
+        const n = margin(hAt(x,y), 'h', y*cols+x), south = margin(hAt(x,y+1), 'h', (y+1)*cols+x);
+        const west = margin(vAt(x,y), 'v', y*(cols+1)+x), east = margin(vAt(x+1,y), 'v', y*(cols+1)+x+1);
+        result.lots.push({ x: x + .5 + (west-east)/2, z: y + .5 + (n-south)/2,
+          width: 1-west-east, depth: 1-n-south, tile: y * cols + x, kind });
         const side = entrySide(world, x, y);
         if (side === null) continue;
         // yaw canonique : l'allée est modélisée vers +Z (sud) ; N = 180°, E = 90°, S = 0, O = 270°.
         const yaw = [Math.PI, Math.PI / 2, 0, -Math.PI / 2][side];
-        result.driveways.push({ x: x + 0.5, z: y + 0.5, yaw, tile: y * cols + x });
+        const front = edgesOfTile(world, x, y)[['n', 'e', 's', 'w'][side]];
+        result.driveways.push({ x: x + 0.5, z: y + 0.5, yaw, tile: y * cols + x, main: isAvenue(world, front) });
       }
     }
+  }
+  for (const court of courtyards(world)) {
+    const middle = court.refs[Math.floor(court.refs.length / 2)];
+    if (world.edges[middle.kind][middle.index] >= EDGE_STREET) continue;
+    result.benches.push({ x: court.x + (court.horizontal ? court.width/2 : 1.17),
+      z: court.y + (court.horizontal ? 1.17 : court.height/2), yaw: court.horizontal ? 0 : Math.PI/2 });
   }
   return result;
 }
@@ -285,7 +298,8 @@ export function roadColors() {
  * Les cinq pièces de nœud, chacune { asphalt, sidewalk } fusionnées en une géométrie.
  * Formes canoniques : `end` branche +X, `straight` ±X, `corner` +X et +Z, `tee` ±X et +Z, `cross`.
  */
-function buildNodeGeometries(colors) {
+function buildNodeGeometries(colors, roadWidth = ROAD_WIDTH, sidewalkWidth = SIDEWALK_WIDTH) {
+  const ROAD_WIDTH = roadWidth, RW = roadWidth / 2, SW = sidewalkWidth / 2;
   const ya = ROAD_THICKNESS, ys = SIDEWALK_THICKNESS, yv = (ys + ya) / 2;
   const armDirs = {
     end: [[1, 0]],
@@ -347,7 +361,9 @@ function edgeModel(models, id) {
 }
 
 /** Géométries de remplacement (couleurs de sommets). */
-function buildFallbackGeometries({ markings, colors }) {
+function buildFallbackGeometries({ markings, colors, roadWidth = ROAD_WIDTH, sidewalkWidth = SIDEWALK_WIDTH }) {
+  const ROAD_WIDTH = roadWidth, SIDEWALK_WIDTH = sidewalkWidth;
+  const RW = roadWidth / 2, STRIP_LENGTH = 1 - sidewalkWidth;
   const streetTrimParts = [slab(STRIP_LENGTH, SIDEWALK_THICKNESS, SIDEWALK_WIDTH, colors.sidewalk)];
   if (markings) streetTrimParts.push(slab(STRIP_LENGTH * 0.5, 0.004, 0.02, colors.marking, ROAD_THICKNESS));
   const bridgeParts = [
@@ -366,17 +382,23 @@ function buildFallbackGeometries({ markings, colors }) {
     pathNode: slab(PATH_WIDTH, PATH_THICKNESS + 0.001, PATH_WIDTH, colors.path),
     bridge: mergeParts(bridgeParts),
     // Parcelle : un plateau clair sous l'îlot, posé juste au-dessus du trottoir.
-    lot: slab(LOT_HALF * 2, LOT_THICKNESS, LOT_HALF * 2, colors.lotPaved),
+    lot: slab(1, LOT_THICKNESS, 1, colors.lotPaved),
     // Jardin d'un quartier : la pelouse va jusqu'au bord de la chaussée.
-    lotGarden: slab((0.5 - RW) * 2, LOT_THICKNESS, (0.5 - RW) * 2, colors.lotGarden),
+    lotGarden: slab(1, LOT_THICKNESS, 1, colors.lotGarden),
     // Allée d'entrée : une dalle claire du pied du bâtiment au bord de la chaussée (vers +Z).
-    driveway: slab(0.17, DRIVEWAY_THICKNESS, 0.5 - RW + 0.015 - 0.17, colors.driveway, 0, 0, (0.17 + 0.5 - RW + 0.015) / 2),
+    bench: mergeParts([
+      slab(.25,.018,.075,PALETTE.wood,.095),
+      slab(.25,.065,.012,PALETTE.wood,.10,0,-.035),
+      slab(.018,.095,.065,PALETTE.metal,0,-.09,0),
+      slab(.018,.095,.065,PALETTE.metal,0,.09,0),
+    ]),
+    driveway: slab(0.17, DRIVEWAY_THICKNESS, 0.5 - RW - 0.006 - 0.17, colors.driveway, 0, 0, (0.17 + 0.5 - RW - 0.006) / 2),
   };
 }
 
 /**
  * Crée le rendu des rues. options : { markings = true, useEdgeModels = false, abords = true }.
- * Par défaut les rues sont des géométries procédurales continues (chaussée 0,30 u, trottoirs
+ * Par défaut les rues sont des géométries procédurales continues (chaussées 0,18 / 0,26 u, trottoirs
  * arrondis aux nœuds, virages en arc) ; les pièces GLB « road-edge-* » du manifeste restent
  * disponibles avec `useEdgeModels: true`.
  * API : { group, setWorld(world), stats, dispose() }.
@@ -391,6 +413,8 @@ export function createRoads(models, options = {}) {
   const colors = roadColors();
   const geometries = buildFallbackGeometries({ markings, colors });
   const nodes = buildNodeGeometries(colors);
+  const localGeometries = buildFallbackGeometries({ markings: false, colors, roadWidth: LOCAL_ROAD_WIDTH, sidewalkWidth: LOCAL_SIDEWALK_WIDTH });
+  const localNodes = buildNodeGeometries(colors, LOCAL_ROAD_WIDTH, LOCAL_SIDEWALK_WIDTH);
   const vertexMaterial = models.materials.vertex;
   const asphaltMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
   const lotMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
@@ -425,7 +449,9 @@ export function createRoads(models, options = {}) {
     mesh.frustumCulled = false;
     items.forEach((it, k) => {
       const yaw = typeof it.yaw === 'number' ? it.yaw : (it.horizontal === false ? Math.PI / 2 : 0);
-      mesh.setMatrixAt(k, composeMatrix(matrix, it.x, 0, it.z, yaw, 1));
+      composeMatrix(matrix, it.x, 0, it.z, yaw, 1);
+      if (it.width && it.depth) matrix.scale(new THREE.Vector3(it.width, 1, it.depth));
+      mesh.setMatrixAt(k, matrix);
       if (colorize) mesh.setColorAt(k, colorize(it));
     });
     mesh.instanceMatrix.needsUpdate = true;
@@ -436,8 +462,8 @@ export function createRoads(models, options = {}) {
   }
 
   function trafficColor(item) {
-    if (item.traffic >= TRAFFIC_RED) return color.copy(colors.red);
-    if (item.traffic >= TRAFFIC_ORANGE) return color.copy(colors.orange);
+    if (item.traffic >= TRAFFIC_RED) return color.copy(colors.asphalt).lerp(colors.red, .16);
+    if (item.traffic >= TRAFFIC_ORANGE) return color.copy(colors.asphalt).lerp(colors.orange, .12);
     return color.copy(colors.asphalt);
   }
 
@@ -453,19 +479,23 @@ export function createRoads(models, options = {}) {
       const others = p.lots.filter((l) => l.kind !== 'garden');
       instance('lots-garden', geometries.lotGarden, vertexMaterial, gardens);
       instance('lots', geometries.lot, lotMaterial, others, { colorize: (it) => color.copy(lotColorOf[it.kind] || colors.lotPaved) });
-      instance('driveways', geometries.driveway, vertexMaterial, p.driveways);
+      instance('driveways', localGeometries.driveway, vertexMaterial, p.driveways.filter(d => !d.main));
+      instance('main-driveways', geometries.driveway, vertexMaterial, p.driveways.filter(d => d.main));
+      instance('courtyard-benches', geometries.bench, vertexMaterial, p.benches, { cast: true });
     }
     if (streetGlb) {
       instance('streets', streetGlb.geometry, streetGlb.material, p.streets);
     } else {
-      instance('streets', geometries.street, asphaltMaterial, p.streets, { colorize: trafficColor });
-      instance('street-trim', geometries.streetTrim, vertexMaterial, p.streets);
+      instance('streets', geometries.street, asphaltMaterial, p.streets.filter(s => s.main), { colorize: trafficColor });
+      instance('street-trim', geometries.streetTrim, vertexMaterial, p.streets.filter(s => s.main));
+      instance('local-streets', localGeometries.street, asphaltMaterial, p.streets.filter(s => !s.main), { colorize: trafficColor });
+      instance('local-trim', localGeometries.streetTrim, vertexMaterial, p.streets.filter(s => !s.main));
     }
     // Une pièce par forme de nœud (cul-de-sac, droit, virage, T, carrefour), tournée au quart de tour.
-    for (const shape of Object.keys(nodes)) {
-      const list = p.streetNodes.filter((n) => n.shape === shape)
-        .map((n) => ({ x: n.x, z: n.z, yaw: n.quarter * Math.PI / 2 }));
-      instance(`street-node-${shape}`, nodes[shape], vertexMaterial, list);
+    for (const main of [false, true]) for (const shape of Object.keys(nodes)) {
+      const list = p.streetNodes.filter(n => n.shape === shape && n.main === main)
+        .map(n => ({ x: n.x, z: n.z, yaw: n.quarter * Math.PI / 2 }));
+      instance(`${main ? 'main' : 'local'}-node-${shape}`, (main ? nodes : localNodes)[shape], vertexMaterial, list);
     }
     instance('paths', geometries.path, vertexMaterial, p.paths);
     instance('path-nodes', geometries.pathNode, vertexMaterial, p.pathNodes.map((n) => ({ ...n, horizontal: true })));
@@ -476,6 +506,8 @@ export function createRoads(models, options = {}) {
     clear();
     for (const g of Object.values(geometries)) g.dispose();
     for (const g of Object.values(nodes)) g.dispose();
+    for (const g of Object.values(localNodes)) g.dispose();
+    for (const g of Object.values(localGeometries)) g.dispose();
     asphaltMaterial.dispose();
     lotMaterial.dispose();
   }

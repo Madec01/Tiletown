@@ -1,31 +1,17 @@
-// Calques air / eau / faune / sols (docs/ARCHITECTURE.md §10.3, GAME_DESIGN.md §5) : ils modulent les
-// couleurs d'instances du sol. Une valeur par case (0 à 100 comme dans GAME_DESIGN §5, ou 0 à 1 si
-// toutes les valeurs sont ≤ 1) ; le calque mélange la couleur du terrain avec une rampe à deux teintes :
-//   air   : gris clair (pur)            → brun (irrespirable)
-//   water : bleu (claire)               → vert sale (polluée)
-//   fauna : vert pâle (peu de vie)      → vert vif (foisonnante)
-//   soil  : paille pâle (épuisé)        → brun humus (fertile)
-// `none` restaure les couleurs de terrain. `layerInfo(kind)` donne la légende prête à afficher
-// (libellé, unité, bornes, paliers colorés : « Pur 0 » → « Irrespirable 100 »).
-//
-// MODE DALTONIEN : en plus de la couleur, le sol peut porter des HACHURES diagonales dont la densité
-// dit la valeur (`layerBand` : 5 bandes, de aucune hachure à serrée). Le dessin vit dans le shader du
-// sol (ground.js) ; ici les parties pures : seuils, fréquences, normalisation.
-//
-// Aucun accès au DOM : des fonctions pures sur des tableaux typés, plus les couleurs three.js pour
-// l'interpolation en espace linéaire.
-
+// Rampes et légendes des calques écologiques. Le jeu utilise toujours une échelle fixe 0..100.
+// analysis.js applique ces couleurs au sol, aux bâtiments et aux rues ; ground.js garde également
+// ses couleurs par case. Les fonctions restent compatibles avec des tableaux normalisés explicites.
+// Les hachures complètent les couleurs par cinq densités de traits.
 import * as THREE from 'three';
-import { PALETTE } from '../data/palette.js';
 
 export const LAYER_KINDS = Object.freeze(['none', 'air', 'water', 'fauna', 'soil']);
 
 /** Rampes [valeur basse, valeur haute] en « #rrggbb ». */
 export const LAYER_RAMPS = Object.freeze({
-  air: Object.freeze([PALETTE.rockLight, '#7a4a30']),
-  water: Object.freeze([PALETTE.river, '#6f8a3a']),
-  fauna: Object.freeze(['#d6e9bf', '#1f8a3c']),
-  soil: Object.freeze(['#efe2bd', '#8a5a28']),
+  air: Object.freeze(['#3dc8b2', '#d94c48']),
+  water: Object.freeze(['#36afe0', '#d75845']),
+  fauna: Object.freeze(['#dcb87a', '#28905d']),
+  soil: Object.freeze(['#bb7953', '#8bbe46']),
 });
 
 /** Part du calque dans le mélange avec la couleur du terrain (le relief reste lisible). */
@@ -83,9 +69,9 @@ export function layerBand(t) {
  * Valeurs d'un calque normalisées dans [0, 1] pour le sol (attribut d'instance des hachures) :
  * Float32Array de la longueur de `values`, réutilise `out` s'il est de la bonne taille.
  */
-export function normalizeLayerValues(values, out = null) {
+export function normalizeLayerValues(values, out = null, fixedScale = null) {
   if (!values || !values.length) return null;
-  const scale = valueScale(values);
+  const scale = fixedScale ?? valueScale(values);
   const dst = out && out.length === values.length ? out : new Float32Array(values.length);
   for (let i = 0; i < values.length; i++) dst[i] = layerNormalized(values[i], scale);
   return dst;
@@ -124,13 +110,13 @@ export function layerInfo(kind) {
  * Couleurs par case pour un calque : Float32Array (3 valeurs linéaires par case) à passer au sol,
  * ou null pour `none` / valeurs absentes. `baseColors` : couleurs de terrain (linéaires, 3 par case).
  */
-export function layerColors(kind, values, baseColors) {
+export function layerColors(kind, values, baseColors, fixedScale = null) {
   if (!kind || kind === 'none' || !values || !baseColors) return null;
   const ramp = LAYER_RAMPS[kind];
   if (!ramp) throw new Error(`Calque inconnu : ${kind}`);
   _low.set(ramp[0]);
   _high.set(ramp[1]);
-  const scale = valueScale(values);
+  const scale = fixedScale ?? valueScale(values);
   const n = baseColors.length / 3;
   const out = new Float32Array(baseColors.length);
   for (let i = 0; i < n; i++) {

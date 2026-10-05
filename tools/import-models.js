@@ -670,7 +670,9 @@ export function addPrimitivePart(doc, buffer, scene, part) {
   const material = flatMaterial(doc, part.color);
   const tilt = part.tilt;
   const place = (geom) => (tilt ? tiltGeometry(geom, tilt) : geom);
-  if (part.primitive === 'box') {
+  if (part.primitive === 'prism') {
+    addGeometry(doc, buffer, node, place(prismGeometry(part.points, part.depth)), material);
+  } else if (part.primitive === 'box') {
     addGeometry(doc, buffer, node, place(boxGeometry(part.size, part.bevel || 0)), material);
   } else if (part.primitive === 'blob') {
     const geom = blobGeometry(part.radii, { segments: part.segments || 8, rings: part.rings || 5, jitter: part.jitter || 0, seed: part.seed || 1 });
@@ -686,6 +688,27 @@ export function addPrimitivePart(doc, buffer, scene, part) {
     throw new Error(`primitive inconnue : ${part.primitive}`);
   }
   scene.addChild(node);
+}
+
+/** Profil convexe en x/y extrudé en z : pignons, mansardes, encadrements cintrés. */
+export function prismGeometry(points, depth) {
+  const positions = [], normals = [], indices = [];
+  const tri = (a, b, c) => {
+    const u = b.map((v, i) => v - a[i]), v = c.map((x, i) => x - a[i]);
+    const n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+    const length = Math.hypot(...n);
+    if (length < 1e-10) return;
+    const start = positions.length / 3;
+    for (const p of [a,b,c]) { positions.push(...p); normals.push(...n.map(x => x/length)); }
+    indices.push(start, start+1, start+2);
+  };
+  const front = points.map(p => [...p, depth/2]), back = points.map(p => [...p, -depth/2]);
+  for (let i=1; i<points.length-1; i++) { tri(front[0],front[i],front[i+1]); tri(back[0],back[i+1],back[i]); }
+  for (let i=0; i<points.length; i++) {
+    const j=(i+1)%points.length;
+    tri(front[i],back[i],back[j]); tri(front[i],back[j],front[j]);
+  }
+  return { positions, normals, indices };
 }
 
 /** Emprise en x/z de la tranche de hauteur [a, b] (fractions de la hauteur) d'une scène. */
@@ -935,6 +958,10 @@ async function buildModel(id, spec) {
 // ─── Licence et manifeste ───────────────────────────────────────────────────────────────────────
 
 function writeLicenseFile(kitsUsed) {
+  // Un import des modèles originaux fonctionne sans les kits bruts. Ne jamais remplacer les
+  // licences déjà livrées par un document tronqué lorsque ces sources ne sont pas présentes.
+  const kenneyKits = [...kitsUsed].filter(kit => kit !== 'tiletown' && (!KITS[kit]?.author || KITS[kit].author === 'Kenney'));
+  if (existsSync(LICENSE_PATH) && kenneyKits.some(kit => !existsSync(joinPath(kitDir(kit), 'License.txt')))) return;
   const lines = [
     'Modèles 3D de Tiletown : origine et licence',
     '==========================================',

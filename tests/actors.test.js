@@ -106,11 +106,11 @@ test('actors : effectifs — 2/4/6 habitants par quartier selon le niveau, plafo
   assert.ok(actorsStats(doubled).byGroup.habitant > CAPS.habitant);
 });
 
-test('actors : les habitants restent sur une arête de rue (± 0,2 u) pendant 60 s', () => {
+test('actors : les habitants restent sur une rue ou un passage piéton (± 0,2 u) pendant 60 s', () => {
   const world = generateWorld({ seed: 12345, starterTown: true });
   const actors = createActors(world, 12345);
   const segments = edgeSegments(world);
-  const isStreet = (s) => s.value >= EDGE.STREET;
+  const isStreet = (s) => s.value >= EDGE.PATH;
   let walked = 0;
   let midEdge = 0;
   simulate(actors, world, 60, (i) => {
@@ -123,11 +123,12 @@ test('actors : les habitants restent sur une arête de rue (± 0,2 u) pendant 60
       // trottoir, à 0,12 u ± 0,04 ; aux carrefours (raccords d'angle, traversées) seule la première borne compte.
       if (a.edge && a.state === 'walk') {
         const own = segments.find((s) => s.ref.kind === a.edge.kind && s.ref.index === a.edge.index);
-        assert.ok(own.value >= EDGE.STREET, 'son arête est une rue');
+        assert.ok(own.value >= EDGE.PATH, 'son arête est une rue ou un passage');
         const along = own.ax === own.bx ? a.z - own.az : a.x - own.ax;
         if (along > 0.25 && along < 0.75) {
           const d = distToSegment(a.x, a.z, own.ax, own.az, own.bx, own.bz);
-          assert.ok(Math.abs(d - SIDEWALK_OFFSET) <= 0.04, `décalage trottoir ${d.toFixed(3)} en pleine arête`);
+          const offset = own.value === EDGE.PATH ? .028 : SIDEWALK_OFFSET;
+          assert.ok(Math.abs(d - offset) <= 0.04, `décalage piéton ${d.toFixed(3)} pour une arête ${own.value}`);
           midEdge++;
         }
       }
@@ -298,8 +299,12 @@ test('actors : décalage à droite — un piéton qui va vers l’est marche au 
   const back = offsetPath(world, [g(1, 1), g(2, 1), g(1, 1)], 0.12);
   assert.equal(back.length, 4);
   assert.ok(Math.abs(back[1].z - 1.12) < 1e-9 && Math.abs(back[2].z - 0.88) < 1e-9);
-  const graph = streetGraph(computeTraffic(rebuildRoads(place(place(makeWorld(4, 4), 1, 1, 'townhall'), 2, 1, 'house'))));
-  assert.ok(graph.degree[g(2, 1)] === 3 && graph.degree[g(1, 1)] === 2, 'degrés des coins');
+  world.edges.h[1 * 4 + 1] = EDGE.STREET;
+  world.edges.h[1 * 4 + 2] = EDGE.STREET;
+  world.edges.v[1 * 5 + 2] = EDGE.STREET;
+  world.edges.v[0 * 5 + 2] = EDGE.PATH;
+  assert.equal(streetGraph(world).degree[g(2, 1)], 3, 'trois branches motorisées');
+  assert.equal(streetGraph(world, { pedestrian: true }).degree[g(2, 1)], 4, 'le piéton peut aussi emprunter le passage');
 });
 
 test('actors : un monde modifié se resynchronise (nouveaux quartiers → plus d’habitants ; rue disparue → rien ne casse)', () => {

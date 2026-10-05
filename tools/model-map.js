@@ -24,6 +24,7 @@
 //   note       remarque libre, reportée dans le manifeste
 
 import { roleColor, hashSeed, FOLIAGE_COLORS } from '../src/data/palette.js';
+import { ARCHITECTURE } from './architecture.js';
 
 const SUBURBAN = 'city-kit-suburban';
 const COMMERCIAL = 'city-kit-commercial';
@@ -706,6 +707,9 @@ export const MODEL_MAP = {
   'bus': { kit: CARS, source: 'delivery.glb', scale: CAR_SCALE, yaw: 0, footprint: [1, 1], orientation: 'avant vers +Z', provisional: true, note: 'le Car Kit n’a pas de bus : camionnette longue (delivery) en attendant' },
   'truck': { kit: CARS, source: 'truck.glb', scale: CAR_SCALE, yaw: 0, footprint: [1, 1], orientation: 'avant vers +Z' },
 };
+
+// Les bâtiments originaux remplacent les anciennes silhouettes, sans changer les sauvegardes.
+Object.assign(MODEL_MAP, ARCHITECTURE);
 
 /** Adresse publique d'un kit (pour `url` et CREDITS.md). */
 export function kitUrl(kit) {

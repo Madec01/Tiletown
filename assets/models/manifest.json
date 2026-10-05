@@ -46,700 +46,683 @@
   "models": {
     "house-a": {
       "file": "house-a.glb",
-      "kit": "kenney-city-kit-suburban",
-      "source": "building-type-a.glb",
-      "scale": 0.654,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.132,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.425,
-          0,
-          -0.374
-        ],
-        "max": [
-          0.425,
-          0.616,
-          0.374
-        ],
-        "size": [
-          0.85,
-          0.616,
-          0.747
-        ]
-      },
-      "triangles": 1394,
-      "bytes": 16832,
-      "roles": {
-        "base": "baseWarm",
-        "wall": "wallGreen",
-        "roof": "roofSlate",
-        "glass": "glass",
-        "trim": "wood",
-        "soil": "soil",
-        "grassLight": "grassLight"
-      },
-      "note": "maison en L avec garage ; cheminée et porche"
-    },
-    "house-b": {
-      "file": "house-b.glb",
-      "kit": "kenney-city-kit-suburban",
-      "source": "building-type-r.glb",
-      "scale": 0.827,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-suburban",
-      "bbox": {
-        "min": [
-          -0.425,
-          0,
-          -0.422
-        ],
-        "max": [
-          0.425,
-          0.96,
-          0.422
-        ],
-        "size": [
-          0.85,
-          0.96,
-          0.843
-        ]
-      },
-      "triangles": 1218,
-      "bytes": 15312,
-      "roles": {
-        "wall": "wallPink",
-        "base": "baseStone",
-        "roof": "roofSlateDark",
-        "glass": "glassDeep",
-        "trim": "marking",
-        "soil": "soil",
-        "grassLight": "grassLight"
-      },
-      "note": "maison à étage et balcon ; cheminée et lucarne"
-    },
-    "house-c": {
-      "file": "house-c.glb",
-      "kit": "kenney-city-kit-suburban",
-      "source": "building-type-h.glb",
-      "scale": 0.654,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-suburban",
-      "bbox": {
-        "min": [
-          -0.451,
-          0,
-          -0.299
-        ],
-        "max": [
-          0.451,
-          0.564,
-          0.299
-        ],
-        "size": [
-          0.902,
-          0.564,
-          0.599
-        ]
-      },
-      "triangles": 902,
-      "bytes": 11748,
-      "roles": {
-        "base": "sidewalk",
-        "trim": "roofSlateDark",
-        "wall": "wallOchre",
-        "roof": "roofBrown",
-        "glass": "lakeDeep"
-      },
-      "note": "toit plat à panneaux solaires ; débord de toiture et édicule"
-    },
-    "house-d": {
-      "file": "house-d.glb",
-      "kit": "kenney-city-kit-suburban",
-      "source": "building-type-s.glb",
-      "scale": 0.605,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-suburban",
-      "bbox": {
-        "min": [
-          -0.425,
-          0,
-          -0.354
-        ],
-        "max": [
-          0.425,
-          0.717,
-          0.354
-        ],
-        "size": [
-          0.85,
-          0.717,
-          0.709
-        ]
-      },
-      "triangles": 1432,
-      "bytes": 18024,
-      "roles": {
-        "base": "sidewalk",
-        "wall": "wallCream",
-        "roof": "roofRed",
-        "grassLight": "grassLight",
-        "soil": "soil",
-        "trim": "trunkDark",
-        "glass": "glass"
-      },
-      "note": "maison compacte à pignon frontal ; cheminée et porche"
-    },
-    "house-e": {
-      "file": "house-e.glb",
-      "kit": "kenney-city-kit-suburban",
-      "source": "building-type-k.glb",
-      "scale": 0.833,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-suburban",
-      "bbox": {
-        "min": [
-          -0.401,
-          0,
-          -0.44
-        ],
-        "max": [
-          0.401,
-          1.03,
-          0.44
-        ],
-        "size": [
-          0.801,
-          1.03,
-          0.88
-        ]
-      },
-      "triangles": 1156,
-      "bytes": 14192,
-      "roles": {
-        "base": "rockLight",
-        "roof": "roofBrown",
-        "wall": "wallOchre",
-        "trim": "wood",
-        "glass": "lakeDeep",
-        "soil": "soil",
-        "grassLight": "grassLight"
-      },
-      "note": "maison cubique à deux niveaux ; débord de toiture et lucarne de toit"
-    },
-    "house-f": {
-      "file": "house-f.glb",
-      "kit": "kenney-city-kit-suburban",
-      "source": "building-type-d.glb",
-      "scale": 0.484,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-suburban",
-      "bbox": {
-        "min": [
-          -0.425,
-          0,
-          -0.249
-        ],
-        "max": [
-          0.425,
-          0.615,
-          0.249
-        ],
-        "size": [
-          0.85,
-          0.615,
-          0.498
-        ]
-      },
-      "triangles": 2045,
-      "bytes": 23924,
-      "roles": {
-        "wall": "wallBlue",
-        "base": "baseStone",
-        "roof": "roofTile",
-        "grassLight": "grassLight",
-        "glass": "lakeDeep",
-        "soil": "soil",
-        "trim": "marking"
-      },
-      "note": "maison longue et basse ; deux lucarnes et une cheminée"
-    },
-    "building-small-a": {
-      "file": "building-small-a.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-a.glb",
-      "scale": 0.904,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
-      "bbox": {
-        "min": [
-          -0.416,
-          0,
-          -0.445
-        ],
-        "max": [
-          0.416,
-          1.271,
-          0.445
-        ],
-        "size": [
-          0.832,
-          1.271,
-          0.89
-        ]
-      },
-      "triangles": 1384,
-      "bytes": 17512,
-      "roles": {
-        "roofFlat": "roofSlate",
-        "base": "wallTan",
-        "trim": "wood",
-        "wall": "wallGreen",
-        "glass": "glass",
-        "accent": "sun"
-      },
-      "note": "immeuble bas à toit-terrasse ; corniche et édicule"
-    },
-    "building-small-b": {
-      "file": "building-small-b.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-d.glb",
-      "scale": 0.944,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
-      "bbox": {
-        "min": [
-          -0.408,
-          0,
-          -0.425
-        ],
-        "max": [
-          0.408,
-          1.221,
-          0.425
-        ],
-        "size": [
-          0.815,
-          1.221,
-          0.85
-        ]
-      },
-      "triangles": 1144,
-      "bytes": 13660,
-      "roles": {
-        "trim": "marking",
-        "wall": "wallCream",
-        "base": "rockLight",
-        "glass": "glass",
-        "accent": "sun",
-        "roof": "roofRed"
-      },
-      "note": "immeuble bas à tourelle ; corniche"
-    },
-    "building-small-c": {
-      "file": "building-small-c.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-b.glb",
-      "scale": 0.876,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
-      "bbox": {
-        "min": [
-          -0.437,
-          0,
-          -0.436
-        ],
-        "max": [
-          0.437,
-          1.225,
-          0.436
-        ],
-        "size": [
-          0.874,
-          1.225,
-          0.872
-        ]
-      },
-      "triangles": 1408,
-      "bytes": 17468,
-      "roles": {
-        "trim": "roofSlateDark",
-        "base": "baseWarm",
-        "roofFlat": "rock",
-        "wall": "wallOchre",
-        "glass": "lakeDeep"
-      },
-      "note": "immeuble bas à étages décalés ; corniche et édicule"
-    },
-    "building-tall-a": {
-      "file": "building-tall-a.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-f.glb",
-      "scale": 0.825,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
-      "bbox": {
-        "min": [
-          -0.369,
-          0,
-          -0.425
-        ],
-        "max": [
-          0.369,
-          1.489,
-          0.425
-        ],
-        "size": [
-          0.737,
-          1.489,
-          0.85
-        ]
-      },
-      "triangles": 1970,
-      "bytes": 22200,
-      "roles": {
-        "wall": "wallOchre",
-        "trim": "wood",
-        "soil": "soil",
-        "grassLight": "grassLight",
-        "base": "sidewalk",
-        "glass": "lakeDeep"
-      },
-      "note": "immeuble haut et étroit ; corniche, bandeau et édicule"
-    },
-    "building-tall-b": {
-      "file": "building-tall-b.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-l.glb",
-      "scale": 0.606,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
-      "bbox": {
-        "min": [
-          -0.426,
+          -0.417,
           0,
           -0.43
         ],
         "max": [
-          0.426,
-          1.478,
+          0.417,
+          1.175,
           0.43
         ],
         "size": [
-          0.853,
-          1.478,
+          0.834,
+          1.175,
           0.86
         ]
       },
-      "triangles": 3644,
-      "bytes": 36868,
-      "roles": {
-        "trim": "marking",
-        "base": "baseWarm",
-        "wall": "wallBlue",
-        "grassLight": "grassLight",
-        "glass": "lakeDeep"
+      "triangles": 4016,
+      "bytes": 53736,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Maison de bourg originale : façade, menuiseries, toit et jardin"
+    },
+    "house-b": {
+      "file": "house-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.116,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.43,
+          0,
+          -0.424
+        ],
+        "max": [
+          0.43,
+          1.159,
+          0.424
+        ],
+        "size": [
+          0.86,
+          1.159,
+          0.848
+        ]
       },
-      "note": "immeuble haut compact ; corniche et édicule"
+      "triangles": 5240,
+      "bytes": 71648,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Maison de bourg originale : façade, menuiseries, toit et jardin"
+    },
+    "house-c": {
+      "file": "house-c.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.132,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.417,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.417,
+          1.436,
+          0.43
+        ],
+        "size": [
+          0.834,
+          1.436,
+          0.86
+        ]
+      },
+      "triangles": 5832,
+      "bytes": 75024,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Maison de bourg originale : façade, menuiseries, toit et jardin"
+    },
+    "house-d": {
+      "file": "house-d.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.43,
+          0,
+          -0.418
+        ],
+        "max": [
+          0.43,
+          1.231,
+          0.418
+        ],
+        "size": [
+          0.86,
+          1.231,
+          0.836
+        ]
+      },
+      "triangles": 3712,
+      "bytes": 51044,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Maison de bourg originale : façade, menuiseries, toit et jardin"
+    },
+    "house-e": {
+      "file": "house-e.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.124,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.414,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.414,
+          1.159,
+          0.43
+        ],
+        "size": [
+          0.829,
+          1.159,
+          0.86
+        ]
+      },
+      "triangles": 6504,
+      "bytes": 88096,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Maison de bourg originale : façade, menuiseries, toit et jardin"
+    },
+    "house-f": {
+      "file": "house-f.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.132,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.417,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.417,
+          1.128,
+          0.43
+        ],
+        "size": [
+          0.834,
+          1.128,
+          0.86
+        ]
+      },
+      "triangles": 3704,
+      "bytes": 51128,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Maison de bourg originale : façade, menuiseries, toit et jardin"
+    },
+    "building-small-a": {
+      "file": "building-small-a.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.106,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.408,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.408,
+          0.967,
+          0.43
+        ],
+        "size": [
+          0.816,
+          0.967,
+          0.86
+        ]
+      },
+      "triangles": 2894,
+      "bytes": 39180,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Petit immeuble à mansarde, balcons et commerce"
+    },
+    "building-small-b": {
+      "file": "building-small-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.106,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.408,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.408,
+          1.31,
+          0.43
+        ],
+        "size": [
+          0.816,
+          1.31,
+          0.86
+        ]
+      },
+      "triangles": 3990,
+      "bytes": 52376,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Petit immeuble à mansarde, balcons et commerce"
+    },
+    "building-small-c": {
+      "file": "building-small-c.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.106,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.408,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.408,
+          0.967,
+          0.43
+        ],
+        "size": [
+          0.816,
+          0.967,
+          0.86
+        ]
+      },
+      "triangles": 2894,
+      "bytes": 39180,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Petit immeuble à mansarde, balcons et commerce"
+    },
+    "building-tall-a": {
+      "file": "building-tall-a.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.106,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.408,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.408,
+          1.653,
+          0.43
+        ],
+        "size": [
+          0.816,
+          1.653,
+          0.86
+        ]
+      },
+      "triangles": 5086,
+      "bytes": 64996,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Immeuble de ville à corniches, balcons et lucarnes"
+    },
+    "building-tall-b": {
+      "file": "building-tall-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.106,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.408,
+          0,
+          -0.43
+        ],
+        "max": [
+          0.408,
+          1.995,
+          0.43
+        ],
+        "size": [
+          0.816,
+          1.995,
+          0.86
+        ]
+      },
+      "triangles": 6182,
+      "bytes": 77084,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Immeuble de ville à corniches, balcons et lucarnes"
     },
     "building-tall-c": {
       "file": "building-tall-c.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-skyscraper-c.glb",
-      "scale": 0.612,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.398,
+          -0.408,
           0,
-          -0.428
+          -0.43
         ],
         "max": [
-          0.398,
-          2.571,
-          0.428
+          0.408,
+          2.338,
+          0.43
         ],
         "size": [
-          0.795,
-          2.571,
-          0.856
+          0.816,
+          2.338,
+          0.86
         ]
       },
-      "triangles": 1836,
-      "bytes": 22256,
-      "roles": {
-        "trim": "roofSlateDark",
-        "roofFlat": "roofSlateDark",
-        "wall": "wallBeige",
-        "base": "baseStone",
-        "glass": "glassDeep",
-        "accent": "sun",
-        "grassLight": "grassLight"
-      },
-      "note": "tour élancée ; corniche et machinerie de toit"
+      "triangles": 7278,
+      "bytes": 89796,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Immeuble de ville à corniches, balcons et lucarnes"
     },
     "shop-a": {
       "file": "shop-a.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-g.glb",
-      "scale": 0.876,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.085,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.436,
+          -0.403,
           0,
-          -0.404
+          -0.43
         ],
         "max": [
-          0.436,
-          1.566,
-          0.404
+          0.403,
+          1.221,
+          0.43
         ],
         "size": [
-          0.872,
-          1.566,
-          0.808
+          0.807,
+          1.221,
+          0.86
         ]
       },
-      "triangles": 2138,
-      "bytes": 24280,
-      "roles": {
-        "trim": "roofSlateDark",
-        "wall": "wallGreen",
-        "base": "sidewalk",
-        "glass": "glass",
-        "accent": "sun"
-      },
-      "note": "auvent orange en rez-de-chaussée ; corniche et édicule"
+      "triangles": 2866,
+      "bytes": 39500,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Commerce de quartier à vitrine, auvent rayé et terrasse"
     },
     "shop-b": {
       "file": "shop-b.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-k.glb",
-      "scale": 0.408,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.085,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.44,
+          -0.403,
           0,
-          -0.196
+          -0.43
         ],
         "max": [
-          0.44,
-          0.6,
-          0.196
+          0.403,
+          1.221,
+          0.43
         ],
         "size": [
-          0.88,
-          0.6,
-          0.392
+          0.807,
+          1.221,
+          0.86
         ]
       },
-      "triangles": 3004,
-      "bytes": 31424,
-      "roles": {
-        "base": "rockLight",
-        "trim": "trunkDark",
-        "wall": "wallBlue",
-        "accent": "roofOrange",
-        "glass": "lakeDeep"
-      },
-      "note": "commerce large à auvents, bas ; corniche"
+      "triangles": 2866,
+      "bytes": 39512,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Commerce de quartier à vitrine, auvent rayé et terrasse"
     },
     "shop-c": {
       "file": "shop-c.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-c.glb",
-      "scale": 0.78,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.124,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.366,
+          -0.418,
           0,
-          -0.437
+          -0.43
         ],
         "max": [
-          0.366,
-          0.778,
-          0.437
+          0.418,
+          1.264,
+          0.43
         ],
         "size": [
-          0.731,
-          0.778,
-          0.874
+          0.836,
+          1.264,
+          0.86
         ]
       },
-      "triangles": 1327,
-      "bytes": 16080,
-      "roles": {
-        "wall": "wallBeige",
-        "base": "baseWarm",
-        "trim": "wood",
-        "soil": "soil",
-        "grassLight": "grassLight",
-        "glass": "glassDeep"
-      },
-      "note": "commerce de quartier à auvent vert ; corniche et édicule"
+      "triangles": 2762,
+      "bytes": 38360,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Commerce de quartier à vitrine, auvent rayé et terrasse"
     },
     "office-a": {
       "file": "office-a.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-i.glb",
-      "scale": 0.653,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.099,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.427,
+          -0.405,
           0,
-          -0.44
+          -0.43
         ],
         "max": [
-          0.427,
-          1.189,
-          0.44
+          0.405,
+          1.314,
+          0.43
         ],
         "size": [
-          0.854,
-          1.189,
-          0.88
+          0.81,
+          1.314,
+          0.86
         ]
       },
-      "triangles": 2676,
-      "bytes": 31320,
-      "roles": {
-        "base": "sidewalk",
-        "roofFlat": "baseStone",
-        "trim": "roofSlateDark",
-        "wall": "wallOchre",
-        "glass": "lakeDeep",
-        "accent": "sun"
-      },
-      "note": "bureaux ; corniche, bandeau et machinerie de toit"
+      "triangles": 3692,
+      "bytes": 51832,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Bureaux à grandes baies et toiture végétalisée"
     },
     "office-b": {
       "file": "office-b.glb",
-      "kit": "kenney-city-kit-commercial",
-      "source": "building-m.glb",
-      "scale": 0.684,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.099,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.424,
+          -0.405,
           0,
-          -0.425
+          -0.43
         ],
         "max": [
-          0.424,
-          2.238,
-          0.425
+          0.405,
+          1.655,
+          0.43
         ],
         "size": [
-          0.849,
-          2.238,
-          0.85
+          0.81,
+          1.655,
+          0.86
         ]
       },
-      "triangles": 3872,
-      "bytes": 37528,
-      "roles": {
-        "trim": "trunkDark",
-        "base": "rockLight",
-        "wall": "wallPink",
-        "roof": "roofSlateDark",
-        "glass": "glassDeep"
-      },
-      "note": "bureaux à terrasse plantée ; corniche et édicule"
+      "triangles": 4568,
+      "bytes": 63268,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Bureaux à grandes baies et toiture végétalisée"
     },
     "factory-a": {
       "file": "factory-a.glb",
@@ -865,272 +848,163 @@
     },
     "school": {
       "file": "school.glb",
-      "kit": "kenney-modular-buildings",
-      "source": "building-corner-window.glb",
-      "scale": 0.307,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 0.983,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/modular-buildings",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.46,
+          -0.43,
           0,
-          -0.322
+          -0.371
         ],
         "max": [
-          0.46,
-          0.678,
-          0.322
+          0.43,
+          0.967,
+          0.371
         ],
         "size": [
-          0.92,
-          0.678,
-          0.644
+          0.86,
+          0.967,
+          0.742
         ]
       },
-      "triangles": 738,
-      "bytes": 10596,
+      "triangles": 3984,
+      "bytes": 57676,
       "assembled": true,
       "parts": [
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-corner-window.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-window.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-steps-wide.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-window-awnings.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "roof-flat-border-corner.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "roof-flat-border-straight.glb"
-        },
         {
           "kit": "tiletown-primitives",
           "source": "primitives"
         }
       ],
-      "roles": {
-        "wall": "wallGreen",
-        "glass": "glass",
-        "soil": "soil",
-        "accent": "roofOrange",
-        "roof": "roofSlate"
-      },
-      "note": "assemblage : 3 × 2 blocs, 2 étages, perron, toit à parapet, drapeau"
+      "note": "Équipement civique original avec architecture identifiable"
     },
     "clinic": {
       "file": "clinic.glb",
-      "kit": "kenney-modular-buildings",
-      "source": "building-corner-window.glb",
-      "scale": 0.421,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.152,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/modular-buildings",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.421,
+          -0.425,
           0,
-          -0.425
+          -0.43
         ],
         "max": [
-          0.421,
-          0.989,
-          0.425
+          0.425,
+          0.964,
+          0.43
         ],
         "size": [
-          0.842,
-          0.989,
-          0.85
+          0.849,
+          0.964,
+          0.86
         ]
       },
-      "triangles": 424,
-      "bytes": 7284,
+      "triangles": 2094,
+      "bytes": 30064,
       "assembled": true,
       "parts": [
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-corner-window.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-door-window.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "roof-flat-border-corner.glb"
-        },
         {
           "kit": "tiletown-primitives",
           "source": "primitives"
         }
       ],
-      "roles": {
-        "wall": "wallOchre",
-        "glass": "lakeDeep",
-        "accent": "roofOrange"
-      },
-      "note": "assemblage : 2 × 2 blocs, 2 étages, croix sur la façade et le toit"
+      "note": "Équipement civique original avec architecture identifiable"
     },
     "townhall": {
       "file": "townhall.glb",
-      "kit": "kenney-modular-buildings",
-      "source": "building-corner-window.glb",
-      "scale": 0.307,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.11,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/modular-buildings",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.46,
+          -0.43,
           0,
-          -0.322
+          -0.416
         ],
         "max": [
-          0.46,
-          0.869,
-          0.322
+          0.43,
+          1.37,
+          0.416
         ],
         "size": [
-          0.92,
-          0.869,
-          0.644
+          0.86,
+          1.37,
+          0.832
         ]
       },
-      "triangles": 746,
-      "bytes": 10376,
+      "triangles": 2412,
+      "bytes": 33432,
       "assembled": true,
       "parts": [
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-corner-window.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-window-large.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-steps-wide.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "roof-flat-border-corner.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "roof-flat-border-straight.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "building-windows-round.glb"
-        },
-        {
-          "kit": "kenney-modular-buildings",
-          "source": "roof-flat-top.glb"
-        },
         {
           "kit": "tiletown-primitives",
           "source": "primitives"
         }
       ],
-      "roles": {
-        "wall": "wallPink",
-        "glass": "glassDeep",
-        "accent": "roofOrange"
-      },
-      "note": "assemblage : 3 × 2 blocs, 2 étages à grandes fenêtres, tour centrale, drapeau"
+      "note": "Équipement civique original avec architecture identifiable"
     },
     "market": {
       "file": "market.glb",
-      "kit": "kenney-fantasy-town-kit",
-      "source": "stall-red.glb",
-      "scale": 0.406,
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.132,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/fantasy-town-kit",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.45,
+          -0.43,
           0,
-          -0.385
+          -0.318
         ],
         "max": [
-          0.45,
-          0.518,
-          0.385
+          0.43,
+          0.572,
+          0.318
         ],
         "size": [
-          0.9,
-          0.518,
-          0.771
+          0.86,
+          0.572,
+          0.636
         ]
       },
-      "triangles": 1550,
-      "bytes": 18096,
+      "triangles": 2264,
+      "bytes": 28012,
       "assembled": true,
       "parts": [
-        {
-          "kit": "kenney-fantasy-town-kit",
-          "source": "stall-red.glb"
-        },
-        {
-          "kit": "kenney-fantasy-town-kit",
-          "source": "stall-green.glb"
-        },
-        {
-          "kit": "kenney-fantasy-town-kit",
-          "source": "cart.glb"
-        },
-        {
-          "kit": "kenney-fantasy-town-kit",
-          "source": "stall-bench.glb"
-        },
-        {
-          "kit": "kenney-fantasy-town-kit",
-          "source": "lantern.glb"
-        },
         {
           "kit": "tiletown-primitives",
           "source": "primitives"
         }
       ],
-      "roles": {
-        "accent": "blossom",
-        "foliage": "forestDark",
-        "trunk": "trunkLight",
-        "soil": "soil",
-        "wall": "wallGreen",
-        "base": "rockLight"
-      },
-      "note": "assemblage : deux étals (rouge, vert), charrette, banc et lanterne sur une dalle"
+      "note": "Halle de marché avec étals, cagettes et produits"
     },
     "tram-stop": {
       "file": "tram-stop.glb",

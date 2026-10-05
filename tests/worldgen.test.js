@@ -120,9 +120,9 @@ test('worldgen : la mairie est au centre, sur de l’herbe, loin de la rivière'
     }
     // Sans ville : la mairie seule, entourée de ses quatre rues de ceinture, rien d'autre.
     const edges = edgesOfTile(w, c.x, c.y);
-    for (const ref of Object.values(edges)) assert.equal(edgeValue(w, ref), 2);
+    assert.equal(Object.values(edges).filter(ref => edgeValue(w, ref) === 2).length, 1, 'une façade desservie');
     assert.equal(w.tiles.filter((t) => t.building).length, 1);
-    assert.equal(countEdges(w).street, 4);
+    assert.equal(countEdges(w).street, 1);
   }
 });
 
@@ -190,7 +190,7 @@ test('worldgen : ville de départ (10 maisons, 2 commerces, 1 champ cultivé) sa
     });
     assert.deepEqual(types, { townhall: 1, house: 10, shop: 2, field: 1 }, `graine ${seed}`);
     assert.ok(networkConnected(w), `graine ${seed} : ville non reliée`);
-    assert.ok(countEdges(w).street >= 12, 'des rues entre les îlots');
+    assert.ok(countEdges(w).street >= 6 && countEdges(w).street < 26, 'des dessertes partagées, sans quadriller chaque maison');
     assert.ok(trafficStats(w).total > 0, 'du trafic vers la mairie et les commerces');
   }
 });

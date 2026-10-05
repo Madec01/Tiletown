@@ -58,10 +58,10 @@ export const BASE_LESSONS = Object.freeze([
   Object.freeze({
     id: 'roads',
     title: 'Les rues se tracent seules',
-    text: 'Regardez autour de votre îlot : la rue est déjà là. Vous n’aurez jamais à la dessiner.',
+    text: 'Les bâtiments d’un même îlot partagent leurs rues. Le raccordement se fait automatiquement, en gardant des jardins au centre.',
     focus: (game) => firstTile(game, 'house'),
-    done: (game) => game.stats.streets >= 6,
-    reward: Object.freeze({ money: 0, text: 'Chaque îlot posé se raccorde tout seul au réseau, et paie son bout de rue.' }),
+    done: (game) => countOf(game, 'house') >= 1 && game.stats.streets >= 1,
+    reward: Object.freeze({ money: 0, text: 'Seuls les nouveaux tronçons sont facturés ; un accès existant est réutilisé.' }),
   }),
   Object.freeze({
     id: 'time',

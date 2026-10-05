@@ -256,13 +256,14 @@ test('semis des collines : des rochers irréguliers, sans emplacement type', () 
 
 test('abords d’un îlot : parcelle plantée, allée côté façade, arbres de rue', () => {
   const world = makeForestWorld();
+  world.edges.h[6 * world.cols + 5] = 0; // jardin derrière la maison, côté nord
   const p = collectPlacements(world);
   const i = 6 * world.cols + 5;
   const decor = p.filter((q) => q.tile === i && q.group !== GROUP_SOLID);
   assert.ok(decor.length >= 1, 'le quartier a des plantations d’abords');
   for (const d of decor) {
     const r = Math.max(Math.abs(d.x - 5.5), Math.abs(d.z - 6.5));
-    assert.ok(r > 0.2 && r <= LOT_HALF + 0.01, `plantation dans la bande de parcelle (r = ${r.toFixed(3)})`);
+    assert.ok(r > 0.2 && r <= 0.42, `plantation dans la bande de parcelle (r = ${r.toFixed(3)})`);
   }
   // L'entrée : la maison a yaw 0 (façade au sud) et une rue au sud → côté 2
   assert.equal(entrySide(world, 5, 6), 2);
@@ -304,10 +305,10 @@ test('collectRoadPlacements : bandes centrées sur les arêtes, pièce de nœud 
   h(2, 2, EDGE_BRIDGE);
   const r = collectRoadPlacements(world);
   assert.equal(r.streets.length, 3);
-  assert.deepEqual(r.streets[0], { x: 0.5, z: 1, horizontal: true, traffic: 0 });
-  assert.deepEqual(r.streets[2], { x: 2, z: 1.5, horizontal: false, traffic: 0 });
-  assert.deepEqual(r.paths, [{ x: 1, z: 0.5, horizontal: false, traffic: 0 }]);
-  assert.deepEqual(r.bridges, [{ x: 2.5, z: 2, horizontal: true, traffic: 0 }]);
+  assert.deepEqual(r.streets[0], { x: 0.5, z: 1, horizontal: true, main: false, traffic: 0 });
+  assert.deepEqual(r.streets[2], { x: 2, z: 1.5, horizontal: false, main: false, traffic: 0 });
+  assert.deepEqual(r.paths, [{ x: 1, z: 0.5, horizontal: false, main: false, traffic: 0 }]);
+  assert.deepEqual(r.bridges, [{ x: 2.5, z: 2, horizontal: true, main: true, traffic: 0 }]);
   // Un nœud à CHAQUE sommet touché par une rue : les bandes s'y arrêtent.
   const byXZ = (a, b) => (a.z - b.z) || (a.x - b.x);
   const nodes = [...r.streetNodes].sort(byXZ);
@@ -341,7 +342,9 @@ test('collectRoadPlacements : parcelle et allée d’entrée sous chaque îlot b
   const r = collectRoadPlacements(world);
   assert.equal(r.lots.length, 2, 'une parcelle par îlot bâti (pas sous la nature plantée)');
   const house = r.lots.find((l) => l.tile === 6 * world.cols + 5);
-  assert.deepEqual([house.x, house.z, house.kind], [5.5, 6.5, 'garden']);
+  assert.equal(house.kind, 'garden');
+  assert.ok(house.x - house.width/2 >= 5 && house.x + house.width/2 <= 6);
+  assert.equal(house.x + house.width/2, 6, 'le jardin rejoint la parcelle voisine en l’absence de rue');
   const shop = r.lots.find((l) => l.tile === 6 * world.cols + 6);
   assert.equal(shop.kind, 'paved');
   assert.equal(r.driveways.length, 2);
@@ -364,9 +367,9 @@ test('layerColors : none → null, valeurs 0-100 ou 0-1, mélange avec la couleu
   assert.equal(valueScale(new Float32Array([0.2, 40])), 100);
   const air = layerColors('air', new Float32Array([0, 100]), base);
   assert.equal(air.length, 6);
-  // Case 0 (air pur) : vers le gris clair ; case 1 (irrespirable) : vers le brun, plus rouge que vert
-  assert.ok(air[0] > base[0] && air[1] > 0.3, 'gris clair');
-  assert.ok(air[3] > air[4], 'brun : rouge > vert');
+  // Case 0 (air pur) : turquoise ; case 1 (irrespirable) : rouge.
+  assert.ok(air[1] > air[0] && air[2] > air[0], 'turquoise : vert et bleu > rouge');
+  assert.ok(air[3] > air[4], 'pollution : rouge > vert');
   const fauna = layerColors('fauna', new Float32Array([0, 1]), base);
   const saturation = (c, i) => c[i * 3 + 1] - Math.max(c[i * 3], c[i * 3 + 2]);
   assert.ok(saturation(fauna, 1) > saturation(fauna, 0), 'faune riche : vert plus vif (plus saturé) que faune pauvre');

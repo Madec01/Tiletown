@@ -24,6 +24,7 @@
 // Repère : la case (x, y) couvre [x, x+1] × [y, y+1] en (X, Z) ; le dessus de la terre est à y = 0.
 
 import * as THREE from 'three';
+import { frontageOffset } from '../core/blocks.js';
 import { PALETTE } from '../data/palette.js';
 import { TILE_BY_ID, modelOfBuilding } from '../data/tiles.js';
 import { BUILDING_SCALE } from './buildings.js';
@@ -329,7 +330,9 @@ export function createGhost(models, options = {}) {
 
     // Pose
     const tr = ghostTransform(current.x, current.y, current.yaw, tileSurface(world, current.x, current.y));
-    mesh.position.set(tr.position[0], tr.position[1], tr.position[2]);
+    const offset = TILE_BY_ID[current.tileId]?.family !== 'nature' && world
+      ? frontageOffset(world, current.x, current.y, Number(current.yaw) || 0) : { x: 0, z: 0 };
+    mesh.position.set(tr.position[0] + offset.x, tr.position[1], tr.position[2] + offset.z);
     mesh.rotation.set(0, tr.yaw, 0);
     baseScale = tr.scale;
     applyBreath();

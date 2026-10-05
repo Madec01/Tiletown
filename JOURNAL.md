@@ -280,3 +280,46 @@ Intégration du commit `220a2e2` arrivé sur `main` pendant la refonte : moteur 
 - Sélection et licences vérifiées sur les pages officielles : Tiny Treats Homely House / Pretty Park, KayKit Forest / City Builder Bits ; Quaternius Stylized Nature comme alternative plus foisonnante. La compatibilité Tiny Treats–KayKit est confirmée par leurs auteurs.
 - Comparaison des possibilités réelles : modèles GLB construits par code, images de concept, Meshy et Tripo. Aucun connecteur pour ces deux services trouvé ; aucun achat et aucune génération 3D externe effectués.
 - Recherche enregistrée dans `docs/ASSETS.md`. Aucun changement au jeu : la PR #1 reste la version testée (235 tests).
+
+
+## 2026-10-05 — Calques visibles et ville plus détaillée
+
+Retour utilisateur : les calques semblent inutiles et la ville reste trop simple. Travail sur `fix/calques-ville-detaillee`, depuis `main` après fusion de la PR #1.
+
+- Sauvegarde préalable : branche **et tag** `backup/avant-calques-ville-2026-10-05`, sur `ddbf57f5dc0962f388f979190f86b333f93a35f2`, publiés sur GitHub.
+- Diagnostic : les anciens calques teintaient le terrain mais laissaient les bâtiments et les rues dans leurs couleurs habituelles ; certaines rampes restaient proches du terrain naturel. Une carte dont toutes les mesures étaient sous 1 pouvait aussi être normalisée à tort sur 1 plutôt que sur 100.
+- Correction : texture géographique commune aux matériaux de la ville, des rues, du sol et de l’eau. Couleurs plus franches, relief conservé, hachures disponibles, échelle écologique fixe 0–100. Légende permanente avec moyenne et bornes, bouton « Voir la carte colorée », valeur d’une case au toucher, retour à la palette naturelle en désactivant le calque.
+- Graphismes : **21 nouveaux modèles GLB originaux CC0** définis dans `tools/architecture.js`. Six maisons (dont chalet, tourelle et maisons jumelées), six immeubles à mansardes et balcons fleuris, trois commerces avec vitrines et terrasses, deux bureaux, mairie, école, clinique et marché. Les identifiants des sauvegardes restent valides ; toutes les variantes sont reliées au catalogue.
+- Mise en scène : bâtiments agrandis (échelle 0,76), rues ramenées à 0,24 unité avec trottoirs de 0,32, caméra portrait rapprochée à 6,5 unités. Les 22 aperçus du catalogue sont régénérés depuis les GLB.
+- Pipeline : profils convexes extrudés pour les toits et les portes cintrées ; un import sans les kits bruts conserve les licences déjà livrées. La planche de contrôle cadre aussi les immeubles hauts en entier.
+- Validation : **265 tests passent**, `npm run check` confirme que la version publiée correspond aux sources. Parcours `review:mobile` validé (construction tactile, annulation, primes, sauvegarde, carrière, réglages) ; dispositions vérifiées à 360 × 740, 412 × 915, 430 × 932 et sur bureau. `review:layers` valide par comparaison des pixels les quatre calques, les mesures 0 / 0,8 / 100, les hachures et la restauration de la palette ; aucune erreur JavaScript ou WebGL. Le parcours `play-career` valide également les trois premières leçons par gestes réels, les objectifs, les étoiles, le niveau suivant et la reprise. Planche de 14 modèles représentatifs : tous chargés, posés au sol et dans leur emprise.
+- Mesure de rendu : 26 appels de dessin ; 231 515 triangles sur la ville de départ ; GLB complets 2,61 Mo, précache initial 3,88 Mo. **Limite mesurée** : la scène de stress de 500 îlots atteint 3 380 311 triangles et dépasse le budget historique de 150 000. Les temps de soumission CPU sous SwiftShader ne garantissent pas la fluidité sur GPU de téléphone ; une réduction de détail à distance reste à prévoir pour cette densité.
+- Captures livrées dans `docs/captures/` : `ville-detaillee-412.png`, `calque-air-412.png`, `calque-sols-412.png`, `architecture-bourg.png`.
+
+## 2026-10-05 — Proposition : rues et quartiers plus naturels
+
+- Demande de conception de l’utilisateur : sortir du quadrillage avec une rue autour de chaque carré ; proposer un fonctionnement par quartiers.
+- Lecture du moteur : `automaticValue` crée une rue dès qu’un côté touche un bâtiment ; `rebuildRoads` conserve ensuite toutes les rues existantes. Les raccordements, l’orientation, les trajets, l’entretien et l’écologie dépendent de ce réseau : le changement doit concerner la logique et le rendu ensemble.
+- Proposition, à ce stade non implémentée : îlots de 4 à 6 bâtiments, tailles et formes variées ; façades vers les rues périphériques, jardins et cours intérieurs continus, accès piétons ; rues principales et rues résidentielles distinctes. Lors d’une pose, réutiliser un accès existant et ne créer une rue que si la desserte le nécessite. Conserver la construction automatique adaptée au téléphone.
+- Schéma comparatif de principe préparé dans `artifacts/proposition-quartiers.svg` et `.png` (artefacts locaux, exclus du dépôt). Première étape recommandée : un îlot de six maisons et sa desserte, puis intégration aux voitures, habitants et sauvegardes.
+
+## 2026-10-05 — Îlots, jardins partagés et rues périphériques
+
+Accord utilisateur : « Go pour la modification ». Suite de la PR #2 sur `fix/calques-ville-detaillee`.
+
+- Sauvegarde préalable : branche **et tag** `backup/avant-quartiers-2026-10-05` sur `eb10d1c167eaeda8ea27abbd73c1d1fa107703eb`, publiés sur GitHub.
+- Nouveau plan déterministe : îlots de 2×2, 3×2 et 2×3 parcelles, tronqués aux bords et adaptés au relief. La construction automatique crée une vraie façade raccordée à la mairie, réutilise les rues existantes et évite l'intérieur de l'îlot. Une desserte intérieure reste possible en dernier recours près d'un obstacle. Un simple contact par un coin ne suffit plus.
+- Rendu : rues résidentielles de 0,18 unité sans ligne centrale ; axes principaux de 0,26 unité. Les jardins/dallages voisins se rejoignent, les bâtiments regardent leur rue et les 21 GLB ne portent plus de socle carré ou de clôture périphérique. Plantations arrière, passages piétons, arbres et bancs dans les cours ; passage légèrement surélevé pour rester visible sur la pelouse. Aperçus du catalogue et planche des 21 modèles régénérés.
+- Circulation : habitants sur trottoirs et passages, véhicules uniquement sur chaussées et ponts, décalage de voie adapté aux rues étroites. Les changements de largeur piétonne se font au coin pour éviter une traversée en diagonale de la chaussée.
+- Pose : seuls les tronçons annoncés sont facturés ; l'orientation du fantôme est celle du bâtiment posé. Correction du choix de variante à la pose : les six maisons sont désormais possibles, au lieu d'un modulo fixé à trois. Annulation, démolition et voies partagées restent cohérentes.
+- Migration : `roadVersion: 2` et masque des axes principaux sérialisés. Conversion gratuite des anciens quadrillages, ponts et progression conservés. Un ancien quai est réutilisé uniquement si sa suppression enclaverait une maison ; un cas réel de la graine 10 a permis de couvrir ce risque. Le recalcul suivant ne retrace pas ces rues.
+- Tutoriel : la leçon des rues vérifie le raccordement après la première maison, sans imposer six tronçons. Les cinq vallées restent gagnables en trois ans sans modifier les seuils : simulation respectivement à 145, 167, 171, 153 et 169 habitants ; 2, 3, 3, 1 et 2 étoiles ; aucun exode ni faillite. Les économies de voirie et la moindre fragmentation permettent trois étoiles sur Rivière et Bocage avec le parcours actif de référence.
+
+### Validation
+
+- **275 tests réussis**, aucun échec ni test sauté ; build généré et `npm run check` à jour. Dix tests spécifiques aux îlots : accès réel, coûts annoncés, cour sans chaussée, jardins continus, passages reliés, sauvegardes, anciens quais, ponts, démolition/annulation et largeur réelle des géométries.
+- **150 vallées initiales** : chaque façade est reliée, réseau et orientation stables après recalcul. **150 villes denses construites par l'ancien moteur** (`eb10d1c`, graines 1–150, 131 à 159 bâtiments chacune) : aucune maison déconnectée après migration ; réseau stable ; 55,4 à 62,7 % de chaussées en moins. Le pilote de six maisons réduit la voirie d'au moins 40 %.
+- `review:blocks` : six poses tactiles (cinq maisons et un commerce) dans une vallée réelle, aperçu/confirmation, prix exact, orientation, passage central, sauvegarde/rechargement ; portraits 412×915 et 360×740. Un raccordement existant est effectivement réutilisé pour 0 $ de rue.
+- `review:mobile`, `review:layers` et `play-career` passent : tactile, annulation, primes, reprise, réglages, tutoriel et niveau suivant ; quatre calques vérifiés par comparaison des pixels, aucune erreur JavaScript/WebGL.
+- Captures livrées dans `docs/captures/` : quartier témoin, jardin intérieur, petit téléphone, ville et calques actualisés ; rapport `quartiers-validation.json`. La vue du jardin à 55° est une vue de contrôle ; l'inclinaison habituelle du jeu reste à 35°.
+- Mesures SwiftShader : **37 à 42 appels de dessin** sur la vallée, **258 589 à 266 193 triangles**, précache **3,86 Mo**. La scène de stress de 500 bâtiments reste à **3 212 766 triangles** : les budgets historiques de triangles sont encore dépassés, comme avant cette modification. Les mesures CPU en navigateur émulé ne constituent pas une mesure de fluidité sur téléphone physique.

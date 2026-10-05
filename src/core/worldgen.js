@@ -12,7 +12,7 @@
 
 import { createRng } from './rng.js';
 import { index, inBounds, tileAt, neighbors4, neighbors8, createEdges, createTraffic, DIRS4 } from './grid.js';
-import { rebuildRoads, computeTraffic, faceTowardRoad } from './roads.js';
+import { rebuildRoads, computeTraffic } from './roads.js';
 import { isBuiltTile, TILE_BY_ID } from '../data/tiles.js';
 
 export const DEFAULT_COLS = 12;
@@ -330,13 +330,7 @@ export function generateWorld({ seed = 1, cols = DEFAULT_COLS, rows = DEFAULT_RO
   placeBuilding(world, center.x, center.y, 'townhall', 0);
   if (starterTown) buildStarterTown(world, rng.fork('town'), center);
 
-  const withRoads = rebuildRoads(world);
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const tile = withRoads.tiles[index(withRoads, x, y)];
-      if (isBuiltTile(tile)) tile.building.yaw = faceTowardRoad(withRoads, x, y, center);
-    }
-  }
+  const withRoads = rebuildRoads(world, { connect: true });
   return computeTraffic(withRoads);
 }
 

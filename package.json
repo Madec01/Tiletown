@@ -14,7 +14,9 @@
     "make-icons": "node tools/make-icons.mjs",
     "print-world": "node tools/print-world.js",
     "review:mobile": "node tools/review-mobile.mjs",
-    "render-previews": "node tools/render-previews.mjs"
+    "review:layers": "node tools/review-layers.mjs",
+    "render-previews": "node tools/render-previews.mjs",
+    "review:blocks": "node tools/review-blocks.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

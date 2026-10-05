@@ -61,9 +61,9 @@ export const TILES = Object.freeze([
     },
     pollution: { air: 0, water: 4 },
     models: {
-      1: ['house-a', 'house-b', 'house-c'],
-      2: ['building-small-a', 'building-small-b'],
-      3: ['building-tall-a', 'building-tall-b'],
+      1: ['house-a', 'house-b', 'house-c', 'house-d', 'house-e', 'house-f'],
+      2: ['building-small-a', 'building-small-b', 'building-small-c'],
+      3: ['building-tall-a', 'building-tall-b', 'building-tall-c'],
     },
   }),
 
@@ -75,7 +75,7 @@ export const TILES = Object.freeze([
     produce: { jobs: 15 }, consume: { energy: 1 }, income: 30,
     perLevel: { 1: { jobs: 15, income: 30 }, 2: { jobs: 20, income: 45 } },
     pollution: { air: 2, water: 0 },
-    models: { 1: ['shop-a', 'shop-b'], 2: ['shop-a', 'shop-b'] },
+    models: { 1: ['shop-a', 'shop-b', 'shop-c'], 2: ['shop-a', 'shop-b', 'shop-c'] },
   }),
   urban({
     id: 'office', family: 'activity', label: 'Bureaux',
@@ -84,7 +84,7 @@ export const TILES = Object.freeze([
     produce: { jobs: 25 }, consume: { energy: 2 }, income: 50,
     perLevel: { 1: { jobs: 25, income: 50 }, 2: { jobs: 35, income: 75 } },
     pollution: { air: 2, water: 0 },
-    models: { 1: ['office-a'], 2: ['office-a'] },
+    models: { 1: ['office-a', 'office-b'], 2: ['office-a', 'office-b'] },
   }),
   urban({
     id: 'factory', family: 'activity', label: 'Usine',
@@ -309,10 +309,10 @@ export const NATURE_MODELS = Object.freeze([
 
 /** Tous les identifiants de modèles que le manifeste doit fournir (liste partagée avec tools/import-models.js). */
 export const MODEL_IDS = Object.freeze([
-  'house-a', 'house-b', 'house-c',
-  'building-small-a', 'building-small-b',
-  'building-tall-a', 'building-tall-b',
-  'shop-a', 'shop-b', 'office-a', 'factory-a', 'factory-b',
+  'house-a', 'house-b', 'house-c', 'house-d', 'house-e', 'house-f',
+  'building-small-a', 'building-small-b', 'building-small-c',
+  'building-tall-a', 'building-tall-b', 'building-tall-c',
+  'shop-a', 'shop-b', 'shop-c', 'office-a', 'office-b', 'factory-a', 'factory-b',
   'school', 'clinic', 'market', 'townhall', 'tram-stop',
   'wastewater', 'wind-turbine', 'solar', 'power-plant', 'compost', 'water-tower',
   'park', ...NATURE_MODELS,

@@ -6,7 +6,7 @@
 
 Tiletown est un city builder en tuiles, cosy, en **3D basse définition au rendu lisse** (façon Islanders, Townscaper), joué sur téléphone en portrait.
 On construit la ville la plus prospère possible **sans sacrifier la vallée qui l'accueille** : l'air, l'eau et la faune sont des jauges aussi importantes que l'argent et la population.
-Chaque tuile posée est un îlot avec une spécialité (quartier, commerce, bureaux, usine, bâtiment spécial) ou un morceau de nature (forêt, champ, prairie, rivière, lac, zone humide).
+Chaque tuile posée est une parcelle avec une spécialité (quartier, commerce, bureaux, usine, bâtiment spécial) ou un morceau de nature (forêt, champ, prairie, rivière, lac, zone humide).
 Les routes se tracent toutes seules entre les îlots : le joueur ne dessine jamais une rue, il décide **où** la ville pousse.
 
 ## 2. Piliers de conception
@@ -22,7 +22,7 @@ Les routes se tracent toutes seules entre les îlots : le joueur ne dessine jama
 ### 3.1 Grille
 
 - **Grille carrée** (et non hexagonale) : simple à lire en portrait, naturelle pour des rues sur les arêtes, et c'est la grille des kits 3D libres (Kenney City Kit : une tuile = une unité). L'hexagone est plus élégant pour un Dorfromantik, mais il complique les rues et la lecture d'un plateau étroit.
-- **Taille** : 12 × 16 tuiles au début (format portrait), extensible par « terrains » adjacents achetés ou gagnés (comme les lots de la carrière de Seve), jusqu'à 16 × 24. **Un îlot = une unité 3D** ; caméra orthographique inclinée à environ 35°, orientation fixe (pas de rotation libre au départ, pour garder des rues et des ombres lisibles) ; **zoom continu** au pincement, d'environ 6 îlots visibles en largeur (jeu) à toute la carte (vue d'ensemble). Rendu lisse à toute échelle.
+- **Taille** : 12 × 16 tuiles au début (format portrait), extensible par « terrains » adjacents achetés ou gagnés (comme les lots de la carrière de Seve), jusqu'à 16 × 24. **Une parcelle = une unité 3D ; un îlot regroupe 4 à 6 parcelles** ; caméra orthographique inclinée à environ 35°, orientation fixe (pas de rotation libre au départ, pour garder des rues et des ombres lisibles) ; **zoom continu** au pincement, d'environ 6 îlots visibles en largeur (jeu) à toute la carte (vue d'ensemble). Rendu lisse à toute échelle.
 - **Voisinage** : les effets d'adjacence se calculent sur les **4 voisins par côté** (les diagonales ne comptent que pour la contiguïté des habitats). Rayon fixe de 1 tuile pour les bonus/malus, 2 pour les services (école, clinique). Jamais de courbe de propagation à lire.
 - **Carte générée à graine** : la vallée existe avant la ville. Rivière orientée (amont → aval), un ou deux lacs, massifs de forêt, prairies, champs, collines. Le joueur ne part jamais d'un désert plat : il s'installe dans un paysage.
 
@@ -47,17 +47,20 @@ Principes :
 
 ### 4.1 Les rues sont des bords, pas des cases
 
-Chaque tuile bâtie est un **îlot**. Les rues courent **sur les arêtes** entre deux îlots : elles ne consomment aucune case, se dessinent toutes seules (raccords automatiques comme les allées de Seve) et donnent immédiatement un aspect de ville.
+Une case est une **parcelle**, et plusieurs parcelles forment un **îlot** de 2 × 2, 3 × 2 ou 2 × 3 cases. Le plan varie selon la vallée et reste stable pendant la construction. Les rues courent sur les arêtes du **périmètre** des îlots ; elles ne consomment aucune case.
 
-- Chaque îlot bâti est **entouré de rues sur ses quatre côtés** : rue partagée entre deux îlots voisins, rue de ceinture face à la nature, quai le long de l'eau. La ville se lit immédiatement comme une ville.
-- Une nature plantée (parc, forêt plantée, haie) n'est pas un îlot : un simple chemin la borde.
-- Deux natures voisines → **aucune rue** : les corridors écologiques sont préservés par défaut.
+- Une nouvelle construction réutilise une rue existante ou ajoute seulement sa façade et les tronçons nécessaires pour la relier à la mairie. Un simple contact par un coin ne vaut pas accès.
+- Les façades regardent leur rue. Derrière, les jardins et les sols se rejoignent sans socle ni clôture autour de chaque case.
+- Dès que trois bâtiments occupent les deux rangées d'un îlot, un passage piéton traverse son cœur et rejoint les trottoirs, avec arbres et banc. Les voitures n'empruntent jamais ces passages.
+- Les rues résidentielles mesurent 0,18 unité (0,26 avec trottoirs), sans ligne centrale. Les axes de raccordement principaux et l'accès de la mairie sont plus larges : 0,26 unité (0,34 avec trottoirs) ; les ponts restent des axes principaux.
+- L'eau et le relief découpent les îlots. Si une berge ferme l'accès périphérique, une courte desserte intérieure peut être créée. Les lacs et zones humides restent à contourner.
+- Les plantations ne créent pas de ceinture routière. Un parc peut ajouter une promenade reliée à une rue.
 
-En 3D, chaque îlot bâti est en retrait de sa case (≈ 0,7 unité d'emprise) : la bande de rue (0,36 unité d'asphalte, trottoirs clairs, ligne centrale) court sur l'arête, les coins reçoivent les carrefours ; entre deux natures l'espace est de l'herbe. Les ponts utilisent les pièces de pont du même kit.
+La construction reste automatique et adaptée au téléphone : le fantôme montre l'orientation et les nouveaux tronçons avant confirmation. Les sauvegardes précédentes sont converties gratuitement au premier chargement ; bâtiments, niveaux, variantes, ponts, argent et progression sont conservés.
 
 ### 4.2 Raccordement d'une tuile isolée
 
-Si le joueur pose un îlot qui ne touche aucun autre îlot, le jeu trace **la route la plus courte** (recherche en largeur sur les arêtes) jusqu'au réseau existant, avec des coûts :
+Si une construction n’a pas de façade accessible, le jeu trace **la route la moins coûteuse** (Dijkstra sur les arêtes périphériques) jusqu’au réseau existant, avec des coûts :
 
 | Terrain traversé | Coût | Conséquence |
 |---|---|---|
@@ -70,8 +73,8 @@ Le fantôme de pose montre le tracé de la future route en rouge avant de confir
 
 ### 4.3 Trafic
 
-- Chaque quartier génère des trajets vers les emplois (commerce, bureaux, usine) et les commerces les plus proches ; chaque trajet suit le plus court chemin sur les arêtes.
-- Le **trafic d'une arête** = nombre de trajets qui l'empruntent. Au-delà d'un seuil, l'arête vire orange puis rouge : +pollution de l'air sur les deux tuiles riveraines, −bonheur (bruit).
+- Chaque quartier génère des trajets vers les emplois (commerce, bureaux, usine) et les commerces les plus proches ; chaque trajet motorisé suit le plus court chemin sur les rues et les ponts.
+- Le **trafic d'une arête** = nombre de trajets qui l'empruntent. Au-delà d'un seuil, l'asphalte se teinte légèrement d'orange puis de rouge : +pollution de l'air sur les deux tuiles riveraines, −bonheur (bruit).
 - Le joueur agit sans tracer : rapprocher emplois et logements, poser un **arrêt de tram** ou une **gare** (absorbe 50 % des trajets dans un rayon de 3), des **rues piétonnes** (tuile commerce « piétonne » qui n'accepte pas de trafic de transit), des pistes cyclables (bonus de service).
 - Les routes **fragmentent** la faune : une arête à trafic élevé entre deux habitats coupe le corridor ; un **passage à faune** (infrastructure) le rétablit.
 
@@ -337,7 +340,7 @@ Tiletown aura son propre dépôt, mais Seve fournit une base **technique** épro
 
 Décisions prises le 2026-10-04 :
 
-1. **Grille carrée** (un îlot = une unité 3D, rues automatiques sur les arêtes).
+1. **Grille carrée** (une parcelle = une unité 3D, îlots de 4 à 6 parcelles, rues automatiques sur leur périmètre).
 2. **Catalogue libre** : argent, catalogue par familles, barres de demande, politique municipale annuelle (la main de 3 tuiles a été écartée).
 3. **Temps réel accéléré** avec pause et vitesses 0, ½, 1, 2, 4, comme Seve ; 1 mois = 30 s à vitesse 1.
 4. **Partie de carrière = 3 ans** (18 min à vitesse 1, en plusieurs sessions).

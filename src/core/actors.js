@@ -28,6 +28,7 @@ import {
   tileAt, inBounds, index, neighbors4, neighbors8, edgeRef, edgeValue, cornerIndex, edgesOfCorner,
   cornersOfTile, DIRS4,
 } from './grid.js';
+import { isAvenue } from './blocks.js';
 import { EDGE, shortestTrip } from './roads.js';
 import { isBuiltTile, jobsOfTile, residentsOfTile } from '../data/tiles.js';
 
@@ -196,7 +197,7 @@ export function allocate(desired, cap) {
  * Graphe des rues : `adj[c]` = [{ to, ref, value, traffic }] pour chaque coin c ; `degree[c]` = nombre de
  * rues qui en partent ; `trafficEdges` = arêtes (une entrée par arête, les deux sens) à trafic > 0.
  */
-export function streetGraph(world) {
+export function streetGraph(world, { pedestrian = false } = {}) {
   const n = (world.cols + 1) * (world.rows + 1);
   const adj = Array.from({ length: n }, () => []);
   const degree = new Uint8Array(n);
@@ -204,7 +205,7 @@ export function streetGraph(world) {
   const traffic = world.traffic || null;
   const link = (ref, a, b) => {
     const value = edgeValue(world, ref);
-    if (value < EDGE.STREET) return;
+    if (value < (pedestrian ? EDGE.PATH : EDGE.STREET)) return;
     const t = traffic && traffic[ref.kind] ? traffic[ref.kind][ref.index] || 0 : 0;
     adj[a].push({ to: b, ref, value, traffic: t });
     adj[b].push({ to: a, ref, value, traffic: t });
@@ -277,7 +278,9 @@ export function offsetPath(world, corners, offset) {
     const b = cornerXZ(world, corners[i + 1]);
     const dx = Math.sign(b.x - a.x);
     const dz = Math.sign(b.z - a.z);
-    return { a, b, dx, dz, rx: -dz * offset, rz: dx * offset, ref: edgeBetween(world, corners[i], corners[i + 1]) };
+    const ref = edgeBetween(world, corners[i], corners[i + 1]);
+    const lane = edgeValue(world, ref) === EDGE.PATH ? Math.min(offset, 0.028) : offset;
+    return { a, b, dx, dz, rx: -dz * lane, rz: dx * lane, ref };
   };
   let s = segment(0);
   pts.push({ x: s.a.x + s.rx, z: s.a.z + s.rz, edge: null });
@@ -286,6 +289,9 @@ export function offsetPath(world, corners, offset) {
     const c = s.b;
     if (s.dx === t.dx && s.dz === t.dz) {
       pts.push({ x: c.x + s.rx, z: c.z + s.rz, edge: s.ref });
+      // Changement de largeur au débouché d'un passage : rejoindre le trottoir au coin,
+      // sinon le segment suivant coupe en diagonale toute la chaussée.
+      if (s.rx !== t.rx || s.rz !== t.rz) pts.push({ x: c.x + t.rx, z: c.z + t.rz, edge: null });
     } else if (s.dx === -t.dx && s.dz === -t.dz) {
       pts.push({ x: c.x + s.rx, z: c.z + s.rz, edge: s.ref });
       pts.push({ x: c.x + t.rx, z: c.z + t.rz, edge: null });
@@ -461,7 +467,7 @@ function buildContext(world) {
   let trafficTotal = 0;
   for (const e of graph.trafficEdges) trafficTotal += e.traffic;
   const cornerTiles = new Map(); // coin → cases dont il est un sommet (pour cibler une case)
-  return { world, graph, homes, jobs, shops, factories, trafficTotal, habitats: habitatSummary(world), cornerTiles };
+  return { world, graph, footGraph: streetGraph(world, { pedestrian: true }), homes, jobs, shops, factories, trafficTotal, habitats: habitatSummary(world), cornerTiles };
 }
 
 /** Ensemble des coins des cases listées. */
@@ -507,7 +513,7 @@ function streetCornersOfHome(ctx, home) {
   const out = [];
   for (const c of cornersOfTile(ctx.world, home.x, home.y)) {
     const i = cornerIndex(ctx.world, c.cx, c.cy);
-    if (ctx.graph.degree[i] > 0) out.push(i);
+    if (ctx.footGraph.degree[i] > 0) out.push(i);
   }
   return out;
 }
@@ -534,7 +540,7 @@ function spawnHabitant(actors, ctx, home) {
 
 /** Choisit la prochaine course d'un habitant : vers un emploi ou un commerce, puis retour, sinon flânerie. */
 function planHabitant(actors, ctx, a) {
-  const { world, graph } = ctx;
+  const { world, footGraph: graph } = ctx;
   const rng = actors.rng;
   let corners = null;
   if (a.away && a.corners && a.corners.length > 1) {
@@ -570,7 +576,12 @@ function planHabitant(actors, ctx, a) {
     const d1 = a.arrive;
     const straight = d1.dx === dx2 && d1.dz === dz2;
     const back = d1.dx === -dx2 && d1.dz === -dz2;
-    if (!straight && !back) a.path[0] = { x: c.x + (-d1.dz - dz2) * a.lane, z: c.z + (d1.dx + dx2) * a.lane, edge: null };
+    if (!straight && !back) {
+      const incoming = a.edge && edgeValue(world, a.edge) === EDGE.PATH ? .028 : a.lane;
+      const outgoing = edgeValue(world, edgeBetween(world, corners[0], corners[1])) === EDGE.PATH ? .028 : a.lane;
+      a.path[0] = { x: c.x - d1.dz * incoming - dz2 * outgoing,
+        z: c.z + d1.dx * incoming + dx2 * outgoing, edge: null };
+    }
   }
   a.state = 'walk';
   a.corner = corners[corners.length - 1];
@@ -635,6 +646,7 @@ function setLane(world, a, ref, from, to, s) {
   const pa = cornerXZ(world, from);
   const pb = cornerXZ(world, to);
   a.lane = { ref, from, to, ax: pa.x, az: pa.z, dx: pb.x - pa.x, dz: pb.z - pa.z };
+  a.lane.offset = world.roadVersion === 2 && !isAvenue(world, ref) ? 0.045 : LANE_OFFSET;
   a.laneKey = laneKey(ref, from);
   a.s = s;
   a.edge = ref;
@@ -647,7 +659,7 @@ function placeOnLane(a) {
   const l = a.lane;
   // Après un demi-tour, le véhicule glisse de la voie de gauche à celle de droite sur le premier quart de l'arête.
   const side = a.uturn ? -1 + 2 * clamp(a.s / 0.25, 0, 1) : 1;
-  const off = LANE_OFFSET * side;
+  const off = (l.offset ?? LANE_OFFSET) * side;
   a.x = l.ax + l.dx * a.s - l.dz * off;
   a.z = l.az + l.dz * a.s + l.dx * off;
   if (a.uturn && a.s >= 0.25) a.uturn = false;
@@ -781,7 +793,7 @@ function habitantQuota(ctx, cap) {
 /** Chemin encore valable : toutes ses arêtes sont des rues. */
 function pathStillValid(world, a) {
   if (a.group !== 'habitant') return true;
-  for (const p of a.path) if (p.edge && edgeValue(world, p.edge) < EDGE.STREET) return false;
+  for (const p of a.path) if (p.edge && edgeValue(world, p.edge) < EDGE.PATH) return false;
   return true;
 }
 
