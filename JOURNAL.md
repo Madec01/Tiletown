@@ -141,3 +141,10 @@ Contrôle économique final : `node tools/simulate.js --career --level vallee-1 
 Correction du retour Android : attendre le `popstate` de fermeture avant de poser une nouvelle entrée d’historique ; un test de régression reproduit l’ouverture d’une couche pendant la fermeture d’une autre. Les paramètres de nouvelle partie sont nettoyés avant de créer la pile des panneaux.
 
 Intégration du commit `220a2e2` arrivé sur `main` pendant la refonte : moteur de carrière, cartes, règles d’étoiles, dix leçons, suivi d’exode et simulateur conservés. L’adaptateur `career-session.js` les raccorde à la partie sauvegardée ; « Premiers pas » affiche les leçons dans le carnet. Les huit missions à primes restent un parcours complémentaire.
+
+## 2026-10-05 — Recherche complémentaire d'assets et génération 3D
+
+- Demande : rechercher de meilleurs assets 3D et examiner la possibilité de les créer ou de les faire générer.
+- Sélection et licences vérifiées sur les pages officielles : Tiny Treats Homely House / Pretty Park, KayKit Forest / City Builder Bits ; Quaternius Stylized Nature comme alternative plus foisonnante. La compatibilité Tiny Treats–KayKit est confirmée par leurs auteurs.
+- Comparaison des possibilités réelles : modèles GLB construits par code, images de concept, Meshy et Tripo. Aucun connecteur pour ces deux services trouvé ; aucun achat et aucune génération 3D externe effectués.
+- Recherche enregistrée dans `docs/ASSETS.md`. Aucun changement au jeu : la PR #1 reste la version testée (235 tests).

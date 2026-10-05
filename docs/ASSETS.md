@@ -955,3 +955,33 @@ Couches « prospérité » : boucles Abstraction (CC0) ; [Squirrel Village](http
 - **Titre : Jersey 10** (OFL, latin-ext) à 30–40 px (multiples de sa hauteur native) : condensée mais ronde, plus « cosy » que Press Start 2P (monospace 8×8, à réserver au logo).
 - Alternative HUD compact : m5x7 (CC0) à 32 px (×2) ou Pixel Operator (CC0) à 16/32 px.
 
+
+## Sélection complémentaire pour la refonte — 2026-10-05
+
+Recherche demandée après la refonte : améliorer les modèles 3D et comparer les packs existants à la création sur mesure ou par IA. Pages officielles et licences consultées le 5 octobre 2026. Cette sélection est une recommandation ; ces nouveaux packs ne sont pas encore intégrés.
+
+### Direction recommandée : Tiny Treats + KayKit
+
+Les auteurs de Tiny Treats indiquent explicitement que leurs modèles reprennent les dimensions et spécifications techniques de KayKit. Cette famille est donc un meilleur point de départ pour une ville miniature cohérente que l'accumulation de packs de styles différents.
+
+| Priorité | Pack | Apport à Tiletown | Accès vérifié |
+|---|---|---|---|
+| 1 | [Tiny Treats — Homely House](https://tinytreats.itch.io/homely-house) | Maison, clôtures et jardin ; base pour plusieurs variantes de quartiers | 16+ modèles, version gratuite CC0, glTF/FBX/OBJ ; source Blender optionnelle à 3,95 $ |
+| 2 | [KayKit — Forest Nature Pack](https://kaylousberg.itch.io/kaykit-forest) | Arbres, buissons, rochers et herbes ; enrichir les silhouettes de la vallée | 100+ modèles gratuits CC0 ; Extra à 9,99 $, Source à 14,99 $ |
+| 3 | [Tiny Treats — Pretty Park](https://tinytreats.itch.io/pretty-park) | Fontaine, haies, sols et décoration ; parcs plus reconnaissables | 14+ modèles, version gratuite CC0, glTF/FBX/OBJ ; source Blender optionnelle à 3,95 $ |
+| 4 | [KayKit — City Builder Bits](https://kaylousberg.itch.io/city-builder-bits) | Bâtiments urbains, voitures et mobilier ; compléter les niveaux denses | 32+ modèles gratuits CC0 ; extension parc à 3,95 $, source à 5,95 $ |
+| Alternative | [Quaternius — Stylized Nature MegaKit](https://quaternius.com/packs/stylizednaturemegakit.html) | Végétation plus foisonnante, fleurs et feuillages texturés | CC0, glTF ; environ 60–70 % du pack gratuits, reste en éditions payantes |
+
+Option esthétique intéressante mais payante : [Tiny Treats — Bakery Building](https://tinytreats.itch.io/bakery-building), 7,95 $, 32+ modèles, deux variantes de bâtiment et accessoires, CC0, sources Blender incluses. Aucun achat effectué. Les quatre packs gratuits ci-dessus permettent déjà une nouvelle famille visuelle complète.
+
+Pour retrouver leur qualité visuelle dans le jeu, conserver leurs dégradés de texture, normaliser l'échelle et les orientations, puis utiliser les mêmes lumière et ombres. Les shaders Unity/Godot/Unreal montrés par certains packs ne sont pas transférés automatiquement dans three.js. La densité d'arbres, les matériaux et les niveaux de détail doivent être mesurés sur téléphone après import.
+
+### Création sur mesure et génération IA
+
+- **Disponible dans cette session** : construire des modèles en géométrie par code, les exporter en GLB et préparer leurs variantes ; générer des images de référence ou des textures. Les arbres arrondis et décors de la refonte illustrent déjà la première méthode. Pour une identité propre, privilégier une mairie, une école, une serre et une petite gare assorties à la famille choisie.
+- **Image générée ≠ modèle 3D** : une image de concept ne fournit ni maillage, ni arrière du bâtiment, ni animations. Elle peut guider la modélisation ou un service image-vers-3D.
+- [Meshy](https://www.meshy.ai/pricing) propose texte/image-vers-3D et export GLB ; sa page officielle indique une licence CC BY 4.0 pour les sorties gratuites, avec attribution, et des droits différents pour les abonnements. Ne pas confondre crédits du site et accès API.
+- [Tripo](https://www.tripo3d.ai/help/privacy-policy/how-to-use-tripo-models-commercially) propose aussi la génération 3D ; sa documentation officielle réserve les droits commerciaux aux offres payantes.
+- Recherche de connecteurs effectuée : aucun connecteur Meshy ou Tripo trouvé dans le catalogue interrogé. Aucun service 3D IA n'est connecté à cette session et aucune génération 3D externe n'a été lancée. Les outils d'image/vidéo disponibles ne remplacent pas un générateur de maillages 3D.
+
+Recommandation : prendre Tiny Treats + KayKit pour la majorité du décor, créer les bâtiments emblématiques de Tiletown sur mesure et réserver un éventuel essai de génération 3D IA à un objet isolé. Vérifier ensuite ses faces cachées, son échelle, ses matériaux et son coût de rendu avant de le multiplier dans la ville.
