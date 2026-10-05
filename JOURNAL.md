@@ -15,6 +15,13 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 4 lancée : les systèmes nature
+
+- Décision de l'utilisateur : l'écologie avant la progression et le son.
+- Sauvegarde : branche `backup/avant-etape4-2026-10-05`.
+- Contrat écrit dans `docs/ARCHITECTURE.md` §10 : état `eco` (air, eau, faune, sols en tableaux typés, parcelles d'habitat, espèces, scores, alertes), `stepEcology` à chaque mois, intégration dans les stats et le bonheur, calques avec légende et hachures daltoniennes, icônes d'espèces, faune animée pilotée par les espèces présentes, brume et lac qui verdit, fiche Nature, carnet des espèces, alertes avec bouton « Voir », parcours `tools/play-eco.mjs` comme critère.
+- Trois chantiers parallèles : écologie pure et intégration ; calques, espèces et ambiance 3D ; interface et carnet.
+
 ## 2026-10-05 — Étape 3 livrée : Tiletown se joue
 
 - **Logique de partie** (`src/core/game.js`, `calendar.js`, `src/data/balance.js`, purs) : horloge (1 mois = 30 s à vitesse 1, vitesses 0, ½, 1, 2, 4), argent, recettes et entretien encaissés chaque mois, arrivées et départs d'habitants, évolutions de quartier en fin de saison, déblocages par paliers de population, `canPlace` / `place` / `demolish` / `undoLast` (10 s), `describeTile`, `serialize`/`deserialize`. 16 tests.
