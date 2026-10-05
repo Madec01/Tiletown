@@ -14,22 +14,35 @@
 //      tenir au-dessus de 60.
 // Pour chacune, un tableau par saison (argent, population, bonheur, nature, air, eau, faune, espèces,
 // recettes et entretien du mois, bâtiments) et un verdict.
+//
+// Puis une cinquième conduite, **la carrière** (docs/ARCHITECTURE.md §11.1) :
+//   node tools/simulate.js --career [--level vallee-1]
+// Elle part de la vallée **vierge** du niveau (la seule mairie, l'argent du niveau), joue sans génie en
+// suivant les objectifs, et montre (a) le mois où chaque objectif tombe, (b) le mois où chaque leçon du
+// tutoriel serait satisfaite. Les objectifs d'un niveau doivent tomber avant la fin des trois ans.
 
 import { createGame, advance, canPlace, place, calendar, setFieldMode } from '../src/core/game.js';
 import { speciesSummary } from '../src/core/ecology.js';
 import { centerOf } from '../src/core/worldgen.js';
 import { tileAt } from '../src/core/grid.js';
+import { EDGE } from '../src/core/roads.js';
+import {
+  createCareer, finishLevel, startLevel, evaluateGoals, evaluateStars, levelResult, levelById, LEVEL_IDS,
+} from '../src/core/career.js';
+import { nextLesson, lessonDone, markSeen, lessonsOf } from '../src/core/tutorial.js';
 import { TILE_BY_ID } from '../src/data/tiles.js';
 import { MONTH_SECONDS } from '../src/data/balance.js';
 
 function parseArgs(argv) {
   // 48 mois : les trois ans d'une carrière, plus l'année où les conséquences écologiques se voient.
-  const opts = { seed: 1, months: 48, dt: 0.1, quiet: false };
+  const opts = { seed: 1, months: 48, dt: 0.1, quiet: false, career: false, level: 'vallee-1' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--months') opts.months = Number(argv[++i]);
     else if (a === '--dt') opts.dt = Number(argv[++i]);
     else if (a === '--quiet') opts.quiet = true;
+    else if (a === '--career') opts.career = true;
+    else if (a === '--level') { opts.level = String(argv[++i]); opts.career = true; }
     else if (a === '--help' || a === '-h') opts.help = true;
     else opts.seed = /^-?\d+$/.test(a) ? Number(a) : a;
   }
@@ -281,11 +294,231 @@ function verdicts(results, months) {
   return notes;
 }
 
+// =================================================================================================
+// Conduite « carrière » (docs/ARCHITECTURE.md §11.1) : la vallée vierge d'un niveau, jouée sans génie.
+//
+// Le joueur simulé fait, dans l'ordre : ce qui manque (énergie, eau, nourriture), du travail pour tout
+// le monde, une école puis une clinique, un parc par quartier, et de la place quand elle vient à
+// manquer — plus ce que les objectifs du niveau réclament (un pont, des champs bio…). Rien d'optimal :
+// une partie que n'importe qui peut rejouer.
+
+/** Carrière placée juste avant `levelId` : les niveaux précédents terminés (sans étoile). */
+export function careerUpTo(levelId) {
+  let career = createCareer();
+  for (const id of LEVEL_IDS) {
+    if (id === levelId) break;
+    career = finishLevel(career, id, 0);
+  }
+  return career;
+}
+
+/** Nombre de bâtiments d'un type. */
+function countOf(game, type) {
+  let n = 0;
+  for (const t of game.world.tiles) if (t.building && t.building.type === type) n++;
+  return n;
+}
+
+/** La case la moins chère pour `tileId` : on épargne la nature native et on reste groupé. */
+function careerSpot(game, tileId) {
+  const c = centerOf(game.world);
+  let best = null;
+  for (let y = 0; y < game.world.rows; y++) {
+    for (let x = 0; x < game.world.cols; x++) {
+      const check = canPlace(game, x, y, tileId);
+      if (!check.ok) continue;
+      const t = tileAt(game.world, x, y);
+      const wild = t.native && t.terrain !== 'grass' ? 1000 : 0;
+      const score = check.cost + wild + 6 * Math.max(Math.abs(x - c.x), Math.abs(y - c.y));
+      if (!best || score < best.score) best = { x, y, check, score };
+    }
+  }
+  return best;
+}
+
+/** Pose `tileId` si l'argent le permet en gardant `margin` de côté. */
+function careerPlace(game, tileId, margin = 0) {
+  if (!game.unlocked.includes(tileId)) return null;
+  const spot = careerSpot(game, tileId);
+  if (!spot || game.money < spot.check.cost + margin) return null;
+  const r = place(game, spot.x, spot.y, tileId, 0);
+  return r.ok ? r.game : null;
+}
+
+/** Pose `tileId` contre un quartier (le parc qui fait venir les hirondelles) ou, à défaut, n'importe où. */
+function placeNear(game, tileId, type, margin = 0) {
+  if (!game.unlocked.includes(tileId)) return null;
+  const w = game.world;
+  for (let y = 0; y < w.rows; y++) {
+    for (let x = 0; x < w.cols; x++) {
+      const t = tileAt(w, x, y);
+      const matches = type === 'meadow' ? t.terrain === 'meadow' : t.building && t.building.type === type;
+      if (!matches) continue;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const n = tileAt(w, x + dx, y + dy);
+          if (!n || (n.native && n.terrain !== 'grass')) continue;
+          const check = canPlace(game, x + dx, y + dy, tileId);
+          if (!check.ok || game.money < check.cost + margin) continue;
+          const r = place(game, x + dx, y + dy, tileId, 0);
+          if (r.ok) return r.game;
+        }
+      }
+    }
+  }
+  return careerPlace(game, tileId, margin);
+}
+
+/** Pose un quartier sur l'autre rive : son raccordement passe par un pont (40 $ le segment). */
+function crossRiver(game, margin = 120) {
+  let best = null;
+  for (let y = 0; y < game.world.rows; y++) {
+    for (let x = 0; x < game.world.cols; x++) {
+      const check = canPlace(game, x, y, 'house');
+      if (!check.ok || !check.path.some((ref) => ref.value === EDGE.BRIDGE)) continue;
+      if (!best || check.cost < best.check.cost) best = { x, y, check };
+    }
+  }
+  if (!best || game.money < best.check.cost + margin) return null;
+  const r = place(game, best.x, best.y, 'house', 0);
+  return r.ok ? r.game : null;
+}
+
+/** Passe tous les champs encore conduits en intensif au bio (§5.4). */
+function allOrganic(game) {
+  let g = game;
+  for (let i = 0; i < g.world.tiles.length; i++) {
+    const b = g.world.tiles[i].building;
+    if (!b || b.type !== 'field' || (b.mode || 'intensive') !== 'intensive') continue;
+    const r = setFieldMode(g, i % g.world.cols, Math.floor(i / g.world.cols), 'organic');
+    if (r.ok) g = r.game;
+  }
+  return g === game ? null : g;
+}
+
+/** Ce que les objectifs encore manquants réclament (un pont, des champs bio, des îlots…). */
+function goalPush(game, level) {
+  const state = evaluateGoals(game, level);
+  for (const goal of level.goals) {
+    const now = state.find((g) => g.id === goal.id);
+    if (!now || now.done) continue;
+    if (goal.kind === 'bridges') {
+      const crossed = crossRiver(game);
+      if (crossed) return crossed;
+    }
+    if (goal.kind === 'buildings' && goal.tile === 'field') {
+      if (countOf(game, 'field') < goal.target) {
+        const sown = placeNear(game, 'field', 'meadow', 40);
+        if (sown) return sown;
+      }
+      if (goal.mode === 'organic') {
+        const bio = allOrganic(game);
+        if (bio) return bio;
+      }
+    }
+  }
+  return null;
+}
+
+/** Un coup du joueur raisonnable (null : il n'a rien à faire ce mois-ci). */
+export function careerStep(game, level) {
+  const s = game.stats;
+  const houses = countOf(game, 'house');
+  if (s.shortages.includes('energy')) return careerPlace(game, 'wind-turbine', 10) || careerPlace(game, 'solar', 10);
+  if (s.shortages.includes('water')) return careerPlace(game, 'water-tower', 10);
+  if (s.shortages.includes('food')) return careerPlace(game, 'field', 10) || careerPlace(game, 'orchard', 10);
+  if (s.unemployment || s.jobs < s.population) return careerPlace(game, 'shop', 20) || careerPlace(game, 'office', 20);
+  if (houses >= 2 && countOf(game, 'school') === 0) return careerPlace(game, 'school', 20);
+  if (countOf(game, 'park') < houses) return placeNear(game, 'park', 'house', 20);
+  if (houses >= 4 && countOf(game, 'clinic') === 0) return careerPlace(game, 'clinic', 20);
+  if (houses >= 8 && countOf(game, 'school') === 1) return careerPlace(game, 'school', 20);
+  const pushed = goalPush(game, level);
+  if (pushed) return pushed;
+  if (s.capacity - s.population < 30) return careerPlace(game, 'house', 20);
+  return null;
+}
+
+/**
+ * Joue un niveau de carrière du premier au dernier mois.
+ * @returns {{ level, game, rows, goalMonths, lessonMonths, result }}
+ */
+export function careerRun({ levelId = 'vallee-1', dt = 0.1 } = {}) {
+  const level = levelById(levelId);
+  if (!level) throw new Error(`Niveau inconnu : ${levelId}`);
+  const career = careerUpTo(levelId);
+  let { game } = startLevel(career, levelId);
+  const catalogue = game.unlocked.length;
+  const months = level.years * 12;
+  const stepsPerMonth = Math.round(MONTH_SECONDS / dt);
+  const rows = [snapshot(game, 'départ')];
+  const goalMonths = {};
+  const lessonMonths = {};
+  let seen = [];
+  const scenario = level.tutorial;
+
+  for (let m = 0; m < months; m++) {
+    for (let i = 0; i < stepsPerMonth; i++) game = advance(game, dt).game;
+    for (let guard = 0; guard < 8; guard++) {
+      const next = careerStep(game, level);
+      if (!next) break;
+      game = next;
+    }
+    // Les objectifs tombés ce mois-ci.
+    for (const g of evaluateGoals(game, level)) {
+      if (g.done && goalMonths[g.id] === undefined) goalMonths[g.id] = game.month;
+    }
+    // Les leçons du tutoriel : le joueur ouvre le calque Air dès qu'il a vu passer deux mois.
+    if (scenario) {
+      const ctx = { layer: game.month >= 2 ? 'air' : null, level };
+      for (;;) {
+        const lesson = nextLesson(scenario, game, seen, ctx);
+        if (!lesson || !lessonDone(lesson, game, ctx)) break;
+        lessonMonths[lesson.id] = game.month;
+        seen = markSeen(seen, lesson.id);
+      }
+    }
+    if (game.month % 3 === 0) rows.push(snapshot(game, calendar({ month: game.month - 1 }).seasonLabel.toLowerCase()));
+  }
+  return { level, game, rows, catalogue, goalMonths, lessonMonths, seen, result: levelResult(game, level) };
+}
+
+/** Affiche la conduite de carrière : tableau par saison, objectifs, étoiles, leçons. */
+export function printCareer(levelId, dt, quiet) {
+  const run = careerRun({ levelId, dt });
+  const { level, game, result } = run;
+  console.log(`\n=== Carrière : ${level.title} (${level.id}, graine ${level.seed}, ${level.cols} × ${level.rows}, ${level.years} ans, ${level.money} $) ===`);
+  console.log(`Vallée vierge au départ : ${run.rows[0].buildings} bâtiment (la mairie), ${run.catalogue} entrées au catalogue (${game.unlocked.length} à la fin).`);
+  if (!quiet) printTable(run.rows);
+  console.log('Objectifs :');
+  for (const g of result.goals) {
+    const when = run.goalMonths[g.id];
+    console.log(`- ${g.done ? '✔' : '✘'} ${g.label} : ${g.text}${when === undefined ? '' : ` (atteint au mois ${when})`}`);
+  }
+  console.log(`Étoiles : ${result.stars} / ${result.details.length}`);
+  for (const d of result.details) console.log(`- ${d.done ? '★' : '☆'} ${d.label} (${d.text})`);
+  console.log(`Score : ${result.score} (nature ${result.nature} × prospérité ${result.prosperity} / 100) ; mois d'exode : ${result.exodus}.`);
+  if (level.tutorial) {
+    console.log(`Tutoriel « ${level.tutorial} » : à quel mois chaque leçon serait satisfaite`);
+    for (const lesson of lessonsOf(level.tutorial)) {
+      const when = run.lessonMonths[lesson.id];
+      console.log(`- ${when === undefined ? '…' : `mois ${String(when).padStart(2)}`} · ${lesson.title}`);
+    }
+  }
+  const missing = result.goals.filter((g) => !g.done);
+  if (missing.length > 0) console.log(`PROBLÈME : ${missing.length} objectif(s) hors de portée d'une conduite raisonnable : ${missing.map((g) => g.label).join(', ')}.`);
+  else console.log('OK : une conduite raisonnable atteint tous les objectifs du niveau dans les temps.');
+  return run;
+}
+
 const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage : node tools/simulate.js [graine] [--months 48] [--dt 0.1] [--quiet]');
+    console.log('Usage : node tools/simulate.js [graine] [--months 48] [--dt 0.1] [--quiet] [--career] [--level vallee-1]');
+    process.exit(0);
+  }
+  if (opts.career) {
+    printCareer(opts.level, opts.dt, opts.quiet);
     process.exit(0);
   }
   const results = simulate(opts);
@@ -298,6 +531,7 @@ if (isMain) {
     const alerts = Object.entries(r.game.eco.alerts).filter(([, v]) => v > 0);
     if (alerts.length > 0) console.log(`Alertes en cours : ${alerts.map(([k, v]) => `${k} depuis ${v} mois`).join(', ')}.`);
   }
+  printCareer('vallee-1', opts.dt, opts.quiet);
   console.log('\n=== Verdict ===');
   for (const n of verdicts(results, opts.months)) console.log(`- ${n}`);
 }
