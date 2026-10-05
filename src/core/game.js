@@ -7,7 +7,14 @@
 //
 // Événements rendus par `advance`, `monthTick`, `place`, `demolish` : { type, month, text, x?, y? } avec
 // type ∈ month | season | year | evolve | arrivals | departures | broke | placed | demolished | unlock | info
-// (`unlock` porte `tileId` ; `evolve` porte `level` ; `placed` porte `tileId` et `cost`).
+// | species | eco-alert
+// (`unlock` porte `tileId` ; `evolve` porte `level` ; `placed` porte `tileId` et `cost` ; `species` porte
+// `key` (identifiant d'espèce), `present` et `layer` ; `eco-alert` porte `key` (smog | algae | flood | heat)
+// et `layer` (air | water | fauna) : l'interface centre la carte sur (x, y) et active le bon calque).
+//
+// L'écologie (src/core/ecology.js) est le seul état avancé **sur place** : `game.eco` est le même objet
+// d'un mois à l'autre (contrat docs/ARCHITECTURE.md §10.1, pour ne rien allouer par tick). Les copies
+// (annulation, sauvegarde) en font une copie profonde.
 //
 // Repères d'économie (§6.4) : les recettes et l'entretien du catalogue sont des montants par saison,
 // encaissés par tiers chaque mois ; un quartier rapporte INCOME_PER_RESIDENT $ par habitant présent et
@@ -18,7 +25,11 @@ import { generateWorld, centerOf } from './worldgen.js';
 import {
   EDGE, rebuildRoads, connectTile, applyPath, computeTraffic, faceTowardRoad, countEdges, networkConnected,
 } from './roads.js';
-import { hashSeed } from './rng.js';
+import { hashSeed, createRng } from './rng.js';
+import {
+  createEcology, cloneEcology, serializeEcology, reviveEcology, syncEcology, stepEcology, describeEcology,
+  cityAir, healthOf, tourismOf, airHappinessPenalty, fieldYieldOf, speciesSummary, speciesCount,
+} from './ecology.js';
 import { calendar, isSeasonEnd, isYearEnd, MONTH_LABELS } from './calendar.js';
 import { TILE_BY_ID, FAMILIES, isBuiltTile, isUrbanFamily, residentsOfTile, jobsOfTile } from '../data/tiles.js';
 import { TERRAINS } from '../data/terrain.js';
@@ -29,11 +40,21 @@ import {
   BASE_HAPPINESS, SHORTAGE_PENALTY, UNEMPLOYMENT_RATIO, UNEMPLOYMENT_PENALTY, OVERSTAFFED_INCOME_FACTOR,
   ADJACENCY, EVOLUTION, START_UNLOCKED, UNLOCKS,
   NATURE_NATIVE_WEIGHT, NATURE_GREEN_WEIGHT, NATURE_GREEN_TARGET, GREEN_TERRAINS, GREEN_BUILDINGS, LOG_LIMIT,
+  ECO_EXODUS_AIR, ECO_EXODUS_HEALTH, ECO_EXODUS_RATE, ECO_TOURISM,
 } from '../data/balance.js';
 
 export { calendar } from './calendar.js';
+export { speciesSummary } from './ecology.js';
 
-export const GAME_VERSION = 1;
+/** Version du format de sauvegarde (2 : l'écologie de l'étape 4). */
+export const GAME_VERSION = 2;
+/** Versions relues par `deserialize` (la 1 est migrée : l'écologie est recalculée de zéro). */
+export const SAVE_VERSIONS = Object.freeze([1, 2]);
+
+/** Types de bâtiments dont les recettes profitent du tourisme (§5.5). */
+const TOURISM_TYPES = Object.freeze(['shop', 'market']);
+/** Tuiles dont le rendement suit la fertilité du sol et la pollinisation (§5.4). */
+const FIELD_TYPES = Object.freeze(['field', 'orchard']);
 
 const SEASON_END_LABELS = Object.freeze(['Le printemps s’achève', 'L’été s’achève', 'L’automne s’achève', 'L’hiver s’achève']);
 const FAMILY_LABEL = Object.freeze(Object.fromEntries(FAMILIES.map((f) => [f.id, f.label])));
@@ -144,9 +165,13 @@ export function penaltiesOf(stats) {
   return stats.shortages.length * SHORTAGE_PENALTY + (stats.unemployment ? UNEMPLOYMENT_PENALTY : 0);
 }
 
-/** Bonheur local d'un quartier (0..100) : base + adjacences − malus communs. */
-export function localHappiness(world, x, y, penalties) {
-  return clamp(Math.round(BASE_HAPPINESS + adjacencyOf(world, x, y).total - penalties), 0, 100);
+/**
+ * Bonheur local d'un quartier (0..100) : base + adjacences − malus communs − l'air (§5.1 : 1 point par
+ * tranche de 10 au-delà de 40, quand l'écologie est fournie).
+ */
+export function localHappiness(world, x, y, penalties, eco = null) {
+  const air = eco ? airHappinessPenalty(eco.air[index(world, x, y)]) : 0;
+  return clamp(Math.round(BASE_HAPPINESS + adjacencyOf(world, x, y).total - penalties - air), 0, 100);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -167,7 +192,11 @@ function countGreen(world) {
   return n;
 }
 
-/** Nature (0..100) = 60 % de nature native conservée + 40 % de cases vertes (par rapport à une cible de 30 % de la carte). */
+/**
+ * Nature (0..100) de l'étape 3, conservée pour la migration des sauvegardes de version 1 et comme recours
+ * quand une partie n'a pas d'écologie : 60 % de nature native conservée + 40 % de cases vertes (cible
+ * 30 % de la carte). Le vrai score est `game.eco.scores.nature` (§7.1).
+ */
 export function computeNature(world, natureBaseline) {
   const conserved = natureBaseline > 0 ? clamp(countNativeNature(world) / natureBaseline, 0, 1) : 1;
   const green = clamp(countGreen(world) / Math.max(1, NATURE_GREEN_TARGET * world.tiles.length), 0, 1);
@@ -184,6 +213,7 @@ export function computeNature(world, natureBaseline) {
  */
 export function computeStats(game) {
   const { world } = game;
+  const eco = game.eco || null;
   let capacity = 0;
   let jobs = 0;
   let buildings = 0;
@@ -192,6 +222,7 @@ export function computeStats(game) {
   const otherNeed = { energy: 0, water: 0, food: 0 };
   let buildingUpkeep = 0;
   let activityIncome = 0;
+  let shopIncome = 0;
   let otherIncome = 0;
   const houses = [];
   for (let y = 0; y < world.rows; y++) {
@@ -204,13 +235,16 @@ export function computeStats(game) {
       const level = t.building.level || 1;
       capacity += residentsOfTile(t);
       jobs += jobsOfTile(t);
-      for (const k of Object.keys(have)) have[k] += def.produce[k] || 0;
+      // Champs et vergers : le rendement suit la fertilité et la pollinisation (§5.4).
+      const factor = eco && FIELD_TYPES.includes(def.id) ? fieldYieldOf(eco, world, index(world, x, y)) : 1;
+      for (const k of Object.keys(have)) have[k] += (def.produce[k] || 0) * factor;
       const need = def.family === 'habitat' ? houseNeed : otherNeed;
       for (const k of Object.keys(need)) need[k] += def.consume[k] || 0;
       buildingUpkeep += upkeepOf(def, level);
       if (def.family === 'habitat') houses.push({ x, y });
+      else if (TOURISM_TYPES.includes(def.id)) shopIncome += incomeOf(def, level);
       else if (def.family === 'activity') activityIncome += incomeOf(def, level);
-      else otherIncome += incomeOf(def, level);
+      else otherIncome += incomeOf(def, level) * factor;
     }
   }
   const population = Math.max(0, Math.min(game.population || 0, capacity));
@@ -219,8 +253,9 @@ export function computeStats(game) {
   const shortages = [];
   for (const k of Object.keys(have)) {
     const need = round1(houseNeed[k] * occupancy + otherNeed[k]);
-    resources[k] = { need, have: have[k] };
-    if (need > have[k] + 1e-9) shortages.push(k);
+    const stock = round1(have[k]);
+    resources[k] = { need, have: stock };
+    if (need > stock + 1e-9) shortages.push(k);
   }
   const unemployment = population > jobs * UNEMPLOYMENT_RATIO;
   const penalties = shortages.length * SHORTAGE_PENALTY + (unemployment ? UNEMPLOYMENT_PENALTY : 0);
@@ -229,19 +264,28 @@ export function computeStats(game) {
     happiness = clamp(BASE_HAPPINESS - penalties, 0, 100);
   } else {
     let sum = 0;
-    for (const h of houses) sum += localHappiness(world, h.x, h.y, penalties);
+    for (const h of houses) sum += localHappiness(world, h.x, h.y, penalties, eco);
     happiness = Math.round(sum / houses.length);
   }
   const streets = countEdges(world).total;
   const activityFactor = jobs > population ? OVERSTAFFED_INCOME_FACTOR : 1;
-  const seasonIncome = Math.round(INCOME_PER_RESIDENT * population + activityIncome * activityFactor + otherIncome);
+  // Tourisme (§5.5) : les recettes des commerces sont multipliées par 1 + tourisme/100.
+  const tourism = eco ? tourismOf(eco, world) : 0;
+  const seasonIncome = Math.round(
+    INCOME_PER_RESIDENT * population
+    + (activityIncome + shopIncome * (1 + tourism / 100)) * activityFactor
+    + otherIncome,
+  );
   const seasonUpkeep = buildingUpkeep + STREET_UPKEEP * streets;
   return {
     population,
     capacity,
     jobs,
     happiness,
-    nature: computeNature(world, game.natureBaseline || 0),
+    nature: eco ? eco.scores.nature : computeNature(world, game.natureBaseline || 0),
+    health: eco ? healthOf(eco, world) : 100,
+    tourism,
+    species: eco ? speciesCount(eco) : 0,
     energy: resources.energy,
     water: resources.water,
     food: resources.food,
@@ -310,6 +354,7 @@ export function createGame({ seed = 1, cols, rows, starterTown = true, money = S
     version: GAME_VERSION,
     seed,
     world,
+    eco: createEcology(world),
     clock: 0,
     month: 0,
     speed: 1,
@@ -370,7 +415,7 @@ function evolveText(def, level) {
 }
 
 /** Conditions de la prochaine évolution d'une case : [{ label, met }], ou [] si elle n'évolue plus. */
-function evolutionConditions(world, x, y, penalties) {
+function evolutionConditions(world, x, y, penalties, eco = null) {
   const t = tileAt(world, x, y);
   if (!t || !t.building) return { nextLevel: null, conditions: [] };
   const def = TILE_BY_ID[t.building.type];
@@ -380,7 +425,7 @@ function evolutionConditions(world, x, y, penalties) {
   const rule = rules[nextLevel];
   const conditions = [];
   if (Number.isFinite(rule.happiness)) {
-    conditions.push({ label: `Bonheur local ≥ ${rule.happiness}`, met: localHappiness(world, x, y, penalties) >= rule.happiness });
+    conditions.push({ label: `Bonheur local ≥ ${rule.happiness}`, met: localHappiness(world, x, y, penalties, eco) >= rule.happiness });
   }
   for (const req of rule.requires) {
     conditions.push({ label: req.label, met: countSources(world, x, y, req) >= (req.count || 1) });
@@ -397,23 +442,42 @@ function evolutionConditions(world, x, y, penalties) {
 export function monthTick(game) {
   const month = game.month;
   const cal = calendar(game);
-  const stats = game.stats || computeStats(game);
   const events = [];
+
+  // 0. L'écologie d'abord (§10.2) : les statistiques du mois lisent l'air, l'eau, la faune et les sols
+  // qui viennent d'être recalculés. `game.eco` est avancé sur place et rendu tel quel.
+  const eco = game.eco || null;
+  const ecoEvents = [];
+  if (eco) {
+    const pass = stepEcology(eco, game.world, { month, season: cal.season, rng: createRng(game.seed, `eco/${month}`) });
+    for (const e of pass.events) ecoEvents.push({ ...e, month });
+  }
+  const stats = computeStats({ ...game, eco });
 
   // 1. La caisse.
   const net = stats.income - stats.upkeep;
   const money = game.money + net;
   events.push(event('month', month, `${capitalize(cal.monthLabel)} : ${signed(net)} $ (recettes ${stats.income} $, entretien ${stats.upkeep} $).`));
+  for (const e of ecoEvents) events.push(e);
 
-  // 2. Les habitants.
+  // 2. Les habitants : exode par lassitude, puis exode écologique (§7.3), sinon arrivées.
   let population = Math.min(game.population, stats.capacity);
   const unhappy = stats.happiness < HAPPINESS_EXODUS ? game.streaks.unhappy + 1 : 0;
+  const cityAirMean = eco ? cityAir(eco, game.world).mean : 0;
+  const ecoExodus = Boolean(eco) && (cityAirMean > ECO_EXODUS_AIR || stats.health < ECO_EXODUS_HEALTH);
   if (unhappy >= EXODUS_MONTHS && population > 0) {
     const departures = Math.min(population, Math.max(1, Math.round(population * EXODUS_RATE)));
     population -= departures;
     events.push(event('departures', month, departures === 1
       ? 'Un habitant quitte la vallée, lassé d’attendre mieux.'
       : `${departures} habitants quittent la vallée, lassés d’attendre mieux.`));
+  } else if (ecoExodus && population > 0) {
+    const departures = Math.min(population, Math.max(1, Math.round(population * ECO_EXODUS_RATE)));
+    population -= departures;
+    const why = cityAirMean > ECO_EXODUS_AIR ? 'l’air est devenu irrespirable' : 'la santé se dégrade';
+    events.push(event('departures', month, departures === 1
+      ? `Un habitant s’en va : ${why}.`
+      : `${departures} habitants s’en vont : ${why}.`));
   } else if (stats.happiness >= HAPPINESS_ARRIVALS && population < stats.capacity) {
     const gap = stats.capacity - population;
     const arrivals = Math.min(gap, Math.max(ARRIVAL_MIN, Math.round(gap * ARRIVAL_RATE)));
@@ -423,7 +487,7 @@ export function monthTick(game) {
       : `${arrivals} nouveaux habitants s’installent.`));
   }
 
-  let next = { ...game, money, population, month: month + 1 };
+  let next = { ...game, eco, money, population, month: month + 1 };
   let world = game.world;
   let unlocked = game.unlocked;
 
@@ -434,7 +498,7 @@ export function monthTick(game) {
     const evolutions = [];
     for (let y = 0; y < world.rows; y++) {
       for (let x = 0; x < world.cols; x++) {
-        const { nextLevel, conditions } = evolutionConditions(world, x, y, penalties);
+        const { nextLevel, conditions } = evolutionConditions(world, x, y, penalties, eco);
         if (nextLevel && conditions.every((c) => c.met)) evolutions.push({ x, y, level: nextLevel });
       }
     }
@@ -456,6 +520,7 @@ export function monthTick(game) {
     }
   }
 
+  if (world !== game.world && eco) syncEcology(eco, world);
   next = withStats({ ...next, world, unlocked });
 
   if (isSeasonEnd(month)) {
@@ -568,8 +633,11 @@ export function place(game, x, y, tileId, nowSeconds = Date.now() / 1000) {
 
   const events = [event('placed', game.month, placedText(def, check.cost), { x, y, tileId, cost: check.cost })];
   if (check.road.bridge > 0) events.push(event('info', game.month, 'Un pont enjambe la rivière.', { x, y }));
+  // L'écologie suit le nouveau monde : parcelles recalculées, fertilité d'un champ neuf initialisée.
+  const eco = game.eco ? syncEcology(game.eco, world) : null;
   const next = withStats({
     ...game,
+    eco,
     world,
     money: game.money - check.cost,
     undo: { game: snapshotOf(game), until: nowSeconds + UNDO_SECONDS, cost: check.cost, x, y, month: game.month },
@@ -668,7 +736,8 @@ export function demolish(game, x, y) {
 
   const label = def ? def.label : tile.building.type;
   const events = [event('demolished', game.month, `${label} : démolition, la case redevient de l’herbe (${DEMOLISH_COST} $).`, { x, y, cost: DEMOLISH_COST })];
-  const next = withStats({ ...game, world, money: game.money - DEMOLISH_COST, undo: null });
+  const eco = game.eco ? syncEcology(game.eco, world) : null;
+  const next = withStats({ ...game, eco, world, money: game.money - DEMOLISH_COST, undo: null });
   next.log = appendLog(game.log, events);
   return { ok: true, game: next, cost: DEMOLISH_COST, events };
 }
@@ -685,9 +754,11 @@ export function undoLast(game, nowSeconds = Date.now() / 1000) {
   const u = game.undo;
   if (!u || !u.game || nowSeconds > u.until) return null;
   const snap = u.game;
+  const world = cloneWorld(snap.world);
   const restored = withStats({
     ...game,
-    world: cloneWorld(snap.world),
+    world,
+    eco: snap.eco ? syncEcology(cloneEcology(snap.eco), world) : createEcology(world),
     unlocked: Array.from(snap.unlocked),
     natureBaseline: snap.natureBaseline,
     money: game.money + u.cost,
@@ -719,7 +790,8 @@ export function cycleSpeed(game) {
  *   conditions: Array<{ label, met }>, nextLevel: number | null,
  *   yields: { income, upkeep, jobs, capacity, residents, energy, water, food } (recette et entretien par saison,
  *     comme le catalogue ; energy / water / food : bilan net de la tuile, + produit, − consommé),
- *   happiness: number | null (bonheur local d'un quartier), adjacency: Array<{ id, label, value }> } | null}
+ *   happiness: number | null (bonheur local d'un quartier), adjacency: Array<{ id, label, value }>,
+ *   eco: { air, water, fauna, soil, habitat, patch, fieldMode, species: string[] } | null } | null}
  */
 export function describeTile(game, x, y) {
   const { world } = game;
@@ -740,6 +812,7 @@ export function describeTile(game, x, y) {
     yields: { income: 0, upkeep: 0, jobs: 0, capacity: 0, residents: 0, energy: 0, water: 0, food: 0 },
     happiness: null,
     adjacency: [],
+    eco: game.eco ? describeEcology(game.eco, world, x, y) : null,
   };
   if (!tile.building) return out;
   const def = TILE_BY_ID[tile.building.type];
@@ -761,8 +834,10 @@ export function describeTile(game, x, y) {
     yaw: tile.building.yaw,
   };
   const capacity = residentsOfTile(tile);
+  // Champs et vergers : la fiche montre le rendement réel (fertilité × pollinisation × haies).
+  const factor = game.eco && FIELD_TYPES.includes(def.id) ? fieldYieldOf(game.eco, world, index(world, x, y)) : 1;
   out.yields = {
-    income: incomeOf(def, level),
+    income: Math.round(incomeOf(def, level) * factor),
     upkeep: upkeepOf(def, level),
     jobs: jobsOfTile(tile),
     capacity,
@@ -770,14 +845,14 @@ export function describeTile(game, x, y) {
     // Bilan net de la tuile par ressource (+ produit, − consommé à pleine capacité).
     energy: (def.produce.energy || 0) - (def.consume.energy || 0),
     water: (def.produce.water || 0) - (def.consume.water || 0),
-    food: (def.produce.food || 0) - (def.consume.food || 0),
+    food: round1((def.produce.food || 0) * factor) - (def.consume.food || 0),
   };
   const penalties = penaltiesOf(stats);
   if (def.family === 'habitat') {
-    out.happiness = localHappiness(world, x, y, penalties);
+    out.happiness = localHappiness(world, x, y, penalties, game.eco);
     out.adjacency = adjacencyOf(world, x, y).details;
   }
-  const evo = evolutionConditions(world, x, y, penalties);
+  const evo = evolutionConditions(world, x, y, penalties, game.eco);
   out.nextLevel = evo.nextLevel;
   out.conditions = evo.conditions;
   return out;
@@ -786,7 +861,10 @@ export function describeTile(game, x, y) {
 // ---------------------------------------------------------------------------------------------
 // Sauvegarde.
 
-/** Objet JSON de la partie (tableaux typés → tableaux ; l'annulation, liée aux secondes réelles, n'est pas sauvée). */
+/**
+ * Objet JSON de la partie (tableaux typés → tableaux ; l'annulation, liée aux secondes réelles, n'est pas
+ * sauvée). Version 2 : l'écologie (`eco`) voyage avec, ses parcelles étant recalculées à la relecture.
+ */
 export function serialize(game) {
   const w = game.world;
   return {
@@ -804,6 +882,7 @@ export function serialize(game) {
     undo: null,
     stats: structuredClone(game.stats),
     demand: structuredClone(game.demand),
+    eco: game.eco ? serializeEcology(game.eco) : null,
     world: {
       ...w,
       tiles: w.tiles.map(cloneTile),
@@ -813,11 +892,15 @@ export function serialize(game) {
   };
 }
 
-/** Relit une sauvegarde (`serialize`). Version inconnue ou contenu incohérent → erreur explicite. */
+/**
+ * Relit une sauvegarde (`serialize`). Version inconnue ou contenu incohérent → erreur explicite.
+ * Une sauvegarde de version 1 (avant l'écologie) est migrée : l'écologie est recalculée de zéro à partir
+ * du monde relu, et la jauge Nature cesse d'être la formule provisoire de l'étape 3.
+ */
 export function deserialize(obj) {
   if (!obj || typeof obj !== 'object') throw new Error('Sauvegarde illisible : ce n’est pas un objet.');
-  if (obj.version !== GAME_VERSION) {
-    throw new Error(`Sauvegarde d’une version inconnue (${obj.version}) : seule la version ${GAME_VERSION} est lisible.`);
+  if (!SAVE_VERSIONS.includes(obj.version)) {
+    throw new Error(`Sauvegarde d’une version inconnue (${obj.version}) : seules les versions ${SAVE_VERSIONS.join(' et ')} sont lisibles.`);
   }
   const w = obj.world;
   if (!w || !Number.isInteger(w.cols) || !Number.isInteger(w.rows) || !Array.isArray(w.tiles)) {
@@ -841,10 +924,13 @@ export function deserialize(obj) {
       : createTraffic(w.cols, w.rows),
   };
   if (!w.traffic) world = computeTraffic(world);
+  // Version 1 : aucune écologie sauvée, tout est recalculé (migration).
+  const eco = obj.version >= 2 && obj.eco ? reviveEcology(obj.eco, world) : createEcology(world);
   const game = {
     version: GAME_VERSION,
     seed: obj.seed ?? world.seed ?? 1,
     world,
+    eco,
     clock: Number.isFinite(obj.clock) ? obj.clock : 0,
     month: Number.isInteger(obj.month) && obj.month >= 0 ? obj.month : 0,
     speed: SPEEDS.includes(obj.speed) ? obj.speed : 1,

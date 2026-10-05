@@ -17,6 +17,7 @@
 // « ?stats=1 » sont lus dans l'adresse. Toute erreur de démarrage remonte à window.__bootFail.
 
 import { createGame, advance, canPlace, place, demolish, undoLast, setSpeed, cycleSpeed, describeTile as describeGameTile } from './core/game.js';
+import { speciesSummary } from './core/ecology.js';
 import { calendar } from './core/calendar.js';
 import { SPEEDS, UNLOCKS } from './data/balance.js';
 import { createActors, updateActors } from './core/actors.js';
@@ -35,6 +36,9 @@ import { createSheets, createBackStack } from './ui/sheets.js';
 import { createCatalog } from './ui/catalog.js';
 import { createPlacement } from './ui/placement.js';
 import { createTileSheet } from './ui/sheet-tile.js';
+import { createLayers } from './ui/layers.js';
+import { createNatureSheet } from './ui/nature-sheet.js';
+import { createSpeciesBook } from './ui/species-book.js';
 import { createStats, statsWanted } from './ui/stats.js';
 import { createGestures } from './ui/gestures.js';
 import { $ } from './ui/dom.js';
@@ -49,6 +53,8 @@ const INTERACT_AFTER_MS = 300; // on reste à 60 i/s un instant après le dernie
 const STATS_EVERY_MS = 500;
 const HUD_EVERY_MS = 250;
 const MAX_FRAME_DT = 0.1; // s : au-delà (onglet revenu au premier plan), le temps de jeu ne rattrape pas
+/** Durée du cadre jaune posé sur la case montrée par un bouton « Voir » (alerte, espèce). */
+const FOCUS_HIGHLIGHT_MS = 6000;
 
 const boot = {
   progress: (v) => { try { window.__bootProgress?.(v); } catch { /* chargeur absent */ } },
@@ -133,14 +139,46 @@ export function gaugesOf(game) {
   };
 }
 
+/** Titres des alertes d'écologie (clés de `stepEcology`, docs/ARCHITECTURE.md §10.1). */
+export const ECO_ALERT_TITLES = Object.freeze({
+  smog: 'Smog sur les quartiers',
+  algae: 'Le lac se couvre d’algues',
+  flood: 'La rivière peut déborder',
+  heat: 'Un quartier étouffe de chaleur',
+});
+
+/** Titre d'une alerte d'écologie en clair (clé inconnue : titre générique, jamais d'identifiant brut). */
+export function ecoAlertTitle(key) {
+  return ECO_ALERT_TITLES[key] || 'La vallée a besoin d’attention';
+}
+
+/** Cible du bouton « Voir » d'un événement : { x, y, layer } ou null (rien à montrer). */
+export function seeTargetOf(ev, layer = null) {
+  if (!ev || typeof ev !== 'object') return null;
+  const x = Number(ev.x);
+  const y = Number(ev.y);
+  const kind = ev.layer || layer || null;
+  const placed = Number.isFinite(x) && Number.isFinite(y);
+  if (!placed && !kind) return null;
+  return { x: placed ? Math.trunc(x) : null, y: placed ? Math.trunc(y) : null, layer: kind };
+}
+
 /**
- * Présentation d'un événement du cœur pour l'interface : { channel: 'banner' | 'toast' | null, kind, title, text }.
- * `season` et `year` passent en bandeau (bouton OK) ; `evolve`, `arrivals`, `unlock`… en message ; `month` : rien.
+ * Présentation d'un événement du cœur pour l'interface :
+ * { channel: 'banner' | 'toast' | null, kind, title, text, see: { x, y, layer } | null, seeLabel }.
+ * `season`, `year` et les alertes d'écologie passent en bandeau (bouton « Voir » puis OK) ; `evolve`,
+ * `arrivals`, `species`, `unlock`… en message ; `month` : rien.
  */
 export function eventPresentation(ev, cal = null) {
   if (!ev || typeof ev !== 'object') return { channel: null };
   const text = typeof ev.text === 'string' ? ev.text : '';
   switch (ev.type) {
+    case 'eco-alert':
+      return { channel: 'banner', kind: 'warn', title: ev.title || ecoAlertTitle(ev.key), text: text || 'La vallée a besoin d’attention.', see: seeTargetOf(ev), seeLabel: 'Voir' };
+    case 'species':
+      return ev.present
+        ? { channel: 'toast', kind: 'success', title: ev.title || 'Une espèce s’installe', text: text || 'Une espèce vient de s’installer dans la vallée.', see: seeTargetOf(ev, 'fauna'), seeLabel: 'Voir' }
+        : { channel: 'toast', kind: 'warn', title: null, text: text || 'Une espèce a quitté la vallée.', see: null };
     case 'season': return { channel: 'banner', kind: 'season', title: ev.title || `Bilan de saison${cal ? ` · an ${cal.year}` : ''}`, text: text || 'La saison s’achève.' };
     case 'year': return { channel: 'banner', kind: 'year', title: ev.title || `Bilan de l’an ${cal ? Math.max(1, cal.year - 1) : ''}`.trim(), text: text || 'Une année de plus pour la ville.' };
     case 'broke': return { channel: 'banner', kind: 'error', title: ev.title || 'La ville est en faillite', text: text || 'Les caisses sont vides depuis deux saisons.' };
@@ -180,6 +218,7 @@ async function main() {
       vibrate,
       onSpeed: (sp) => { applyGame(setSpeed(game, sp), { silent: true }); poke(); },
       onTab: (id) => { onTab(id); updateInsets(); poke(); },
+      onGauge: (id) => { onGauge(id); updateInsets(); poke(); },
     },
   );
   boot.progress(0.15);
@@ -298,6 +337,7 @@ async function main() {
     game = next;
     if (game.world !== prevWorld) {
       r.setWorld(game.world);
+      pushEco();
       poke();
     }
     syncHud();
@@ -336,17 +376,57 @@ async function main() {
     onDemolish: (x, y) => { app.placement.demolishAt(x, y); },
   });
 
+  // ── 3 ter. Écologie : calques, fiche Nature, carnet des espèces (docs/ARCHITECTURE.md §10.4) ───
+  app.layers = createLayers({
+    sheets: app.sheets, renderer: r, getGame, pill: $('#layer-pill'), vibrate, toasts: app.toasts,
+    onChange: () => { syncTabs(); poke(); },
+  });
+  const ecoOps = { speciesSummary };
+  app.speciesBook = createSpeciesBook({
+    sheets: app.sheets, getGame, ops: ecoOps, layers: app.layers, renderer: r, vibrate,
+    focus: (cell) => focusEco(cell),
+    onBack: () => app.natureSheet.open(),
+  });
+  app.natureSheet = createNatureSheet({
+    sheets: app.sheets, getGame, ops: ecoOps, layers: app.layers, renderer: r, vibrate,
+    focus: (cell) => focusEco(cell),
+    book: app.speciesBook,
+  });
+
+  /**
+   * Pousse l'écologie du mois au rendu (brume d'air, teinte de l'eau, icônes d'espèces), rafraîchit le
+   * calque allumé et les feuilles ouvertes. Chaque appel au rendu est facultatif : l'interface marche
+   * même si l'étape écologie du rendu n'est pas encore en place.
+   */
+  function pushEco() {
+    const eco = game.eco;
+    if (!eco) return;
+    try { r.setEcology?.({ air: eco.air, water: eco.water }); } catch (err) { console.warn('setEcology :', err); }
+    try { r.setSpecies?.(eco.species, eco.patches); } catch (err) { console.warn('setSpecies :', err); }
+    app.layers.refresh();
+    app.natureSheet.refresh();
+    app.speciesBook.refresh();
+  }
+  pushEco();
+
   /** Onglet allumé : la feuille ouverte, sinon l'outil Démolir, sinon la famille de la tuile en main. */
   function syncTabs() {
     const sheet = app.sheets.current;
     let active = null;
-    if (sheet && sheet !== 'tile') active = sheet;
+    if (sheet && sheet !== 'tile') active = sheet === 'nature' || sheet === 'species' ? null : sheet;
+    else if (app.layers?.kind && app.layers.kind !== 'none') active = 'layers';
     else if (app.placement.tool === 'demolish') active = 'demolish';
     else if (app.placement.hand) active = TILE_BY_ID[app.placement.hand]?.family || null;
     app.hud.setActiveTab(active);
   }
 
   function onTab(id) {
+    if (id === 'layers') {
+      if (app.placement.tool === 'demolish') app.placement.drop();
+      app.layers.open();
+      syncTabs();
+      return;
+    }
     if (id === 'demolish') {
       if (app.placement.tool === 'demolish') { app.placement.drop(); return; }
       app.sheets.close('tab');
@@ -358,6 +438,15 @@ async function main() {
     if (app.placement.tool === 'demolish') app.placement.drop();
     app.catalog.open(id);
     syncTabs();
+  }
+
+  /** Toucher une jauge de la barre du haut : la jauge Nature ouvre sa fiche détaillée. */
+  function onGauge(id) {
+    if (id === 'nature') {
+      if (app.placement.tool === 'demolish') app.placement.drop();
+      app.natureSheet.open();
+      syncTabs();
+    }
   }
 
   /** Bouton « retour » / Échap : ferme la couche du dessus (feuille, puis tuile en main ou outil). */
@@ -388,6 +477,26 @@ async function main() {
     if (viewMode === 'home') fitView(); else homeView();
   }
   let viewMode = 'home';
+  let focusTimer = 0;
+
+  /**
+   * Bouton « Voir » d'une alerte ou d'une espèce : centre la carte sur la case, allume le calque
+   * concerné et pose un cadre jaune quelques secondes pour que l'œil trouve l'endroit.
+   */
+  function focusEco({ x, y, layer } = {}) {
+    if (layer) app.layers.set(layer);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      r.camera.lookAt(x, y, GAME_ZOOM, { insets: insetsNow() });
+      viewMode = 'home';
+      try { r.setHighlight([{ x, y }]); } catch { /* rien */ }
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => {
+        try { if (!app.tileSheet.isOpen()) r.setHighlight(null); } catch { /* rien */ }
+        r.invalidate?.();
+      }, FOCUS_HIGHLIGHT_MS);
+    }
+    poke();
+  }
 
   function tapAt(p) {
     const hit = r.pick(p.clientX, p.clientY);
@@ -433,12 +542,21 @@ async function main() {
     const cal = calendar(game);
     for (const ev of events) {
       const p = eventPresentation(ev, cal);
+      const target = p.see || null;
+      const onSee = target ? () => focusEco(target) : null;
+      const key = ev.key ? `${ev.type}:${ev.key}` : ev.type;
       if (p.channel === 'banner') {
-        app.hud.showBanner({ kind: p.kind, title: p.title, text: p.text, actionLabel: 'OK' });
+        app.hud.showBanner({ kind: p.kind, title: p.title, text: p.text, actionLabel: 'OK', seeLabel: p.seeLabel || 'Voir', onSee });
       } else if (p.channel === 'toast') {
-        app.toasts.show({ key: ev.type, kind: p.kind, title: p.title || undefined, text: p.text, duration: 4000 });
+        app.toasts.show({
+          key, kind: p.kind, title: p.title || undefined, text: p.text,
+          duration: onSee ? 9000 : 4000,
+          actionLabel: p.seeLabel || 'Voir',
+          onClick: onSee || undefined,
+        });
       }
       if (ev.type === 'unlock') app.catalog.refresh();
+      if (ev.type === 'species') app.speciesBook.refresh();
     }
   }
 
@@ -452,6 +570,7 @@ async function main() {
     if (game.world !== before.world) { r.setWorld(game.world); poke(); }
     if (game.month !== before.month) {
       syncHud();
+      pushEco();
       app.catalog.refresh();
       app.placement.refresh();
       if (game.month !== lastSavedMonth) {
@@ -575,6 +694,7 @@ async function main() {
     actors = createActors(game.world, seed);
     r.setWorld(game.world);
     r.setActors(actors);
+    pushEco();
     homeView();
     syncHud();
     lastSavedMonth = game.month;
@@ -594,7 +714,53 @@ async function main() {
     catalog: app.catalog,
     placement: app.placement,
     tileSheet: app.tileSheet,
+    layers: app.layers,
+    natureSheet: app.natureSheet,
+    speciesBook: app.speciesBook,
     storage,
+    /** Allume un calque ('none' le coupe) ; renvoie le calque actif. */
+    setLayer: (kind) => app.layers.set(kind),
+    get layer() { return app.layers.kind; },
+    /** Légende du calque actif : { kind, label, unit, min, max, stops } ou null. */
+    layerInfo: () => app.layers.info(),
+    /**
+     * Écologie du mois, en tableaux ordinaires (sérialisable par Playwright) :
+     * { cols, rows, scores, alerts, air, water, fauna, soil, patches, species }.
+     */
+    eco() {
+      const eco = game.eco;
+      if (!eco) return null;
+      const arr = (v) => (v && typeof v.length === 'number' ? Array.from(v, (n) => Math.round(n * 1000) / 1000) : null);
+      const species = {};
+      for (const [id, sp] of Object.entries(eco.species || {})) {
+        species[id] = { present: !!sp?.present, since: sp?.since ?? null, cells: Array.isArray(sp?.cells) ? [...sp.cells] : [] };
+      }
+      return {
+        cols: game.world.cols,
+        rows: game.world.rows,
+        scores: { ...(eco.scores || {}) },
+        alerts: { ...(eco.alerts || {}) },
+        air: arr(eco.air), water: arr(eco.water), fauna: arr(eco.fauna), soil: arr(eco.soil),
+        patches: Array.isArray(eco.patches) ? eco.patches.map((pa) => ({ id: pa.id, habitat: pa.habitat, size: pa.size ?? (pa.cells || []).length })) : [],
+        species,
+      };
+    },
+    /** Lignes du carnet : [{ id, label, present, since, sinceText, hint }]. */
+    species: () => app.speciesBook.rows(),
+    /** Route des événements du cœur dans l'interface (bandeaux, messages, bouton « Voir ») : outils de test. */
+    emit(events) {
+      presentEvents(Array.isArray(events) ? events : [events]);
+      return true;
+    },
+    /** Débloque une entrée du catalogue et/ou crédite la caisse (outils de test seulement). */
+    grant({ money = 0, unlock = [] } = {}) {
+      const ids = Array.isArray(unlock) ? unlock : [unlock];
+      const unlocked = [...(game.unlocked || [])];
+      for (const id of ids) if (id && !unlocked.includes(id)) unlocked.push(id);
+      applyGame({ ...game, unlocked, money: (game.money || 0) + (Number(money) || 0) }, { silent: true });
+      app.catalog.refresh();
+      return { money: game.money, unlocked: [...game.unlocked] };
+    },
     /** { calls, triangles, frameMs, fps, ghost } : valeurs fraîches du rendu + i/s de la dernière fenêtre. */
     stats: () => ({ ...app.stats.snapshot(), ...r.stats(), updateMs: updateMs + (r.stats().layersUpdateMs || 0) }),
     get actors() { return actors; },

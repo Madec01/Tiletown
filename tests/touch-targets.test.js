@@ -3,7 +3,8 @@
 // d'onglets ≥ 56 px, les chiffres des jauges ≥ 18 px, le corps ≥ 14 px, les mentions ≥ 12 px, et la page ne
 // déborde pas en largeur. Trois états sont mesurés : la feuille du catalogue ouverte (cartes ≥ 64 px, barres de
 // demande), une tuile en main (pastille + ✕), un fantôme affiché (bandeau + ✓ 56 px + ✕ 48 px) ; plus la fiche
-// d'une case. Mesuré dans Chromium (Playwright, SwiftShader) sur dev.html servi par un petit serveur local ; si
+// d'une case, la feuille des **calques** (quatre grands boutons + Sols + légende + hachures), la **fiche
+// Nature** (quatre sous-scores touchables) et le **carnet des espèces**. Mesuré dans Chromium (Playwright, SwiftShader) sur dev.html servi par un petit serveur local ; si
 // Playwright ou son navigateur manquent, le test est sauté (les vérifications statiques sont dans
 // tests/style.test.js). Les erreurs de console sont aussi relevées : une erreur de page ou d'interface fait
 // échouer le test ; celles du pipeline des modèles 3D (« THREE.… », ressources de assets/models/ absentes)
@@ -68,16 +69,37 @@ function measureInPage(label) {
   const size = (sel) => { const n = document.querySelector(sel); return n && vis(n) ? [n.getBoundingClientRect().width, n.getBoundingClientRect().height] : null; };
   const tabbar = document.querySelector('#tabbar');
   const hud = document.querySelector('#hud');
+  const box = (sel) => [...document.querySelectorAll(sel)].filter(vis).map((n) => [n.getBoundingClientRect().width, n.getBoundingClientRect().height]);
   return {
     label,
+    // Écologie (étape 4) : calques, fiche Nature, carnet des espèces
+    layerBtns: box('.layer-btn'),
+    layerIds: [...document.querySelectorAll('.layer-btn')].filter(vis).map((n) => n.dataset.layer),
+    layerActive: [...document.querySelectorAll('.layer-btn.is-active')].filter(vis).map((n) => n.dataset.layer),
+    // (la barre de la légende porte aria-hidden : elle est décorative, `vis` ne s'y applique pas)
+    legend: (() => {
+      const n = document.querySelector('.layer-legend:not([hidden]) .layer-legend-bar');
+      if (!n || n.getBoundingClientRect().width <= 0) return null;
+      const t = (sel) => { const e = document.querySelector(sel); return e ? e.textContent.trim() : ''; };
+      return { gradient: getComputedStyle(n).backgroundImage, title: t('.layer-legend-title'), min: t('.layer-legend-min'), max: t('.layer-legend-max') };
+    })(),
+    pattern: box('.layer-pattern'),
+    pill: box('#layer-pill:not([hidden]) button'),
+    pillText: (document.querySelector('#layer-pill .layer-pill-text') || {}).textContent || '',
+    ecoRows: box('.eco-row'),
+    ecoKeys: [...document.querySelectorAll('.eco-row')].filter(vis).map((n) => n.dataset.score),
+    speciesCount: [...document.querySelectorAll('.species')].filter(vis).length,
+    speciesSee: box('.species-see'),
+    bookBtn: box('.nature-book'),
+    tileEco: [...document.querySelectorAll('.tile-eco-row')].map((n) => n.dataset.eco),
     targets: targets.length,
     small,
     tabbarH: tabbar ? tabbar.getBoundingClientRect().height : 0,
     hudH: hud ? hud.getBoundingClientRect().height : 0,
     tabs: tabbar ? tabbar.querySelectorAll('.tab').length : 0,
     gaugeValues: fs('.gauge-value'),
-    secondary: fs('.gauge-label, .gauge-delta, .tab-label, .hud-date, .card-price, .demand-value'),
-    body: fs('.toast-text, .sheet-hint, .card-title, .rotate-text, .action-title, .action-sub, .demand-label, .alert-text, .tile-sheet p, .cond-text'),
+    secondary: fs('.gauge-label, .gauge-delta, .tab-label, .hud-date, .card-price, .demand-value, .layer-legend-min, .layer-legend-mid, .layer-legend-max, .tile-eco-label, .tile-eco-word'),
+    body: fs('.toast-text, .sheet-hint, .card-title, .rotate-text, .action-title, .action-sub, .demand-label, .alert-text, .tile-sheet p, .cond-text, .layer-btn-label, .layer-pattern-label, .layer-legend-title, .layer-legend-hint, .nature-total, .eco-label, .book-count, .species-name, .species-note, .tile-eco-species, .layer-pill-text'),
     speed: size('#speed'),
     ok: size('#action .action-ok'),
     x: size('#action .action-x'),
@@ -161,6 +183,25 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
         await page.waitForTimeout(350);
         states.push(await page.evaluate(measureInPage, 'fiche'));
         await page.evaluate(() => window.__tiletown.sheets.close());
+        await page.waitForTimeout(300);
+        // 5. Feuille des calques : quatre grands boutons + Sols, légende, bascule hachures.
+        await page.click('#tabbar .tab--layers').catch(() => {});
+        await page.waitForTimeout(400);
+        await page.click('.layer-btn--air').catch(() => {});
+        await page.waitForTimeout(350);
+        states.push(await page.evaluate(measureInPage, 'calques'));
+        await page.evaluate(() => window.__tiletown.sheets.close());
+        await page.waitForTimeout(350);
+        states.push(await page.evaluate(measureInPage, 'pastille'));
+        // 6. Fiche Nature (jauge Nature) : quatre sous-scores touchables, puis le carnet.
+        await page.click('.gauge--nature').catch(() => {});
+        await page.waitForTimeout(400);
+        states.push(await page.evaluate(measureInPage, 'nature'));
+        await page.click('.nature-book').catch(() => {});
+        await page.waitForTimeout(400);
+        states.push(await page.evaluate(measureInPage, 'carnet'));
+        await page.evaluate(() => { window.__tiletown.sheets.close(); window.__tiletown.setLayer('none'); });
+        await page.waitForTimeout(250);
       }
       await context.close();
 
@@ -204,6 +245,29 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
         }
         const sheet = states.find((st) => st.label === 'fiche');
         assert.ok(sheet && sheet.sheetOpen, `${s.name} : la fiche s'ouvre`);
+        // Calques : cinq boutons (Aucun, Air, Eau, Faune, Sols), tous ≥ 48 px, le choix actif marqué,
+        // la légende affichée (barre dégradée + bornes) et la bascule « Hachures » touchable.
+        const lay = states.find((st) => st.label === 'calques');
+        assert.ok(lay && lay.sheetOpen, `${s.name} : la feuille des calques s'ouvre`);
+        assert.deepEqual(lay.layerIds, ['none', 'air', 'water', 'fauna', 'soil'], `${s.name} : quatre choix + Sols`);
+        assert.ok(lay.layerBtns.length === 5 && lay.layerBtns.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : boutons de calque ≥ 48 px (${JSON.stringify(lay.layerBtns)})`);
+        assert.deepEqual(lay.layerActive, ['air'], `${s.name} : le calque choisi est marqué`);
+        assert.ok(lay.legend && /gradient/.test(lay.legend.gradient) && lay.legend.min && lay.legend.max, `${s.name} : légende du calque (${JSON.stringify(lay.legend)})`);
+        assert.ok(lay.pattern.length === 1 && lay.pattern.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : bascule « Hachures » ≥ 48 px (${JSON.stringify(lay.pattern)})`);
+        // Le calque reste actif après la fermeture : pastille avec son ✕, tous deux ≥ 48 px.
+        const pill = states.find((st) => st.label === 'pastille');
+        assert.ok(pill && !pill.sheetOpen && pill.pill.length === 2 && pill.pill.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : pastille du calque actif (${JSON.stringify(pill && pill.pill)})`);
+        assert.match(pill.pillText, /Air/, `${s.name} : la pastille nomme le calque actif`);
+        // Fiche Nature : quatre sous-scores touchables (chacun ouvre son calque) + bouton « Carnet ».
+        const nat = states.find((st) => st.label === 'nature');
+        assert.ok(nat && nat.sheetOpen, `${s.name} : la fiche Nature s'ouvre`);
+        assert.deepEqual(nat.ecoKeys, ['air', 'water', 'fauna', 'soil'], `${s.name} : quatre sous-scores`);
+        assert.ok(nat.ecoRows.length === 4 && nat.ecoRows.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : sous-scores ≥ 48 px (${JSON.stringify(nat.ecoRows)})`);
+        assert.ok(nat.bookBtn.length === 1 && nat.bookBtn[0][1] >= 48, `${s.name} : bouton « Carnet » ≥ 48 px (${JSON.stringify(nat.bookBtn)})`);
+        // Carnet des espèces : la liste en grand, chaque bouton « Voir » ≥ 48 px.
+        const book = states.find((st) => st.label === 'carnet');
+        assert.ok(book && book.sheetOpen && book.speciesCount >= 1, `${s.name} : le carnet s'ouvre (${book && book.speciesCount} ligne(s))`);
+        assert.ok(book.speciesSee.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : boutons « Voir » du carnet ≥ 48 px (${JSON.stringify(book.speciesSee)})`);
       }
     }
   } finally {

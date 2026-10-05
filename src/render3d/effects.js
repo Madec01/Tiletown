@@ -4,11 +4,16 @@
 // models.js, pivot au moyeu), en rotation continue avec ombre portée. L'eau animée vit dans ground.js
 // (shader) : `ground.update(dt)`.
 //
+// S'y ajoute la BRUME d'air vicié (docs/ARCHITECTURE.md §10.3) : `fx.setAir(values)` pose un voile
+// gris-brun instancié (UNE `InstancedMesh` de plans horizontaux, un appel de dessin, sans ombre) au-dessus
+// des cases dont l'air dépasse 50, de densité proportionnelle à la pollution.
+//
 //   const fx = createEffects(models, { palette });
 //   fx.setWorld(world);            // émetteurs de fumée, ancrages des pales
 //   fx.update(dt, time);           // avant render() ; `time` (s) impose l'horloge, sinon dt s'accumule
 //   fx.setSmokeLevel(0..1);        // intensité de la fumée (plus tard liée à la pollution)
-//   fx.stats() → { smoke, emitters, blades, calls, shadowCalls } ; scene.add(fx.group) ; fx.dispose()
+//   fx.setAir(values | null);      // brume d'air vicié par case (eco.air, 0 à 100) ; null l'efface
+//   fx.stats() → { smoke, emitters, blades, haze, calls, shadowCalls } ; scene.add(fx.group) ; fx.dispose()
 //
 // Les parties pures (vent, émetteurs, cycle de vie d'une bouffée, ancrages des pales) sont exportées et
 // testées sous Node (tests/effects.test.js). `update` n'alloue rien par image.
@@ -19,7 +24,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../data/palette.js';
 import { collectPlacements } from './buildings.js';
 import { familyOf, paintGeometry, mergeParts } from './models.js';
-import { hashUnit, lerp, composeMatrix } from './util.js';
+import { hashUnit, lerp, composeMatrix, composeScaled } from './util.js';
 
 /** Durée de vie d'une bouffée (s). */
 export const SMOKE_LIFE = 3;
@@ -41,6 +46,21 @@ export const BLADE_RPS_JITTER = 0.12;
 
 /** Familles de modèles (préfixes) qui fument. */
 export const SMOKING_FAMILIES = Object.freeze(['factory', 'power-plant']);
+
+/** Brume : seuil d'air (sur 100) à partir duquel un voile apparaît (GAME_DESIGN §5.1). */
+export const HAZE_THRESHOLD = 50;
+/** Hauteur du voile au-dessus du sol (u) : au-dessus des toits courants, sous les tours. */
+export const HAZE_HEIGHT = 1.45;
+/** Côté d'un voile (u) : plus large qu'une case pour que les voiles se fondent entre eux. */
+export const HAZE_SIZE = 1.7;
+/** Opacité d'un voile à air 100 (le plus dense). */
+export const HAZE_OPACITY = 0.3;
+/** Densité en dessous de laquelle on ne dessine rien. */
+export const HAZE_MIN_DENSITY = 0.04;
+/** Plafond d'instances de brume (un seul appel de dessin). */
+export const HAZE_MAX = 1024;
+/** Teinte de la brume : gris-brun. */
+export const HAZE_COLOR = '#8d8073';
 
 /**
  * Sommets des cheminées des modèles connus, dans le repère du modèle (avant l'échelle de pose) : [x, y, z].
@@ -173,6 +193,45 @@ export function smokePuffAt(t, emitter, k, options = {}, out = { color: [0, 0, 0
 }
 
 // ---------------------------------------------------------------------------------------------
+// Brume d'air vicié : parties pures
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Densité du voile pour une valeur d'air : 0 jusqu'au seuil (50 sur 100), puis croît jusqu'à 1 à 100.
+ * `scale` est l'échelle des valeurs (100 par défaut, 1 si l'écologie fournit des valeurs 0 à 1).
+ */
+export function hazeDensity(value, scale = 100) {
+  if (!Number.isFinite(value)) return 0;
+  const v = (value / (scale || 1)) * 100;
+  const t = (v - HAZE_THRESHOLD) / (100 - HAZE_THRESHOLD);
+  return t <= 0 ? 0 : t >= 1 ? 1 : t;
+}
+
+/**
+ * Voiles de brume d'un champ d'air : [{ i, x, y, density }] pour chaque case au-dessus du seuil
+ * (position = centre de la case), triés par densité décroissante puis par index (les plus denses
+ * d'abord : si le plafond coupe, ce sont les pires qui restent visibles). Pur.
+ */
+export function collectHaze(values, cols, rows, options = {}) {
+  if (!values || !values.length || !cols || !rows) return [];
+  const scale = Number.isFinite(options.scale) ? options.scale : (() => {
+    let max = 0;
+    for (let i = 0; i < values.length; i++) if (values[i] > max) max = values[i];
+    return max > 1 ? 100 : 1;
+  })();
+  const min = Number.isFinite(options.minDensity) ? options.minDensity : HAZE_MIN_DENSITY;
+  const out = [];
+  const n = Math.min(values.length, cols * rows);
+  for (let i = 0; i < n; i++) {
+    const density = hazeDensity(values[i], scale);
+    if (density < min) continue;
+    out.push({ i, x: (i % cols) + 0.5, y: Math.floor(i / cols) + 0.5, density });
+  }
+  out.sort((a, b) => b.density - a.density || a.i - b.i);
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Pales : parties pures
 // ---------------------------------------------------------------------------------------------
 
@@ -240,6 +299,61 @@ export function bladeAngle(anchor, t) {
 // Rendu
 // ---------------------------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------------------------
+// Brume : matériau (plans horizontaux translucides, un seul appel de dessin)
+// ---------------------------------------------------------------------------------------------
+
+const HAZE_VERTEX_PARS = /* glsl */`
+uniform float uTime;
+attribute float aDensity;
+attribute float aPhase;
+varying float vDensity;
+varying vec2 vHazeUv;
+`;
+
+/** Dérive très lente du voile et respiration de sa densité (brume vivante, jamais clignotante). */
+const HAZE_VERTEX_BODY = /* glsl */`
+vHazeUv = uv;
+vDensity = aDensity * ( 0.82 + 0.18 * sin( uTime * 0.45 + aPhase ) );
+transformed.x += sin( uTime * 0.13 + aPhase ) * 0.12;
+transformed.z += cos( uTime * 0.11 + aPhase * 1.3 ) * 0.12;
+`;
+
+const HAZE_FRAGMENT_PARS = /* glsl */`
+varying float vDensity;
+varying vec2 vHazeUv;
+`;
+
+/** Voile doux : opaque au centre, fondu à zéro sur les bords (les cases voisines se mêlent). */
+const HAZE_FRAGMENT_BODY = /* glsl */`
+{
+	float d = length( vHazeUv - 0.5 ) * 2.0;
+	float soft = 1.0 - smoothstep( 0.2, 1.0, d );
+	diffuseColor.a *= clamp( vDensity, 0.0, 1.0 ) * soft;
+}
+`;
+
+/** Matériau de la brume : { material, uniforms } ; `uniforms.uTime.value` est l'horloge (s). */
+export function createHazeMaterial(hex) {
+  const uniforms = { uTime: { value: 0 } };
+  const material = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(hex || HAZE_COLOR),
+    transparent: true,
+    opacity: HAZE_OPACITY,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    forceSinglePass: true,   // sinon three dessine les faces arrière puis avant : deux appels
+    toneMapped: false,
+  });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.uTime;
+    shader.vertexShader = HAZE_VERTEX_PARS + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + HAZE_VERTEX_BODY);
+    shader.fragmentShader = HAZE_FRAGMENT_PARS + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + HAZE_FRAGMENT_BODY);
+  };
+  material.customProgramCacheKey = () => 'tiletown-haze-1';
+  return { material, uniforms };
+}
+
 /** Rotor de repli : moyeu + trois pales plates dans le plan XY, axe Z, couleur `marking`. */
 function buildFallbackRotor(radius, hex) {
   const parts = [];
@@ -257,7 +371,7 @@ function buildFallbackRotor(radius, hex) {
 
 /**
  * Crée les effets. `models` : résultat de `loadModels`. options : { palette = PALETTE, shadows = true,
- * modelFor (bâtiment → identifiant de modèle, comme buildings.js) }.
+ * modelFor (bâtiment → identifiant de modèle, comme buildings.js), hazeColor (teinte de la brume) }.
  */
 export function createEffects(models, options = {}) {
   const palette = options.palette || PALETTE;
@@ -293,6 +407,17 @@ export function createEffects(models, options = {}) {
   };
   const puff = { x: 0, y: 0, z: 0, scale: 0, u: 0, color: [0, 0, 0] };
 
+  // --- Brume d'air vicié (§10.3) --------------------------------------------------------------
+  // Un plan horizontal par case polluée, une seule InstancedMesh (un appel de dessin, sans ombre).
+  const hazeTemplate = new THREE.PlaneGeometry(1, 1);
+  hazeTemplate.rotateX(-Math.PI / 2);
+  const { material: hazeMaterial, uniforms: hazeUniforms } = createHazeMaterial(options.hazeColor || HAZE_COLOR);
+  let haze = null;              // InstancedMesh (créée à la première brume)
+  let hazeCapacity = 0;
+  let hazeCount = 0;
+  let airValues = null;         // dernier champ d'air reçu (réappliqué à chaque nouveau monde)
+  let worldSize = null;         // { cols, rows, seed } du monde courant
+
   // --- Pales ----------------------------------------------------------------------------------
   /** Par identifiant de modèle : { mesh, anchors, bases: Matrix4[], owned (géométrie de repli à libérer) }. */
   const rotors = new Map();
@@ -311,6 +436,65 @@ export function createEffects(models, options = {}) {
     if (!smoke.visible) smoke.count = 0;
   }
 
+  /** Prépare l'InstancedMesh de brume pour `needed` voiles (recréée seulement si elle est trop petite). */
+  function ensureHaze(needed) {
+    if (haze && hazeCapacity >= needed) return haze;
+    if (haze) { group.remove(haze); haze.geometry.dispose(); }
+    const capacity = Math.min(HAZE_MAX, Math.max(64, Math.ceil(needed * 1.4)));
+    const geometry = hazeTemplate.clone();
+    geometry.setAttribute('aDensity', new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1));
+    geometry.setAttribute('aPhase', new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1));
+    haze = new THREE.InstancedMesh(geometry, hazeMaterial, capacity);
+    haze.name = 'haze';
+    haze.castShadow = false;
+    haze.receiveShadow = false;
+    haze.frustumCulled = false;
+    haze.renderOrder = 2;      // après le sol et les îlots : le voile se pose par-dessus
+    haze.count = 0;
+    hazeCapacity = capacity;
+    group.add(haze);
+    return haze;
+  }
+
+  /**
+   * Voile de brume d'après le champ d'air par case (`eco.air`, 0 à 100) : les cases au-dessus de
+   * HAZE_THRESHOLD portent un plan translucide de densité proportionnelle. null ou un tableau vide
+   * efface la brume. Rien n'est recalculé par image : la respiration vit dans le shader.
+   */
+  function setAir(values) {
+    airValues = values && values.length ? values : null;
+    if (!airValues || !worldSize) {
+      hazeCount = 0;
+      if (haze) { haze.count = 0; haze.visible = false; }
+      return;
+    }
+    const list = collectHaze(airValues, worldSize.cols, worldSize.rows);
+    const n = Math.min(list.length, HAZE_MAX);
+    if (!n) {
+      hazeCount = 0;
+      if (haze) { haze.count = 0; haze.visible = false; }
+      return;
+    }
+    const mesh = ensureHaze(n);
+    const density = mesh.geometry.attributes.aDensity;
+    const phase = mesh.geometry.attributes.aPhase;
+    const seed = worldSize.seed | 0;
+    for (let k = 0; k < n; k++) {
+      const h = list[k];
+      const lift = HAZE_HEIGHT + (hashUnit(seed, h.i, 0, 0xfa2e) - 0.5) * 0.2;
+      composeScaled(matrix, h.x, lift, h.y, HAZE_SIZE, 1, HAZE_SIZE);
+      mesh.setMatrixAt(k, matrix);
+      density.array[k] = h.density;
+      phase.array[k] = hashUnit(seed, h.i, 1, 0xfa2e) * Math.PI * 2;
+    }
+    mesh.count = n;
+    mesh.visible = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    density.needsUpdate = true;
+    phase.needsUpdate = true;
+    hazeCount = n;
+  }
+
   function clearRotors() {
     for (const r of rotors.values()) {
       group.remove(r.mesh);
@@ -322,6 +506,7 @@ export function createEffects(models, options = {}) {
 
   function setWorld(world) {
     puffOptions.wind = windVector(world.wind);
+    worldSize = { cols: world.cols, rows: world.rows, seed: world.seed | 0 };
     emitters = collectSmokeEmitters(world, models, { modelFor: options.modelFor });
     if (emitters.length > SMOKE_MAX) emitters = emitters.slice(0, SMOKE_MAX);
     puffsPerEmitter = emitters.length ? Math.min(SMOKE_PUFFS, Math.floor(SMOKE_MAX / emitters.length)) : 0;
@@ -357,6 +542,8 @@ export function createEffects(models, options = {}) {
       rotors.set(id, { mesh, anchors: list, bases, owned });
       bladeCount += list.length;
     }
+    // La brume suit le monde : mêmes valeurs d'air, nouvelles cases.
+    setAir(airValues);
     update(0, clock);
   }
 
@@ -401,6 +588,7 @@ export function createEffects(models, options = {}) {
     clock = Number.isFinite(time) ? time : clock + (Number.isFinite(dt) ? Math.max(0, dt) : 0);
     updateSmoke(clock);
     updateBlades(clock);
+    hazeUniforms.uTime.value = clock;
   }
 
   function setSmokeLevel(v) {
@@ -414,7 +602,8 @@ export function createEffects(models, options = {}) {
       smoke: smoke.visible ? emitters.length * activePuffs : 0,
       emitters: emitters.length,
       blades: bladeCount,
-      calls: (smoke.visible ? 1 : 0) + bladeMeshes,
+      haze: hazeCount,
+      calls: (smoke.visible ? 1 : 0) + bladeMeshes + (hazeCount > 0 ? 1 : 0),
       shadowCalls: shadows ? bladeMeshes : 0,
     };
   }
@@ -424,6 +613,10 @@ export function createEffects(models, options = {}) {
     group.remove(smoke);
     smokeGeometry.dispose();
     smokeMaterial.dispose();
+    if (haze) { group.remove(haze); haze.geometry.dispose(); haze = null; }
+    hazeTemplate.dispose();
+    hazeMaterial.dispose();
+    hazeCount = 0;
     emitters = [];
   }
 
@@ -432,11 +625,14 @@ export function createEffects(models, options = {}) {
     setWorld,
     update,
     setSmokeLevel,
+    setAir,
     stats,
     dispose,
     /** Accès de débogage. */
     get emitters() { return emitters; },
     get time() { return clock; },
     get smokeLevel() { return smokeLevel; },
+    get haze() { return haze; },
+    get airValues() { return airValues; },
   };
 }

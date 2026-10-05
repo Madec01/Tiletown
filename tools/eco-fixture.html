@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tiletown — fixture de l'écologie (§10.3)</title>
+<!-- Démo et mesure du rendu de l'écologie (docs/ARCHITECTURE.md §10.3) : calques lisibles, mode
+     daltonien (hachures), icônes d'espèces, brume d'air vicié et eau qui verdit.
+     La vallée vient de src/core/worldgen.js ; on y pose UNE USINE et UNE CENTRALE au bord de la rivière,
+     puis on fabrique À LA MAIN les champs d'écologie (dégradé d'air depuis l'usine et la centrale, eau
+     qui se dégrade vers l'aval, faune et fertilité qui en découlent) et quelques espèces présentes avec
+     leurs parcelles. Aucun import de src/core/ecology.js : cette page ne dépend que du rendu.
+     Paramètres :
+       ?layer=air|water|fauna|soil   calque affiché (défaut : aucun)
+       ?pattern=1                    hachures (mode daltonien)
+       ?species=1                    icônes des espèces présentes
+       ?haze=1                       brume d'air vicié au-dessus des cases polluées
+       ?eco=0                        sans ambiance écologique (ni brume ni eau trouble)
+       ?seed= ?cols= ?rows=          monde ; ?view=town|factory|all ; ?zoom=<u>
+       ?stats=1                      mesures à l'écran ; ?shadows=0 ; ?strategy=batched|instanced
+     window.__tiletown : { ready, world, renderer, eco, legend, stats(), renderFrames(n) }. -->
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/examples/jsm/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe6; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; }
+  #stats { position: fixed; left: 8px; top: 8px; font: 12px/1.4 monospace; color: #333; background: rgba(255,255,255,.75); padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
+  /* Légende du calque : exactement ce que `r.layerInfo(kind)` fournit à l'interface (§10.4). */
+  #legend { position: fixed; left: 8px; bottom: 8px; font: 12px/1.5 system-ui, sans-serif; color: #243; background: rgba(255,255,255,.86); padding: 8px 10px; border-radius: 10px; display: none; }
+  #legend b { font-weight: 600; }
+  #legend ul { list-style: none; margin: 4px 0 0; padding: 0; }
+  #legend li { display: flex; align-items: center; gap: 6px; }
+  #legend i { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.25); }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="stats"></div>
+<div id="legend"></div>
+<script type="module">
+import { createRenderer } from '../src/render3d/renderer.js';
+import { generateWorld, centerOf } from '../src/core/worldgen.js';
+import { rebuildRoads, computeTraffic } from '../src/core/roads.js';
+import { index, neighbors4, neighbors8 } from '../src/core/grid.js';
+import { TERRAINS } from '../src/data/terrain.js';
+
+const params = new URLSearchParams(location.search);
+const num = (k, d) => (params.has(k) && params.get(k) !== '' && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : d);
+const seed = num('seed', 12345);
+const cols = num('cols', 12);
+const rows = num('rows', 16);
+const showStats = params.get('stats') === '1';
+const layerKind = params.get('layer') || 'none';
+const withPattern = params.get('pattern') === '1';
+const withSpecies = params.get('species') === '1';
+const withHaze = params.get('haze') === '1';
+const withEco = params.get('eco') !== '0';
+
+// --- Monde : vallée générée, ville de départ, puis une usine et une centrale au bord de l'eau ------
+let world = generateWorld({ seed, cols, rows, map: 'valley', starterTown: true });
+
+/** Vrai si l'on peut poser une industrie sur cette case (nature banale, rien dessus). */
+const freeTile = (t) => t && !t.building && ['grass', 'meadow', 'field'].includes(t.terrain);
+/** Vrai si la case touche de l'eau (rivière, lac, zone humide). */
+function touchesWater(x, y) {
+  return neighbors4(world, x, y).some((n) => {
+    const t = world.tiles[index(world, n.x, n.y)];
+    return t && (t.terrain === 'river' || t.terrain === 'lake' || t.terrain === 'wetland');
+  });
+}
+
+/** Pose un bâtiment sur la case (x, y). */
+function place(x, y, type, yaw = 0) {
+  const t = world.tiles[index(world, x, y)];
+  t.building = { type, level: 1, variant: 0, yaw };
+  t.native = false;
+  return { x, y, i: index(world, x, y) };
+}
+
+/** Première case libre au bord de l'eau, à partir du sud (l'usine rejette dans la rivière). */
+function findRiverside(fromY, skip = []) {
+  for (let y = fromY; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = index(world, x, y);
+      if (skip.includes(i)) continue;
+      if (freeTile(world.tiles[i]) && touchesWater(x, y)) return { x, y, i };
+    }
+  }
+  // Rien au bord de l'eau : n'importe quelle case libre.
+  for (let y = fromY; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const i = index(world, x, y);
+    if (!skip.includes(i) && freeTile(world.tiles[i])) return { x, y, i };
+  }
+  return null;
+}
+
+const center = centerOf(world);
+const factorySpot = findRiverside(Math.max(1, center.y - 1));
+const factory = factorySpot ? place(factorySpot.x, factorySpot.y, 'factory') : null;
+const plantSpot = findRiverside(factorySpot ? factorySpot.y + 1 : center.y, factory ? [factory.i] : []);
+const plant = plantSpot ? place(plantSpot.x, plantSpot.y, 'power-plant') : null;
+const sources = [factory, plant].filter(Boolean);
+world = computeTraffic(rebuildRoads(world));
+
+// --- Champs d'écologie fabriqués à la main (ils imiteront src/core/ecology.js) ---------------------
+const n = cols * rows;
+const air = new Float32Array(n);
+const water = new Float32Array(n);
+const fauna = new Float32Array(n);
+const soil = new Float32Array(n);
+
+/** Dérive du vent : le vent est nommé par son origine ('W' pousse vers l'est). */
+const WIND = { N: [0, 1], S: [0, -1], E: [-1, 0], W: [1, 0] };
+const wind = WIND[world.wind] || [0, 0];
+
+// Air : chaque cheminée fume (centrale 20, usine 12 par mois, §5.1), la pollution diffuse en perdant
+// la moitié tous les 2,2 u, et le vent dominant l'étire. Les forêts, prairies et lacs en reprennent.
+for (let y = 0; y < rows; y++) {
+  for (let x = 0; x < cols; x++) {
+    const i = index(world, x, y);
+    let v = 6;                                    // fond : le trafic et les quartiers
+    for (const s of sources) {
+      const strength = world.tiles[s.i].building.type === 'power-plant' ? 100 : 72;
+      // Position « sous le vent » : la fumée part de la cheminée et dérive.
+      const dx = x - (s.x + wind[0] * 1.4);
+      const dy = y - (s.y + wind[1] * 1.4);
+      const d = Math.hypot(dx, dy);
+      v += strength * Math.exp(-(d * d) / 9);
+    }
+    const sink = (TERRAINS[world.tiles[i].terrain] || {}).airSink || 0;
+    air[i] = Math.max(0, Math.min(100, v - sink * 2.2));
+  }
+}
+
+// Eau : la rivière se charge en descendant vers l'aval depuis l'usine, le lac accumule un peu, la
+// nappe suit l'eau voisine. Les cases sèches gardent la valeur de leur nappe (le calque reste lisible).
+const isWater = (t) => t && (t.terrain === 'river' || t.terrain === 'lake' || t.terrain === 'wetland');
+for (let y = 0; y < rows; y++) {
+  for (let x = 0; x < cols; x++) {
+    const i = index(world, x, y);
+    let v = 8;
+    for (const s of sources) {
+      const downstream = y - s.y;                 // la rivière coule vers le sud
+      const across = Math.abs(x - s.x);
+      if (downstream >= -1) v += Math.max(0, 85 - across * 16 - Math.max(0, downstream) * 3.5);
+    }
+    if (!isWater(world.tiles[i])) v *= 0.55;      // la nappe est moins chargée que la rivière
+    water[i] = Math.max(0, Math.min(100, v));
+  }
+}
+
+// Faune : base de l'habitat, bonus de taille de parcelle, malus de pollution (§5.3).
+const HABITAT_BASE = { forest: 70, meadow: 50, wetland: 65, lake: 55 };
+
+/** Parcelles d'habitat contiguës (8 voisins), comme `findPatches` de src/core/ecology.js. */
+function findPatches() {
+  const seen = new Uint8Array(n);
+  const out = [];
+  let id = 1;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = index(world, x, y);
+      const habitat = (TERRAINS[world.tiles[i].terrain] || {}).habitat;
+      if (seen[i] || !habitat || world.tiles[i].building) continue;
+      const cells = [];
+      const stack = [{ x, y }];
+      seen[i] = 1;
+      while (stack.length) {
+        const p = stack.pop();
+        cells.push(index(world, p.x, p.y));
+        for (const q of neighbors8(world, p.x, p.y)) {
+          const j = index(world, q.x, q.y);
+          const t = world.tiles[j];
+          if (seen[j] || t.building) continue;
+          if (((TERRAINS[t.terrain] || {}).habitat) !== habitat) continue;
+          seen[j] = 1;
+          stack.push(q);
+        }
+      }
+      cells.sort((a, b) => a - b);
+      out.push({ id: `p${id++}`, habitat, cells, size: cells.length, connectedTo: [] });
+    }
+  }
+  return out;
+}
+
+const patches = findPatches();
+const patchOfCell = new Map();
+for (const p of patches) for (const i of p.cells) patchOfCell.set(i, p);
+for (let i = 0; i < n; i++) {
+  const p = patchOfCell.get(i);
+  const base = p ? (HABITAT_BASE[p.habitat] || 40) : 8;
+  const size = p ? Math.min(p.size, 10) : 0;
+  fauna[i] = Math.max(0, Math.min(100, base * (1 + 0.1 * size) / 2 - (air[i] + water[i]) / 50));
+  const t = world.tiles[i];
+  soil[i] = t.terrain === 'field' || (t.building && t.building.type === 'field')
+    ? Math.max(5, Math.min(100, 70 - air[i] * 0.3 + (i % 5) * 4))
+    : 0;
+}
+
+// Espèces présentes : le cerf dans le plus grand massif de forêt, le héron sur le lac, les abeilles
+// dans une prairie, l'hirondelle au-dessus de la ville (hors parcelle : elle récompense la ville verte).
+const biggest = (habitat) => patches.filter((p) => p.habitat === habitat).sort((a, b) => b.size - a.size)[0] || null;
+const forestPatch = biggest('forest');
+const lakePatch = biggest('lake') || biggest('wetland');
+const meadowPatch = biggest('meadow');
+const townCells = [];
+for (let y = 0; y < rows && townCells.length < 4; y++) for (let x = 0; x < cols && townCells.length < 4; x++) {
+  const t = world.tiles[index(world, x, y)];
+  if (t.building && ['house', 'shop', 'townhall', 'market'].includes(t.building.type) && air[index(world, x, y)] < 45) townCells.push(index(world, x, y));
+}
+const species = {
+  deer: { present: Boolean(forestPatch), since: 7, cells: forestPatch ? forestPatch.cells.slice(0, 4) : [] },
+  heron: { present: Boolean(lakePatch), since: 3, cells: lakePatch ? lakePatch.cells.slice(0, 2) : [] },
+  bee: { present: Boolean(meadowPatch), since: 11, cells: meadowPatch ? meadowPatch.cells.slice(0, 3) : [] },
+  swallow: { present: townCells.length > 0, since: 2, cells: townCells },
+  owl: { present: false, since: 0, cells: [] },
+  otter: { present: false, since: 0, cells: [] },
+  fox: { present: false, since: 0, cells: [] },
+};
+
+const FIELDS = { air, water, fauna, soil, none: null };
+
+// --- Démarrage ------------------------------------------------------------------------------------
+const canvas = document.getElementById('map');
+const statsEl = document.getElementById('stats');
+const legendEl = document.getElementById('legend');
+if (showStats) statsEl.style.display = 'block';
+
+let ready = false;
+const tiletown = {
+  ready: false,
+  world,
+  renderer: null,
+  eco: { air, water, fauna, soil, species, patches, sources: sources.map((s) => ({ x: s.x, y: s.y, type: world.tiles[s.i].building.type })) },
+  legend: null,
+  options: { layer: layerKind, pattern: withPattern, species: withSpecies, haze: withHaze, eco: withEco },
+  stats: () => (tiletown.renderer ? tiletown.renderer.stats() : null),
+  /** Force n images et renvoie la médiane du temps CPU de rendu (ms). */
+  renderFrames(k = 10) {
+    const r = tiletown.renderer; if (!r) return null;
+    const times = [];
+    for (let i = 0; i < k; i++) { r.invalidate(); r.render(1 / 60); times.push(r.stats().frameMs); }
+    times.sort((a, b) => a - b);
+    return times[Math.floor(times.length / 2)];
+  },
+};
+window.__tiletown = tiletown;
+
+const renderer = await createRenderer(canvas, {
+  manifestUrl: '../assets/models/manifest.json',
+  pixelRatioMax: 2,
+  strategy: params.get('strategy') || 'auto',
+  shadows: params.get('shadows') !== '0',
+});
+tiletown.renderer = renderer;
+renderer.setWorld(world);
+renderer.setLayer(layerKind, FIELDS[layerKind] || null);
+renderer.setLayerPattern(withPattern);
+if (withSpecies) renderer.setSpecies(species, patches);
+if (withEco) renderer.setEcology({ air: withHaze ? air : null, water });
+
+// Légende : rendue en HTML par-dessus le canevas, à partir de `r.layerInfo(kind)` (jamais dans la scène).
+const legend = renderer.layerInfo();
+tiletown.legend = legend;
+if (legend.kind !== 'none') {
+  legendEl.style.display = 'block';
+  legendEl.innerHTML = `<b>${legend.label}</b> ${legend.unit}<ul>`
+    + legend.stops.map((s) => `<li><i style="background:${s.hex}"></i>${s.label} ${s.value}</li>`).join('')
+    + '</ul>' + (withPattern ? '<div>hachures : mode daltonien</div>' : '');
+}
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  renderer.resize(w, h, window.devicePixelRatio || 1);
+}
+resize();
+
+/** Cadrage : toute la vallée par défaut, la ville ou l'usine de près (?view=town|factory&zoom=). */
+function frame() {
+  const view = params.get('view');
+  if (view === 'town') renderer.camera.lookAt(center.x, center.y, num('zoom', 8));
+  else if (view === 'factory' && factory) renderer.camera.lookAt(factory.x, factory.y + 1, num('zoom', 8));
+  else renderer.camera.fitAll();
+}
+frame();
+window.addEventListener('resize', () => { resize(); frame(); });
+
+// Gestes minimaux pour l'essai manuel : glisser = défiler, molette = zoom, double clic = tout voir.
+const pointers = new Map();
+let lastPinch = null;
+canvas.addEventListener('pointerdown', (e) => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  if (pointers.size === 1) renderer.camera.pan(e.clientX - p.x, e.clientY - p.y);
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (lastPinch) renderer.camera.zoomAt(d / lastPinch, cx, cy);
+    lastPinch = d;
+  }
+});
+const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = null; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); renderer.camera.zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
+canvas.addEventListener('dblclick', () => renderer.camera.fitAll());
+
+let lastT = performance.now();
+function loop(t) {
+  const dt = (t - lastT) / 1000; lastT = t;
+  const drew = renderer.render(dt);
+  if (drew && !ready) { ready = true; tiletown.ready = true; }
+  if (drew && showStats) {
+    const s = renderer.stats();
+    const air50 = Array.from(air).filter((v) => v > 50).length;
+    statsEl.textContent = `appels ${s.calls}  triangles ${s.triangles}  image ${s.frameMs.toFixed(1)} ms\n`
+      + `calque ${s.layer.kind}${s.layer.pattern ? ' + hachures' : ''}  brume ${s.effects.haze} / ${air50} cases > 50\n`
+      + `espèces ${s.species.instances} icônes (${s.species.species} espèces, atlas ${s.species.atlas ? 'oui' : 'non'})\n`
+      + `îlots ${s.buildings.placements}  acteurs ${s.actors ? s.actors.instances : 0}  ${cols}×${rows}  vent ${world.wind}`;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

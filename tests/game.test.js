@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   createGame, advance, monthTick, computeStats, computeDemand, canPlace, place, demolish, undoLast, setSpeed, cycleSpeed,
   describeTile, serialize, deserialize, calendar, roadCostOfPath, countNativeNature, upkeepOf, incomeOf,
+  GAME_VERSION, SAVE_VERSIONS,
 } from '../src/core/game.js';
+import { findPatches, fieldYieldOf, speciesSummary, tourismOf } from '../src/core/ecology.js';
 import { tileAt, edgesOfTile, edgeValue, index } from '../src/core/grid.js';
 import { centerOf } from '../src/core/worldgen.js';
 import { EDGE, countEdges, networkConnected } from '../src/core/roads.js';
@@ -101,7 +103,11 @@ test('balance : constantes du contrat, cohérence avec le catalogue', () => {
 
 test('game : création (argent 500, stats cohérentes, demande dans [0, 1], ville de départ)', () => {
   const g = createGame({ seed: SEED });
-  assert.equal(g.version, 1);
+  assert.equal(g.version, 2, 'version 2 : l’écologie fait partie de la partie');
+  assert.equal(GAME_VERSION, 2);
+  assert.deepEqual([...SAVE_VERSIONS], [1, 2]);
+  assert.ok(g.eco && g.eco.air.length === g.world.tiles.length, 'l’écologie est créée avec la partie');
+  assert.equal(g.stats.nature, g.eco.scores.nature, 'la jauge Nature est le score d’écologie');
   assert.equal(g.seed, SEED);
   assert.equal(g.money, START_MONEY);
   assert.equal(g.clock, 0);
@@ -128,7 +134,7 @@ test('game : création (argent 500, stats cohérentes, demande dans [0, 1], vill
   assert.ok(s.happiness >= HAPPINESS_ARRIVALS, 'la ville de départ accueille des habitants');
   assert.equal(s.energy.have, 3);
   assert.equal(s.water.have, 3);
-  assert.equal(s.food.have, 4);
+  assert.equal(s.food.have, 4.2, 'le champ de départ rend 1,5 × 70/100 (§5.4)');
   assert.ok(s.energy.need > s.energy.have, 'l’énergie manque au départ : premier objectif du joueur');
   assert.deepEqual(s.shortages, ['energy']);
   assert.equal(s.unemployment, false);
@@ -214,7 +220,14 @@ test('game : monthTick (recettes et entretien attendus pour la ville de départ,
   assert.equal(houses, 10);
   assert.equal(shops, 2);
   assert.equal(fields, 1);
-  const expectedSeasonIncome = INCOME_PER_RESIDENT * g.population + shops * 30 + fields * 10;
+  // Les commerces profitent du tourisme (§5.5) et le champ rend selon sa fertilité (§5.4).
+  const tourism = tourismOf(g.eco, w);
+  assert.equal(g.stats.tourism, tourism);
+  let fieldIncome = 0;
+  for (let i = 0; i < w.tiles.length; i++) {
+    if (w.tiles[i].building && w.tiles[i].building.type === 'field') fieldIncome += 10 * fieldYieldOf(g.eco, w, i);
+  }
+  const expectedSeasonIncome = Math.round(INCOME_PER_RESIDENT * g.population + shops * 30 * (1 + tourism / 100) + fieldIncome);
   const expectedSeasonUpkeep = buildingUpkeep + STREET_UPKEEP * countEdges(w).total;
   assert.equal(g.stats.seasonIncome, expectedSeasonIncome);
   assert.equal(g.stats.seasonUpkeep, expectedSeasonUpkeep);
@@ -257,7 +270,16 @@ test('game : monthTick (recettes et entretien attendus pour la ville de départ,
   assert.ok(g12.money > 0, 'pas de faillite en un an sans rien faire');
   assert.ok(!e12.some((e) => e.type === 'broke'));
   assert.ok(g12.log.length <= 50);
-  for (const e of e12) assert.ok(['month', 'season', 'year', 'evolve', 'arrivals', 'departures', 'broke', 'placed', 'demolished', 'unlock', 'info'].includes(e.type), e.type);
+  for (const e of e12) {
+    assert.ok(['month', 'season', 'year', 'evolve', 'arrivals', 'departures', 'broke', 'placed', 'demolished', 'unlock', 'info', 'species', 'eco-alert'].includes(e.type), e.type);
+  }
+  // Les événements d'écologie portent de quoi centrer la carte et choisir le calque (§10.2).
+  for (const e of e12.filter((ev) => ev.type === 'eco-alert' || ev.type === 'species')) {
+    assert.ok(['smog', 'algae', 'flood', 'heat'].includes(e.key) || speciesSummary(g12).some((sp) => sp.id === e.key), e.key);
+    assert.ok(['air', 'water', 'fauna'].includes(e.layer), e.layer);
+    assert.ok(Number.isInteger(e.x) && Number.isInteger(e.y));
+    assert.equal(typeof e.text, 'string');
+  }
 });
 
 test('game : fin de saison : un quartier remplissant les conditions évolue, pas les autres', () => {
@@ -424,7 +446,13 @@ test('game : place (débit exact, rue de ceinture, raccordement facturé, forêt
     assert.equal(rw.game.money, g.money - woods.check.cost);
     assert.equal(tileAt(rw.game.world, woods.x, woods.y).terrain, 'forest', 'le terrain reste une forêt (défrichée)');
     assert.equal(tileAt(rw.game.world, woods.x, woods.y).native, false);
-    assert.ok(rw.game.stats.nature < g.stats.nature);
+    // L'écologie enregistre la perte tout de suite : la case n'est plus un habitat de forêt et le massif
+    // perd une case (la jauge Nature, elle, suit l'air, l'eau, les espèces et les sols au tick suivant).
+    assert.equal(describeTile(rw.game, woods.x, woods.y).eco.habitat, null);
+    const before = findPatches(g.world).filter((p) => p.habitat === 'forest');
+    const after = findPatches(rw.game.world).filter((p) => p.habitat === 'forest');
+    const cells = (list) => list.reduce((n, p) => n + p.size, 0);
+    assert.equal(cells(after), cells(before) - 1, 'une case de forêt en moins');
   }
 
   // Forêt plantée : le terrain devient forêt, non natif ; aucune rue n'est tracée ; la nature monte.
@@ -593,7 +621,8 @@ test('game : describeTile (terrain, bâtiment, conditions d’évolution, rendem
 test('game : serialize / deserialize (égalité profonde, y compris après trois mois et une pose)', () => {
   const g = createGame({ seed: SEED });
   const s = serialize(g);
-  assert.equal(s.version, 1);
+  assert.equal(s.version, 2);
+  assert.ok(Array.isArray(s.eco.air) && s.eco.air.length === g.world.tiles.length, 'l’écologie est sauvée en tableaux simples');
   assert.ok(Array.isArray(s.world.edges.h) && Array.isArray(s.world.traffic.v), 'tableaux simples dans la sauvegarde');
   assert.equal(s.undo, null);
   const back = deserialize(JSON.parse(JSON.stringify(s)));
@@ -614,8 +643,28 @@ test('game : serialize / deserialize (égalité profonde, y compris après trois
   s3.world.tiles[0].terrain = 'lake';
   assert.notEqual(played.world.tiles[0].terrain, 'lake');
 
+  // Aller-retour de l'écologie : champs, espèces, alertes et scores identiques, parcelles recalculées.
+  const eg = advance(g, 7 * MONTH_SECONDS).game;
+  const eback = deserialize(JSON.parse(JSON.stringify(serialize(eg))));
+  assert.deepEqual(eback.eco, eg.eco);
+  assert.ok(eback.eco.air instanceof Float32Array && eback.eco.soil instanceof Float32Array);
+  assert.deepEqual(eback.eco.patches, findPatches(eg.world));
+  assert.deepEqual(speciesSummary(eback.eco), speciesSummary(eg.eco));
+  assert.equal(eback.stats.nature, eg.stats.nature);
+
+  // Migration depuis la version 1 (avant l'écologie) : l'écologie est recalculée de zéro.
+  const v1 = serialize(g);
+  v1.version = 1;
+  delete v1.eco;
+  const migrated = deserialize(JSON.parse(JSON.stringify(v1)));
+  assert.equal(migrated.version, 2);
+  assert.ok(migrated.eco && migrated.eco.air.length === g.world.tiles.length);
+  assert.deepEqual(migrated.eco, createGame({ seed: SEED }).eco, 'l’écologie migrée est celle d’une partie neuve');
+  assert.equal(migrated.stats.nature, g.stats.nature);
+  assert.deepEqual(serialize(migrated), s);
+
   // Versions et contenus inconnus : erreurs claires.
-  assert.throws(() => deserialize({ ...s, version: 2 }), /version inconnue/);
+  assert.throws(() => deserialize({ ...s, version: 3 }), /version inconnue/);
   assert.throws(() => deserialize({ ...s, version: undefined }), /version inconnue/);
   assert.throws(() => deserialize(null), /illisible/);
   assert.throws(() => deserialize('{}'), /illisible/);

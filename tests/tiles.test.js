@@ -38,7 +38,7 @@ test('tiles : le catalogue couvre les tuiles de GAME_DESIGN §3.2 et §6.3', () 
     habitat: ['house'],
     activity: ['shop', 'office', 'factory'],
     services: ['school', 'clinic', 'market', 'townhall', 'tram-stop'],
-    infrastructure: ['wastewater', 'wind-turbine', 'solar', 'power-plant', 'compost', 'water-tower'],
+    infrastructure: ['wastewater', 'wind-turbine', 'solar', 'power-plant', 'compost', 'wildlife-crossing', 'water-tower'],
     nature: ['park', 'tree-planting', 'hedge', 'wetland-restored', 'orchard', 'field'],
   };
   for (const [family, ids] of Object.entries(expected)) {
@@ -54,6 +54,12 @@ test('tiles : le catalogue couvre les tuiles de GAME_DESIGN §3.2 et §6.3', () 
   assert.equal(TILE_BY_ID['power-plant'].price, 200);
   assert.deepEqual(TILE_BY_ID.townhall.produce, { jobs: 20, energy: 3, water: 3 });
   assert.deepEqual(TILE_BY_ID.house.clearing, { forest: 80, field: 20 });
+  // Passage à faune (§5.3) : il rétablit la contiguïté des habitats malgré le trafic.
+  const crossing = TILE_BY_ID['wildlife-crossing'];
+  assert.equal(crossing.price, 120);
+  assert.equal(crossing.upkeep, 5);
+  assert.deepEqual(crossing.terrains, ['grass', 'meadow', 'forest']);
+  assert.deepEqual(crossing.models[1], ['bridge'], 'modèle provisoire : le pont');
 });
 
 test('tiles : chaque modèle référencé est dans la liste partagée, un jeu de modèles par niveau', () => {

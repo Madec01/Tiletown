@@ -6,6 +6,8 @@
 //   r.camera.pan(dx, dy); r.camera.zoomAt(f, cx, cy); r.camera.fitAll();
 //   r.pick(clientX, clientY) → { x, y } | null; r.render(dt) → bool (a dessiné ?);
 //   r.setGhost({ x, y, tileId, ok, path, yaw } | null); r.setHighlight([{ x, y }] | null);   // §9.2 (ghost.js)
+//   r.layerInfo(kind) → légende du calque ; r.setLayerPattern(on) → hachures (mode daltonien);  // §10.3
+//   r.setSpecies(eco.species, eco.patches); r.setEcology({ air, water });                       // §10.3
 //   r.stats() → { calls, triangles, frameMs, …, ghost: { visible, dashes, highlights } }; r.dispose();
 //
 // Mode économie : `render` ne redessine que si quelque chose a changé (`dirty`) ou si une animation
@@ -22,7 +24,8 @@ import { createRoads } from './roads.js';
 import { createEffects } from './effects.js';
 import { createActorsLayer } from './actors.js';
 import { createGhost } from './ghost.js';
-import { layerColors } from './layers.js';
+import { createSpeciesMarkers } from './species.js';
+import { layerColors, layerInfo as layerLegend, normalizeLayerValues } from './layers.js';
 
 /** Direction du soleil (du centre de la carte vers la lumière) : ouest-sud-ouest, haut. */
 const SUN_DIRECTION = new THREE.Vector3(-0.62, 1.0, 0.42).normalize();
@@ -127,12 +130,19 @@ export async function createRenderer(canvas, options = {}) {
   const actorsLayer = createActorsLayer(models, { maxSkinned: options.maxSkinned ?? 8, manifestUrl: options.manifestUrl });
   // Fantôme de pose, cadre et pointillés de raccordement, surbrillance des cases (étape 3, §9.2).
   const ghost = createGhost(models, { palette: PALETTE });
-  scene.add(ground.group, buildings.group, roads.group, fx.group, actorsLayer.group, ghost.group);
+  // Icônes des espèces présentes au-dessus de leurs parcelles (étape 4, §10.3).
+  const speciesMarkers = createSpeciesMarkers(models, { palette: PALETTE });
+  scene.add(ground.group, buildings.group, roads.group, fx.group, actorsLayer.group, ghost.group, speciesMarkers.group);
   let actors = null;   // état des acteurs fourni par setActors (lecture seule)
   let elapsed = 0;     // temps d'animation cumulé (s)
   const upd = { ms: 0 }; // temps CPU de la mise à jour des couches animées
 
-  let layer = { kind: 'none', values: null };
+  let layer = { kind: 'none', values: null, pattern: false };
+  /** Valeurs du calque normalisées (0 à 1), réutilisées d'un mois à l'autre pour les hachures. */
+  let layerNorm = null;
+  /** Dernier état d'écologie reçu : champs par case (brume, teinte de l'eau) et espèces présentes. */
+  let ecology = { air: null, water: null };
+  let ecoSpecies = { species: null, patches: null };
 
   /** Ajuste le frustum de l'ombre au volume de la carte (ombre statique, nette, sans gaspillage). */
   function fitShadow() {
@@ -165,6 +175,17 @@ export async function createRenderer(canvas, options = {}) {
     const base = ground.baseColors();
     const colors = base ? layerColors(layer.kind, layer.values, base) : null;
     ground.setTileColors(colors);
+    // Hachures du mode daltonien : la même valeur, normalisée, en attribut d'instance du sol.
+    const active = layer.kind && layer.kind !== 'none' && layer.values;
+    layerNorm = active ? normalizeLayerValues(layer.values, layerNorm) : null;
+    ground.setLayerValues(layerNorm);
+    dirty = true;
+  }
+
+  /** Brume d'air vicié et teinte de l'eau d'après le dernier `setEcology`. */
+  function applyEcology() {
+    fx.setAir(ecology.air);
+    ground.setWaterQuality(ecology.water);
     dirty = true;
   }
 
@@ -209,7 +230,7 @@ export async function createRenderer(canvas, options = {}) {
 
   const api = {
     /** Accès de débogage (fixture de mesure, outils) ; pas pour l'interface. */
-    debug: { scene, camera: threeCamera, renderer, models, ground, buildings, roads, sun, ghost },
+    debug: { scene, camera: threeCamera, renderer, models, ground, buildings, roads, sun, ghost, fx, species: speciesMarkers },
     camera: cameraApi,
     get world() { return world; },
     get strategy() { return strategy; },
@@ -225,6 +246,8 @@ export async function createRenderer(canvas, options = {}) {
       roads.setWorld(world);
       fitShadow();
       applyLayer();
+      speciesMarkers.setWorld(world);
+      applyEcology();
       if (firstWorld) { firstWorld = false; cameraApi.fitAll(); } else { setCameraState(Camera.clamp(camState, world, viewport)); }
       dirty = true;
     },
@@ -239,8 +262,41 @@ export async function createRenderer(canvas, options = {}) {
     },
 
     setLayer(kind, values) {
-      layer = { kind: kind || 'none', values: values || null };
+      layer = { ...layer, kind: kind || 'none', values: values || null };
       applyLayer();
+    },
+
+    /**
+     * Légende du calque (§10.3) : { kind, label, unit, min, max, stops: [{ value, hex, label }] }.
+     * Sans argument, celle du calque actif ; `none` renvoie une légende vide.
+     */
+    layerInfo(kind) { return layerLegend(kind === undefined ? layer.kind : kind); },
+
+    /** Mode daltonien : hachures diagonales par bandes de valeur, en plus de la couleur. */
+    setLayerPattern(on) {
+      layer.pattern = Boolean(on);
+      ground.setLayerPattern(layer.pattern);
+      dirty = true;
+    },
+    get layerPattern() { return layer.pattern; },
+
+    /**
+     * Espèces présentes et parcelles (`eco.species`, `eco.patches`) : une icône au-dessus de chaque
+     * parcelle habitée, avec son animation d'apparition ou de disparition.
+     */
+    setSpecies(species, patches) {
+      ecoSpecies = { species: species || null, patches: patches || null };
+      speciesMarkers.set(ecoSpecies.species, ecoSpecies.patches);
+      dirty = true;
+    },
+
+    /**
+     * Ambiance écologique (§10.3) : `{ air, water }` (champs par case de `eco`) → voile de brume
+     * au-dessus des cases dont l'air dépasse 50, eau qui verdit quand la pollution monte.
+     */
+    setEcology(eco) {
+      ecology = { air: (eco && eco.air) || null, water: (eco && eco.water) || null };
+      applyEcology();
     },
 
     resize(widthCss, heightCss, dpr) {
@@ -285,6 +341,8 @@ export async function createRenderer(canvas, options = {}) {
         ghost.update(dt);
         upd.ms = performance.now() - tu;
       }
+      // Les panneaux d'espèces suivent la caméra : à réorienter même sans animation en cours.
+      speciesMarkers.update(animating && dt > 0 ? dt : 0, threeCamera);
       renderer.render(scene, threeCamera);
       last.frameMs = performance.now() - t0;
       last.calls = renderer.info.render.calls;
@@ -312,6 +370,8 @@ export async function createRenderer(canvas, options = {}) {
         effects: fx.stats ? fx.stats() : null,
         actors: actorsLayer.stats ? actorsLayer.stats() : null,
         ghost: ghost.stats(),
+        species: speciesMarkers.stats(),
+        layer: { kind: layer.kind, pattern: layer.pattern },
         layersUpdateMs: upd.ms,
         models: { loaded: models.ids.length, errors: models.errors.length },
       };
@@ -322,6 +382,7 @@ export async function createRenderer(canvas, options = {}) {
       disposed = true;
       canvas.removeEventListener('webglcontextlost', onContextLost, false);
       canvas.removeEventListener('webglcontextrestored', onContextRestored, false);
+      speciesMarkers.dispose();
       ghost.dispose();
       actorsLayer.dispose();
       fx.dispose();

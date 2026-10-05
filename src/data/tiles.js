@@ -172,6 +172,15 @@ export const TILES = Object.freeze([
     models: { 1: ['compost'] },
   }),
   urban({
+    id: 'wildlife-crossing', family: 'infrastructure', label: 'Passage à faune',
+    description: 'Un pont planté par-dessus la rue : la faune retrouve son chemin d’une parcelle à l’autre.',
+    price: 120, upkeep: 5, levels: 1,
+    produce: {}, consume: {}, income: 0,
+    terrains: ['grass', 'meadow', 'forest'], clearing: { forest: 80 },
+    // Modèle provisoire : on réutilise `bridge` en attendant un modèle dédié (docs/ASSETS.md).
+    models: { 1: ['bridge'] },
+  }),
+  urban({
     id: 'water-tower', family: 'infrastructure', label: 'Château d’eau',
     description: 'Eau potable tirée de la nappe.',
     price: 100, upkeep: 5, levels: 1,

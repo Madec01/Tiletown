@@ -310,7 +310,7 @@ test('createEffects : une InstancedMesh de fumée (≤ 160), une de pales, inten
 
   // Monde vide : rien à dessiner, pas d'erreur.
   fx.setWorld(makeWorld(3, 3));
-  assert.deepEqual(fx.stats(), { smoke: 0, emitters: 0, blades: 0, calls: 0, shadowCalls: 0 });
+  assert.deepEqual(fx.stats(), { smoke: 0, emitters: 0, blades: 0, haze: 0, calls: 0, shadowCalls: 0 });
   fx.dispose();
   assert.equal(fx.group.children.length, 0);
 });

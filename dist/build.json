@@ -1,8 +1,8 @@
 {
-  "id": "888dd4513ced",
+  "id": "48a8e6a92527",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.539fa0b268.js",
-  "css": "dist/game.0f43185d07.css",
+  "js": "dist/game.44dc2cbf31.js",
+  "css": "dist/game.c9d4ef38d1.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/fonts/Nunito-latin-ext.woff2": "2c8d792869818ecb",
@@ -79,46 +79,52 @@
     "assets/models/water-tower.glb": "01101f10c10d9c5d",
     "assets/models/wind-turbine.glb": "397b8abb2d3dd77a",
     "css/fonts.css": "f09d0e5ef98a16ba",
-    "css/style.css": "2ef7e86e80b7d6e6",
+    "css/style.css": "89f2a730d8bdc12e",
     "manifest.webmanifest": "d781b7f56357c6a9",
     "package-lock.json": "66cc44e0cd0d4a8b",
-    "src/core/actors.js": "5dde4b7fe9c5454c",
+    "src/core/actors.js": "0a18d337b01d9e07",
     "src/core/calendar.js": "d531026a520853c2",
-    "src/core/game.js": "30ea1893697271d6",
+    "src/core/ecology.js": "e6eb3328c9a039b1",
+    "src/core/game.js": "37d0aaa5c76444ed",
     "src/core/grid.js": "29df44c5235c731b",
     "src/core/rng.js": "6fbad2721b18a2ac",
     "src/core/roads.js": "524fb3d4d1689cec",
     "src/core/worldgen.js": "a6dbae38af8ac32d",
-    "src/data/balance.js": "844bb200c8bac234",
+    "src/data/balance.js": "71363d731efb9d2f",
     "src/data/palette.js": "230ea69456d864db",
+    "src/data/species.js": "9ec5cd7c9907dd8c",
     "src/data/terrain.js": "ca766200de222040",
-    "src/data/tiles.js": "be8f82f8d88a69a2",
-    "src/index.template.html": "a72b2de2e2cc2422",
+    "src/data/tiles.js": "85659aa4b6128cad",
+    "src/index.template.html": "c338e7db4112e32e",
     "src/loader.js": "782328b4f797e591",
-    "src/main.js": "5c4e2e40856fc0d4",
+    "src/main.js": "5ce31ad6c417449b",
     "src/pwa.js": "4600989641d122c6",
     "src/render3d/actors.js": "9d55b68069b8f6c0",
     "src/render3d/buildings.js": "2fbe725fbcf8bf9c",
     "src/render3d/camera.js": "da87199cdecbd096",
-    "src/render3d/effects.js": "9829e81e430b42ab",
+    "src/render3d/effects.js": "e2049ddb416229d3",
     "src/render3d/ghost.js": "cc1630910515ffa6",
-    "src/render3d/ground.js": "c6553a6be24da893",
-    "src/render3d/layers.js": "b38a0195b34ee0fe",
+    "src/render3d/ground.js": "988a2d977e5bee44",
+    "src/render3d/layers.js": "96ef7b2072b52e68",
     "src/render3d/models.js": "a5fcdb14b9757dbc",
     "src/render3d/puppet-pose.js": "27b68f8a88c21886",
-    "src/render3d/renderer.js": "235d7212749cbacd",
+    "src/render3d/renderer.js": "20c11371ed1de866",
     "src/render3d/rigs.js": "656b2f0e1a413fb8",
     "src/render3d/roads.js": "57de71f88ef6b40f",
+    "src/render3d/species.js": "e4aec0a05eda3065",
     "src/render3d/util.js": "e37eba65381cb4a0",
     "src/storage.js": "dd2a3a1bcbf70a8e",
     "src/ui/a11y.js": "d0792e98751893bd",
     "src/ui/catalog.js": "4b75f482da92b1d4",
     "src/ui/dom.js": "2e71c51a2abfaafd",
     "src/ui/gestures.js": "63fe1b355be1dadb",
-    "src/ui/hud.js": "a2c35248762618c6",
+    "src/ui/hud.js": "14257c28df026eb3",
+    "src/ui/layers.js": "889ce1af88a5992e",
+    "src/ui/nature-sheet.js": "e575295ac316b0a0",
     "src/ui/placement.js": "15bcbde0cc89420e",
-    "src/ui/sheet-tile.js": "cb350b4685fb59c5",
+    "src/ui/sheet-tile.js": "d09bc5f4b7e078d2",
     "src/ui/sheets.js": "e1d2e664cc89c413",
+    "src/ui/species-book.js": "b1683e8ce0e03fbf",
     "src/ui/stats.js": "1aef6f69acff7b6d",
     "src/ui/toasts.js": "fc3e98397c63b524",
     "src/version.js": "6c0b2c0331bcc04a",
@@ -127,43 +133,43 @@
   },
   "history": [
     {
+      "id": "48a8e6a92527",
+      "files": [
+        "dist/game.44dc2cbf31.js",
+        "dist/game.44dc2cbf31.js.map",
+        "dist/game.c9d4ef38d1.css"
+      ]
+    },
+    {
+      "id": "e3ab49043b8a",
+      "files": [
+        "dist/game.17fc01dd99.js",
+        "dist/game.17fc01dd99.js.map",
+        "dist/game.c9d4ef38d1.css"
+      ]
+    },
+    {
+      "id": "525eaf010f3d",
+      "files": [
+        "dist/game.972db0d192.js",
+        "dist/game.972db0d192.js.map",
+        "dist/game.2d1112fd07.css"
+      ]
+    },
+    {
+      "id": "560eb057b7bc",
+      "files": [
+        "dist/game.1095c9442c.js",
+        "dist/game.1095c9442c.js.map",
+        "dist/game.2d1112fd07.css"
+      ]
+    },
+    {
       "id": "888dd4513ced",
       "files": [
         "dist/game.539fa0b268.js",
         "dist/game.539fa0b268.js.map",
         "dist/game.0f43185d07.css"
-      ]
-    },
-    {
-      "id": "569c68d49bf5",
-      "files": [
-        "dist/game.0c0d803f25.js",
-        "dist/game.0c0d803f25.js.map",
-        "dist/game.0f43185d07.css"
-      ]
-    },
-    {
-      "id": "bd04e7ac4a31",
-      "files": [
-        "dist/game.d1153264e3.js",
-        "dist/game.d1153264e3.js.map",
-        "dist/game.9daa2b9a96.css"
-      ]
-    },
-    {
-      "id": "4394becdf886",
-      "files": [
-        "dist/game.b46cb1a597.js",
-        "dist/game.b46cb1a597.js.map",
-        "dist/game.b8ae07dec7.css"
-      ]
-    },
-    {
-      "id": "73dd3e85a8ee",
-      "files": [
-        "dist/game.78fc108259.js",
-        "dist/game.78fc108259.js.map",
-        "dist/game.b8ae07dec7.css"
       ]
     }
   ]

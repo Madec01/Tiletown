@@ -7,6 +7,13 @@
 //   actorsStats(actors)                         // comptes par genre (tests, affichage de débogage)
 //   habitatSummary(world)                       // habitats de la faune et effectifs souhaités (pur)
 //
+// FAUNE PILOTÉE PAR L'ÉCOLOGIE (docs/ARCHITECTURE.md §10.3) : `createActors(world, seed, { species })`
+// et `syncActors(actors, world, { species })` ne créent les espèces emblématiques (ECO_SPECIES : cerf,
+// renard, héron, loutre, abeilles, hirondelle, chouette) que si elles sont PRÉSENTES. `species` accepte
+// l'objet `eco.species` ({ [id]: { present, since, cells } }), un tableau ou un Set d'identifiants ;
+// `null` (par défaut) veut dire « toutes présentes ». Une espèce qui disparaît retire ses animaux sans
+// toucher aux autres acteurs ; une espèce qui arrive fait naître les siens.
+//
 // Conventions d'espace : la case (i, j) couvre [i, i+1] × [j, j+1] en (x, z) ; les rues vivent sur les
 // arêtes du treillis (h(x, y) le long de X à z = y, v(x, y) le long de Z à x = x) ; yaw = atan2(dx, dz),
 // 0 = face +Z (sud), comme `rotation.y` de three.js. La « droite » dans le sens de marche (dx, dz) est
@@ -70,6 +77,12 @@ export const ACTOR_MODELS = Object.freeze({
 
 const CITIZEN_MODELS = ['citizen-a', 'citizen-b', 'citizen-c'];
 const SPECIES = ['deer', 'fox', 'duck', 'heron', 'otter', 'bee', 'swallow', 'owl'];
+/**
+ * Espèces emblématiques suivies par l'écologie (§10.3, GAME_DESIGN §5.3) : elles n'existent dans la
+ * vallée que si `eco.species` les déclare présentes. Le canard n'en fait pas partie : il peuple l'eau
+ * en toutes circonstances.
+ */
+export const ECO_SPECIES = Object.freeze(['deer', 'fox', 'heron', 'otter', 'bee', 'swallow', 'owl']);
 /** Marge gardée au bord d'une case par la faune (les points visés restent dans [m, 1 − m]). */
 const TILE_MARGIN = 0.18;
 const TAU = Math.PI * 2;
@@ -121,6 +134,40 @@ function pointInTile(world, i, rng, margin = TILE_MARGIN) {
   const tx = i % world.cols;
   const ty = Math.floor(i / world.cols);
   return { x: tx + rng.range(margin, 1 - margin), z: ty + rng.range(margin, 1 - margin) };
+}
+
+/**
+ * Normalise la liste des espèces présentes : `null` ou `undefined` → null (toutes présentes) ; un
+ * tableau ou un Set d'identifiants → le même ensemble ; l'objet `eco.species` ({ [id]: { present } })
+ * → l'ensemble des identifiants présents. Pure.
+ */
+export function speciesFilter(species) {
+  if (species === null || species === undefined) return null;
+  if (species instanceof Set) return new Set(species);
+  if (Array.isArray(species)) return new Set(species);
+  if (typeof species === 'object') {
+    const out = new Set();
+    for (const [id, entry] of Object.entries(species)) {
+      const present = entry && typeof entry === 'object' ? entry.present !== false : Boolean(entry);
+      if (present) out.add(id);
+    }
+    return out;
+  }
+  return null;
+}
+
+/** Vrai si l'espèce peut vivre ici : hors écologie (canard, habitants, véhicules) ou déclarée présente. */
+export function speciesPresent(filter, kind) {
+  if (!filter || !ECO_SPECIES.includes(kind)) return true;
+  return filter.has(kind);
+}
+
+/** Effectifs souhaités réduits aux espèces présentes (les absentes tombent à 0). */
+function desiredPresent(desired, filter) {
+  if (!filter) return { ...desired };
+  const out = {};
+  for (const [id, n] of Object.entries(desired)) out[id] = speciesPresent(filter, id) ? n : 0;
+  return out;
 }
 
 /** Partage un budget entre des demandes entières, au prorata (reste aux plus grandes parts fractionnaires). */
@@ -741,8 +788,12 @@ function pathStillValid(world, a) {
 /**
  * Met les acteurs en accord avec un nouveau monde : treillis des rues, trafic et habitats recalculés ;
  * les acteurs encore valables sont gardés, les autres retirés, les manquants créés. Mutation en place.
+ * `options.species` (§10.3) remplace la liste des espèces présentes : les animaux des espèces qui
+ * viennent de disparaître sont retirés, ceux des espèces qui arrivent naissent, les autres acteurs ne
+ * bougent pas. Sans cette option, la liste en place est conservée.
  */
-export function syncActors(actors, world) {
+export function syncActors(actors, world, options = {}) {
+  if (options.species !== undefined) actors.species = speciesFilter(options.species);
   const ctx = buildContext(world);
   actors.world = world;
   actors.ctx = ctx;
@@ -813,7 +864,8 @@ export function syncActors(actors, world) {
 
   // --- Faune : effectifs au prorata des habitats, plafond global.
   const h = ctx.habitats;
-  const alloc = allocate(h.desired, caps.animal);
+  // Seules les espèces présentes (eco.species) comptent : le plafond se partage entre elles.
+  const alloc = allocate(desiredPresent(h.desired, actors.species), caps.animal);
   const bigMassifs = h.massifs.filter((m) => m.size >= 4);
   // Cerfs et chouettes : attachés à un massif (le plus grand d'abord).
   const massifQuota = (species, budget) => {
@@ -828,6 +880,7 @@ export function syncActors(actors, world) {
   const perMassif = new Map();
   actors.list = actors.list.filter((a) => {
     if (a.group !== 'animal') return true;
+    if (!speciesPresent(actors.species, a.kind)) return false;   // l'espèce a disparu de la vallée
     const here = tileIndexAt(world, a.x, a.z);
     if (a.kind === 'deer' || a.kind === 'owl') {
       const m = bigMassifs.find((mm) => mm.tiles.includes(here));
@@ -851,6 +904,7 @@ export function syncActors(actors, world) {
     return true;
   });
   for (const species of SPECIES) {
+    if (!speciesPresent(actors.species, species)) continue;
     const want = alloc[species] || 0;
     const now = kept[species] || 0;
     if (species === 'deer' || species === 'owl') {
@@ -870,7 +924,8 @@ export function syncActors(actors, world) {
 
 /**
  * Crée les acteurs d'un monde. `seed` : graine (celle du monde par défaut) ; `options.caps` surcharge
- * les plafonds (la fixture de charge les double).
+ * les plafonds (la fixture de charge les double) ; `options.species` (§10.3) limite la faune aux
+ * espèces présentes (objet `eco.species`, tableau ou Set ; absent = toutes présentes).
  */
 export function createActors(world, seed = world.seed, options = {}) {
   const rng = typeof seed === 'number' ? createRng((seed ^ 0xA11CE) >>> 0, 'actors') : createRng(seed, 'actors');
@@ -878,6 +933,7 @@ export function createActors(world, seed = world.seed, options = {}) {
     rng,
     list: [],
     caps: { ...CAPS, ...(options.caps || {}) },
+    species: speciesFilter(options.species),
     nextId: 1,
     time: 0,
     world: null,

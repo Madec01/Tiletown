@@ -126,7 +126,7 @@ export const START_UNLOCKED = Object.freeze([
 /** Déblocages par palier de population, vérifiés au bilan de saison. */
 export const UNLOCKS = Object.freeze([
   Object.freeze({ population: 80, tiles: ['office', 'market', 'compost'] }),
-  Object.freeze({ population: 120, tiles: ['clinic', 'factory', 'wetland-restored'] }),
+  Object.freeze({ population: 120, tiles: ['clinic', 'factory', 'wetland-restored', 'wildlife-crossing'] }),
   Object.freeze({ population: 160, tiles: ['power-plant', 'wastewater', 'tram-stop'] }),
 ]);
 
@@ -142,3 +142,140 @@ export const GREEN_BUILDINGS = Object.freeze(['park', 'hedge', 'orchard']);
 
 /** Nombre d'événements gardés dans `game.log`. */
 export const LOG_LIMIT = 50;
+
+// ---- Écologie : air (§5.1) ---------------------------------------------------------------------
+/**
+ * Émissions d'air d'un bâtiment par mois : un nombre, ou un palier par niveau (le quartier ne pollue
+ * qu'au niveau 3). Les terrains n'émettent rien ; le trafic s'ajoute à part (ECO_AIR_PER_TRAFFIC).
+ */
+export const ECO_EMIT = Object.freeze({
+  'power-plant': 20,
+  factory: 12,
+  shop: 2,
+  office: 2,
+  house: Object.freeze({ 1: 0, 2: 0, 3: 2 }),
+});
+/** Puits d'air d'un bâtiment par mois (les terrains ont leur `airSink` dans terrain.js). */
+export const ECO_SINK = Object.freeze({
+  park: 4,
+  'tree-planting': 5,
+  'wetland-restored': 3,
+  orchard: 2,
+  hedge: 1,
+});
+/** Air : pollution ajoutée par unité de trafic de chaque arête riveraine. */
+export const ECO_AIR_PER_TRAFFIC = 0.5;
+/** Air : part gardée sur place par la diffusion (le reste vient de la moyenne des quatre voisins). */
+export const ECO_AIR_KEEP = 0.6;
+/** Air : poids du vent dominant (écart avec le voisin au vent). */
+export const ECO_AIR_WIND = 0.15;
+/** Air : dissipation mensuelle. */
+export const ECO_AIR_DECAY = 0.97;
+/** Air d'un quartier : bonheur −1 par tranche de 10 au-delà de 40. */
+export const ECO_AIR_HAPPY_THRESHOLD = 40;
+export const ECO_AIR_HAPPY_STEP = 10;
+
+// ---- Écologie : eau (§5.2) ---------------------------------------------------------------------
+/**
+ * Rejets dans l'eau par mois. `house` ne compte que si aucune station d'épuration n'est à moins de
+ * ECO_WASTEWATER_RADIUS cases ; `field` dépend de la conduite du champ (`building.mode`) ; une haie
+ * voisine divise les rejets d'un champ par deux (ECO_HEDGE_WATER_FACTOR).
+ */
+export const ECO_WATER_OUT = Object.freeze({
+  factory: 15,
+  house: 4,
+  field: Object.freeze({ intensive: 6, organic: 1, fallow: 0 }),
+  orchard: 1,
+});
+/**
+ * Dépollution de l'eau par mois. `wetland` et `riparian` (forêt qui touche l'eau) agissent sur les cases
+ * d'eau voisines ; `lake` est la sédimentation que le lac s'applique à lui-même.
+ */
+export const ECO_WATER_IN = Object.freeze({
+  wastewater: 20,
+  wetland: 8,
+  riparian: 4,
+  lake: 2,
+});
+/** Rivière : part de l'amont transportée vers l'aval chaque mois. */
+export const ECO_RIVER_CARRY = 0.8;
+/** Lac : part des affluents qui entre chaque mois. */
+export const ECO_LAKE_INFLOW = 0.3;
+/** Nappe : valeur d'échantillon d'un champ intensif voisin. */
+export const ECO_GROUND_FIELD = 5;
+/** Distance (Chebyshev) à laquelle une station d'épuration dispense un quartier de ses rejets. */
+export const ECO_WASTEWATER_RADIUS = 5;
+/** Une haie voisine divise par deux les rejets d'un champ (§5.4). */
+export const ECO_HEDGE_WATER_FACTOR = 0.5;
+/** Santé : la nappe au-delà de ce seuil coûte ECO_HEALTH_PER_POINT point par point (comme l'air). */
+export const ECO_GROUND_HEALTH_THRESHOLD = 40;
+export const ECO_HEALTH_PER_POINT = 1.5;
+
+// ---- Écologie : faune (§5.3) -------------------------------------------------------------------
+/** Biodiversité de base d'une case selon son habitat. */
+export const ECO_FAUNA_BASE = Object.freeze({ forest: 40, wetland: 35, lake: 30, meadow: 25 });
+/** Faune : bonus par case de parcelle (plafonné), malus par arête de rue riveraine, poids de la pollution. */
+export const ECO_FAUNA_SIZE_BONUS = 0.1;
+export const ECO_FAUNA_SIZE_CAP = 10;
+export const ECO_FAUNA_ROAD_MALUS = 0.5;
+export const ECO_FAUNA_POLLUTION = 1 / 50;
+/** Faune : une haie voisine ajoute un point de biodiversité (§5.4). */
+export const ECO_FAUNA_HEDGE_BONUS = 1;
+/** Trafic d'une arête à partir duquel elle coupe la contiguïté des habitats (sauf passage à faune). */
+export const ECO_TRAFFIC_CUT = 3;
+/** Part de la carte en habitat qui vaut la note maximale du score de faune. */
+export const ECO_HABITAT_TARGET = 0.25;
+/** Espèces : mois consécutifs sous ECO_SPECIES_LEAVE_RATIO (20 % sous le seuil) avant le départ. */
+export const ECO_SPECIES_LEAVE_MONTHS = 15;
+export const ECO_SPECIES_LEAVE_RATIO = 0.8;
+/** Score nature : points par espèce présente dans le terme `0,25·min(100, 15·espèces)`. */
+export const ECO_SPECIES_SCORE = 15;
+
+// ---- Écologie : sols et champs (§5.4) ----------------------------------------------------------
+/** Fertilité d'un champ qui vient d'être mis en culture. */
+export const ECO_SOIL_START = 70;
+/** Par conduite : rendement (× F/100) et variation mensuelle de la fertilité. */
+export const ECO_SOIL = Object.freeze({
+  intensive: Object.freeze({ yield: 1.5, change: -2 }),
+  organic: Object.freeze({ yield: 0.9, change: 1 }),
+  fallow: Object.freeze({ yield: 0, change: 4 }),
+});
+/** Conduite d'un champ sans consigne (`building.mode` absent) ; le verger est toujours conduit en bio. */
+export const ECO_FIELD_MODE = 'intensive';
+/** Érosion d'un champ intensif sous une colline sans haie, et multiplicateur des pluies fortes. */
+export const ECO_SOIL_EROSION = 2;
+export const ECO_RAIN_EROSION = 3;
+/** Probabilité de pluies fortes dans le mois (une fois par saison en moyenne). */
+export const ECO_RAIN_CHANCE = 1 / 3;
+/** Pollinisation : rendement bio multiplié à moins de deux cases d'abeilles ; une haie coûte 10 % de rendement. */
+export const ECO_POLLINATION_BONUS = 1.2;
+export const ECO_POLLINATION_RADIUS = 2;
+export const ECO_HEDGE_YIELD_FACTOR = 0.9;
+
+// ---- Écologie : scores, tourisme, alertes (§5.5, §7.1, §7.3) -----------------------------------
+/** Poids du score nature : `0,3·air + 0,3·eau + 0,25·espèces + 0,15·fertilité` (§7.1). */
+export const ECO_NATURE_WEIGHTS = Object.freeze({ air: 0.3, water: 0.3, species: 0.25, soil: 0.15 });
+/**
+ * Tourisme (§5.5) : points par espèce présente, pour un lac propre (sous `cleanLakeMax`), par tranche de
+ * dix cases de forêt (plafonnée par `forestMax`), et plafond général. Les recettes des commerces sont
+ * multipliées par `1 + tourisme/100`.
+ */
+export const ECO_TOURISM = Object.freeze({
+  perSpecies: 5,
+  cleanLake: 10,
+  cleanLakeMax: 30,
+  perForest10: 2,
+  forestMax: 20,
+  max: 50,
+});
+/** Alertes : seuil et nombre de mois consécutifs avant le signalement (§5.1, §5.2, §7.3). */
+export const ECO_ALERTS = Object.freeze({
+  smog: Object.freeze({ threshold: 60, months: 5 }),
+  algae: Object.freeze({ threshold: 60, months: 10 }),
+  flood: Object.freeze({ wetlandShare: 0.2, months: 6 }),
+  heat: Object.freeze({ radius: 2, months: 3 }),
+});
+/** Exode écologique (§7.3) : au-delà de ces seuils, cette part des habitants s'en va chaque mois. */
+export const ECO_EXODUS_AIR = 60;
+export const ECO_EXODUS_HEALTH = 40;
+export const ECO_EXODUS_RATE = 0.03;

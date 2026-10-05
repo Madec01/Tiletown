@@ -8,8 +8,9 @@
      #ui                  calque de l'interface (pointer-events: none ; ses enfants le réactivent)
        #hud               barre du haut : 4 jauges (Population, Bonheur, Nature, Argent + delta), date, pause/vitesse
        #stats             mesures du prototype (appels de dessin, triangles, ms/image, i/s), en haut à droite
-       #alerts            bandeau d'alerte (bilan de saison / d'année), un à la fois, bouton OK
-       #sheet-layer       feuille coulissante du bas (catalogue avec barres de demande, fiche d'une case)
+       #alerts            bandeau d'alerte (saison, année, écologie), un à la fois, bouton « Voir » puis OK
+       #layer-pill        pastille du calque actif (air, eau, faune, sols) avec son ✕, sous la barre du haut
+       #sheet-layer       feuille coulissante du bas (catalogue, fiche d'une case, calques, nature, carnet)
        #toasts            messages temporaires (au-dessus des onglets et de la barre d'action)
        #action            barre d'action : tuile « en main », résumé du fantôme, boutons ✓ (56 px) et ✕ (48 px)
        #tabbar            barre d'onglets du catalogue (≥ 56 px) : familles + Démolir + Calques
@@ -781,3 +782,225 @@ body.is-rotated #rotate { display: grid; }
 /* Fiche : adjacences du bonheur local (bonus en vert, malus en rouge) */
 .tile-adjacency li.is-up { color: var(--btn-bg); }
 .tile-adjacency li.is-down { color: var(--c-roof-red); }
+
+
+/* ─── Calques : pastille du calque actif (en haut, sous la barre du HUD) ────────
+   Le calque reste allumé quand la feuille se referme : cette pastille le rappelle et le coupe (✕ de
+   48 px). Elle s'efface sous un bandeau d'alerte (un seul message à la fois, docs/MOBILE.md). */
+#layer-pill {
+  position: absolute;
+  z-index: 26;
+  left: calc(var(--safe-l) + 8px);
+  top: calc(var(--inset-top) + 8px);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: calc(var(--radius-sm) + 3px);
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow);
+}
+/* Un bandeau d'alerte occupe le haut de l'écran : la pastille s'efface le temps qu'il soit lu. */
+#alerts.is-open ~ #layer-pill { display: none; }
+.layer-pill-main,
+.layer-pill-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.875rem; /* 14 px */
+  font-weight: 800;
+  cursor: pointer;
+}
+.layer-pill-main:active,
+.layer-pill-x:active { transform: translateY(1px); background: var(--panel-2); }
+.layer-pill-x { padding: 0; font-size: 1.125rem; color: var(--ink-soft); }
+.layer-pill-dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--lay, var(--c-sidewalk));
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.14);
+}
+.layer-pill-text { white-space: nowrap; }
+
+/* ─── Feuille des calques ───────────────────────────────────────────────────────
+   Les dégradés recopient LAYER_RAMPS de src/render3d/layers.js (la légende exacte vient de
+   r.layerInfo(kind) ; ces teintes ne servent qu'aux pastilles des boutons). */
+#layer-pill[data-layer='air'] { --lay: linear-gradient(135deg, var(--c-rock-light), #7a4a30); }
+#layer-pill[data-layer='water'] { --lay: linear-gradient(135deg, var(--c-river), #6f8a3a); }
+#layer-pill[data-layer='fauna'] { --lay: linear-gradient(135deg, #d6e9bf, #1f8a3c); }
+#layer-pill[data-layer='soil'] { --lay: linear-gradient(135deg, var(--c-wall-beige), var(--c-wood)); }
+
+.layers { display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 4px; }
+.layer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.layer-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--t-fast), border-color var(--t-fast);
+}
+.layer-btn:active { transform: translateY(1px); border-color: var(--accent); }
+.layer-btn.is-active { border-color: var(--accent); background: var(--panel); box-shadow: inset 0 0 0 2px var(--accent); }
+.layer-btn--soft { min-height: 56px; padding: 8px 12px; background: var(--panel); }
+.layer-btn-swatch {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--lay, var(--c-rock-light));
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12);
+}
+.layer-btn--none .layer-btn-swatch { --lay: linear-gradient(135deg, var(--c-grass-light), var(--c-grass)); }
+.layer-btn--air .layer-btn-swatch { --lay: linear-gradient(135deg, var(--c-rock-light), #7a4a30); }
+.layer-btn--water .layer-btn-swatch { --lay: linear-gradient(135deg, var(--c-river), #6f8a3a); }
+.layer-btn--fauna .layer-btn-swatch { --lay: linear-gradient(135deg, #d6e9bf, #1f8a3c); }
+.layer-btn--soil .layer-btn-swatch { --lay: linear-gradient(135deg, var(--c-wall-beige), var(--c-wood)); }
+.layer-btn-label { flex: 1 1 auto; min-width: 0; font-size: 1rem; font-weight: 800; }
+.layer-btn-mark { flex: none; width: 22px; font-size: 1.125rem; font-weight: 900; color: var(--accent); opacity: 0; }
+.layer-btn.is-active .layer-btn-mark { opacity: 1; }
+
+/* Légende du calque : barre dégradée et libellés des deux bornes (r.layerInfo) */
+.layer-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.layer-legend-title { grid-column: 1 / 4; margin: 0; font-size: 0.9375rem; font-weight: 800; }
+.layer-legend-bar {
+  grid-column: 1 / 4;
+  display: block;
+  height: 14px;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px rgba(58, 58, 66, 0.12);
+}
+.layer-legend-min,
+.layer-legend-mid,
+.layer-legend-max { font-size: 0.8125rem; font-weight: 700; color: var(--ink-soft); }
+.layer-legend-mid { text-align: center; }
+.layer-legend-max { text-align: right; }
+.layer-legend-hint { grid-column: 1 / 4; margin: 2px 0 0; font-size: 0.875rem; line-height: 1.3; color: var(--ink-soft); }
+
+/* Bascule « Hachures (daltonisme) » : couleur + motif pour lire un calque sans distinguer les teintes */
+.layer-pattern {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.layer-pattern:active { transform: translateY(1px); }
+.layer-pattern.is-on { border-color: var(--accent); }
+.layer-pattern-box {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 2px solid var(--line);
+  background:
+    repeating-linear-gradient(45deg, rgba(58, 58, 66, 0.35) 0 3px, transparent 3px 6px),
+    var(--panel-2);
+}
+.layer-pattern.is-on .layer-pattern-box { border-color: var(--accent); background: repeating-linear-gradient(45deg, var(--accent) 0 3px, var(--c-wall-cream) 3px 6px); }
+.layer-pattern-label { flex: 1 1 auto; min-width: 0; }
+
+/* ─── Fiche Nature : quatre sous-scores touchables (chacun allume son calque) ─── */
+.nature-sheet { display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 4px; }
+.nature-total { margin: 0; font-size: 1.125rem; font-weight: 800; }
+.eco-rows { display: flex; flex-direction: column; gap: 6px; }
+.eco-row {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.eco-row:active { transform: translateY(1px); filter: brightness(0.97); }
+.eco-label { font-size: 0.9375rem; font-weight: 800; }
+.eco-bar { display: block; height: 12px; border-radius: 6px; background: var(--panel); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(58, 58, 66, 0.1); }
+.eco-fill { display: block; height: 100%; border-radius: 6px; background: var(--eco, var(--c-grass)); transition: width var(--t-med) ease; }
+.eco-value { font-size: 1rem; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.eco-row--air { --eco: linear-gradient(90deg, var(--c-rock-light), var(--c-grass)); }
+.eco-row--water { --eco: linear-gradient(90deg, var(--c-wetland), var(--c-river)); }
+.eco-row--fauna { --eco: linear-gradient(90deg, var(--c-grass-light), var(--c-forest-dark)); }
+.eco-row--soil { --eco: linear-gradient(90deg, var(--c-wall-beige), var(--c-wheat)); }
+
+/* ─── Carnet des espèces (fiche Nature et feuille « Carnet ») ─────────────────── */
+.book { display: flex; flex-direction: column; gap: 8px; padding: 2px 2px 4px; }
+.book-count { margin: 2px 0 0; font-size: 0.9375rem; color: var(--ink-soft); }
+.species-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.species {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.species.is-absent { background: none; box-shadow: inset 0 0 0 1.5px var(--line); }
+.species-ico { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--panel); }
+.species.is-absent .species-ico { filter: saturate(0.15) opacity(0.75); }
+.species-body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.species-name { font-size: 1rem; font-weight: 800; }
+.species.is-absent .species-name { color: var(--ink-soft); font-weight: 700; }
+.species-note { font-size: 0.875rem; line-height: 1.3; color: var(--ink-soft); }
+.species-see { flex: none; margin-left: auto; min-height: 48px; }
+.species-list--big .species { min-height: 64px; padding: 8px 10px; }
+.species-list--big .species-ico { width: 48px; height: 48px; }
+.species-list--big .species-name { font-size: 1.0625rem; }
+.species-list--big .species-note { font-size: 0.9375rem; }
+
+/* ─── Bloc écologie de la fiche d'une case (barres courtes) ───────────────────── */
+.tile-eco { display: flex; flex-direction: column; gap: 4px; }
+.tile-eco-rows { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; }
+.tile-eco-row { display: contents; }
+.tile-eco-label { font-size: 0.875rem; font-weight: 700; color: var(--ink-soft); }
+.tile-eco-bar { display: block; height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(58, 58, 66, 0.08); }
+.tile-eco-fill { display: block; height: 100%; border-radius: 4px; background: var(--eco, var(--c-grass)); }
+.tile-eco-row.is-load .tile-eco-fill { background: linear-gradient(90deg, var(--c-wheat), var(--c-roof-red)); }
+.tile-eco-row.is-life .tile-eco-fill { background: linear-gradient(90deg, var(--c-grass-light), var(--c-forest-dark)); }
+.tile-eco-word { font-size: 0.8125rem; font-weight: 700; color: var(--ink-soft); white-space: nowrap; }
+.tile-eco-species { margin: 4px 0 0; font-size: 0.9375rem; line-height: 1.3; }
+
+/* Bandeau d'alerte : bouton « Voir » (centre la carte, allume le calque) devant le bouton OK */
+.alert-see { flex: none; min-width: 64px; background: var(--c-river); color: var(--ink); }

@@ -4,7 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createActors, updateActors, syncActors, actorsStats, habitatSummary, streetGraph, offsetPath, allocate, tileIndexAt,
-  CAPS, SIDEWALK_OFFSET, LANE_OFFSET, RESIDENTS_PER_LEVEL, FLIGHT,
+  speciesFilter, speciesPresent,
+  CAPS, SIDEWALK_OFFSET, LANE_OFFSET, RESIDENTS_PER_LEVEL, FLIGHT, ECO_SPECIES,
 } from '../src/core/actors.js';
 import { generateWorld } from '../src/core/worldgen.js';
 import { rebuildRoads, computeTraffic, EDGE } from '../src/core/roads.js';
@@ -324,5 +325,93 @@ test('actors : un monde modifié se resynchronise (nouveaux quartiers → plus d
   syncActors(actors, world3);
   simulate(actors, world3, 10);
   assert.equal(actorsStats(actors).byGroup.habitant, 4);
+  for (const a of actors.list) assert.ok(Number.isFinite(a.x) && Number.isFinite(a.z));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Faune pilotée par l'écologie (docs/ARCHITECTURE.md §10.3)
+
+test('actors : speciesFilter accepte eco.species, un tableau ou un Set ; le canard échappe à l’écologie', () => {
+  assert.equal(speciesFilter(null), null, 'sans écologie : toutes les espèces sont présentes');
+  assert.equal(speciesFilter(undefined), null);
+  assert.deepEqual(speciesFilter(['deer', 'owl']), new Set(['deer', 'owl']));
+  assert.deepEqual(speciesFilter(new Set(['fox'])), new Set(['fox']));
+  assert.deepEqual(
+    speciesFilter({ deer: { present: true, since: 4, cells: [1] }, owl: { present: false, since: 0, cells: [] }, fox: { cells: [2] } }),
+    new Set(['deer', 'fox']),
+    'une entrée sans `present` compte comme présente',
+  );
+  // speciesPresent : hors écologie, tout passe ; sous écologie, seule la liste compte.
+  const filter = speciesFilter(['deer']);
+  assert.equal(speciesPresent(filter, 'deer'), true);
+  assert.equal(speciesPresent(filter, 'owl'), false);
+  assert.equal(speciesPresent(filter, 'duck'), true, 'le canard n’est pas une espèce emblématique');
+  assert.equal(speciesPresent(filter, 'habitant'), true);
+  assert.equal(speciesPresent(null, 'owl'), true, 'sans filtre, rien n’est retiré');
+  assert.deepEqual([...ECO_SPECIES], ['deer', 'fox', 'heron', 'otter', 'bee', 'swallow', 'owl']);
+});
+
+test('actors : createActors({ species }) ne crée que la faune présente (défaut : toutes)', () => {
+  const world = generateWorld({ seed: 7, starterTown: true });
+  const all = actorsStats(createActors(world, 7)).byKind;
+  assert.ok(all.deer >= 1 && all.heron >= 1 && all.bee >= 1 && all.duck >= 1, JSON.stringify(all));
+
+  // Écologie pauvre : seuls le canard (hors écologie) et les abeilles subsistent.
+  const poor = createActors(world, 7, { species: { bee: { present: true, since: 2, cells: [] } } });
+  const kinds = actorsStats(poor).byKind;
+  for (const species of ECO_SPECIES) {
+    if (species === 'bee') continue;
+    assert.ok(!kinds[species], `${species} ne devrait pas exister (${JSON.stringify(kinds)})`);
+  }
+  assert.ok(kinds.bee >= 1, 'les abeilles restent');
+  assert.ok(kinds.duck >= 1, 'les canards ne dépendent pas de l’écologie');
+  // Le plafond se partage entre les espèces présentes : plus d'abeilles qu'avec toute la faune.
+  assert.ok(kinds.bee >= all.bee, `${kinds.bee} abeilles contre ${all.bee}`);
+  assert.ok(actorsStats(poor).byGroup.animal <= CAPS.animal);
+  // Habitants et véhicules ne bougent pas d'un poil.
+  assert.equal(actorsStats(poor).byGroup.habitant, actorsStats(createActors(world, 7)).byGroup.habitant);
+
+  // Liste vide : plus aucune espèce emblématique (le canard reste).
+  const none = actorsStats(createActors(world, 7, { species: [] })).byKind;
+  for (const species of ECO_SPECIES) assert.ok(!none[species], species);
+  assert.ok(none.duck >= 1);
+});
+
+test('actors : syncActors({ species }) ajoute et retire les animaux sans réinitialiser les autres', () => {
+  const world = generateWorld({ seed: 7, starterTown: true });
+  const actors = createActors(world, 7, { species: ['deer', 'bee'] });
+  simulate(actors, world, 10);
+  const before = actorsStats(actors).byKind;
+  assert.ok(before.deer >= 1 && before.bee >= 1 && !before.heron);
+  const habitantsBefore = positions(actors).filter((p) => p[1] === 'habitant');
+  const beeIds = actors.list.filter((a) => a.kind === 'bee').map((a) => a.id);
+  const deerState = actors.list.filter((a) => a.kind === 'deer').map((a) => [a.id, a.x, a.z]);
+
+  // Le héron arrive (berges propres) : il naît, le reste est intact.
+  syncActors(actors, world, { species: ['deer', 'bee', 'heron'] });
+  const after = actorsStats(actors).byKind;
+  assert.ok(after.heron >= 1, 'le héron est arrivé');
+  assert.deepEqual(actors.list.filter((a) => a.kind === 'bee').map((a) => a.id), beeIds, 'les abeilles sont les mêmes');
+  assert.deepEqual(actors.list.filter((a) => a.kind === 'deer').map((a) => [a.id, a.x, a.z]), deerState, 'les cerfs n’ont pas bougé');
+  assert.deepEqual(positions(actors).filter((p) => p[1] === 'habitant'), habitantsBefore, 'les habitants continuent leur trajet');
+
+  // La forêt est rasée dans l'écologie : le cerf disparaît, les autres restent.
+  syncActors(actors, world, { species: ['bee', 'heron'] });
+  const gone = actorsStats(actors).byKind;
+  assert.ok(!gone.deer, 'plus de cerf');
+  assert.ok(gone.heron >= 1 && gone.bee >= 1);
+  assert.deepEqual(positions(actors).filter((p) => p[1] === 'habitant'), habitantsBefore);
+
+  // Sans option, la liste en place est conservée (updateActors resynchronise sur un monde neuf).
+  const world2 = generateWorld({ seed: 7, starterTown: true });
+  updateActors(actors, world2, DT);
+  const kept = actorsStats(actors).byKind;
+  assert.ok(!kept.deer, 'le cerf reste absent après un changement de monde');
+  assert.ok(kept.bee >= 1);
+  // `species: null` rouvre la vallée à toute la faune.
+  syncActors(actors, world2, { species: null });
+  const back = actorsStats(actors).byKind;
+  assert.ok(back.deer >= 1, 'le cerf revient');
+  simulate(actors, world2, 5);
   for (const a of actors.list) assert.ok(Number.isFinite(a.x) && Number.isFinite(a.z));
 });

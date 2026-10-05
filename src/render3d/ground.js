@@ -8,6 +8,12 @@
 // terre. `update(dt)` avance l'horloge du shader ; deux appels de dessin pour toute l'eau, sans ombre portée.
 // Les fonctions `flowVector`, `bankMask`, `bankVector` sont pures (testables sous Node).
 //
+// ÉCOLOGIE (§10.3) : deux réglages par case, sans reconstruire le monde ni ajouter d'appel de dessin —
+//   `setLayerValues(norm)` + `setLayerPattern(on)` : mode daltonien, HACHURES diagonales dont la densité
+//     dit la valeur du calque actif (attribut d'instance `aLayer`, 5 bandes, voir layers.js) ;
+//   `setWaterQuality(values)` : la teinte de l'eau glisse vers un VERT TROUBLE quand `eco.water` monte
+//     (attribut d'instance `aQuality`, interpolation de la couleur de base dans le shader).
+//
 // Repère : la case (x, y) couvre [x, x+1] × [y, y+1] en (X, Z) ; le dessus de la terre est à y = 0 ;
 // nord = −Z, est = +X.
 
@@ -15,6 +21,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../data/palette.js';
 import { TERRAINS } from '../data/terrain.js';
 import { hashUnit, lerp, composeScaled } from './util.js';
+import { LAYER_BANDS, HATCH_CYCLES, valueScale, layerNormalized } from './layers.js';
 
 /** Épaisseur des boîtes de terre (visible sur les berges et au bord de la carte). */
 export const LAND_THICKNESS = 0.12;
@@ -36,6 +43,12 @@ export const WATER_STYLES = Object.freeze({
   lake: Object.freeze([WAVE_AMPLITUDE, 0]),
   wetland: Object.freeze([0.0025, 0]),
 });
+/** Teinte de l'eau polluée (vert trouble) : la couleur de base y glisse quand `eco.water` monte. */
+export const WATER_MURKY = '#6f8a3a';
+/** Part maximale de vert trouble dans l'eau (eau à 100). */
+export const WATER_MURKY_MIX = 0.72;
+/** Contraste des hachures du mode daltonien (0 = invisible, 1 = noir ou blanc franc). */
+export const HATCH_DARKEN = 0.5;
 /** Bits du masque des berges (`bankMask`) : côtés de la case bordés de terre. */
 export const BANK_N = 1;
 export const BANK_E = 2;
@@ -108,6 +121,73 @@ export function surfaceHeight(world, x, y) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Hachures du mode daltonien (partagées par la terre et l'eau)
+// ---------------------------------------------------------------------------------------------
+
+/** Déclarations communes aux shaders de sol : valeur du calque par instance et position monde. */
+const HATCH_VERTEX_PARS = /* glsl */`
+attribute float aLayer;
+varying float vLayer;
+varying vec2 vHatchPos;
+`;
+
+const HATCH_FRAGMENT_PARS = /* glsl */`
+uniform float uPattern;
+varying float vLayer;
+varying vec2 vHatchPos;
+`;
+
+/**
+ * Hachures diagonales (nord-ouest → sud-est) dont la densité dit la valeur du calque : 5 bandes, de
+ * « aucune hachure » à « serrée » (layers.js : `layerBand`). `aLayer` vaut −1 hors calque : rien n'est
+ * dessiné. Les traits assombrissent la couleur en place : lisibles sur l'eau comme sur les collines,
+ * et sans appel de dessin de plus.
+ */
+const HATCH_FRAGMENT_BODY = /* glsl */`
+if ( uPattern > 0.5 && vLayer >= 0.0 ) {
+	float band = floor( min( vLayer, 0.999 ) * ${LAYER_BANDS.toFixed(1)} );
+	float freq = band * ${HATCH_CYCLES.toFixed(3)};
+	if ( freq > 0.0 ) {
+		float s = ( vHatchPos.x + vHatchPos.y ) * freq;
+		float f = abs( fract( s ) - 0.5 ) * 2.0;             // 1 au bord de la bande, 0 en son milieu
+		float line = 1.0 - smoothstep( 0.1, 0.55, f );       // trait doux, large d'environ la moitié du cycle
+		// L'encre contraste toujours : trait foncé sur une case claire, trait clair sur une case foncée.
+		float lum = dot( diffuseColor.rgb, vec3( 0.299, 0.587, 0.114 ) );
+		vec3 ink = mix( mix( diffuseColor.rgb, vec3( 1.0 ), ${HATCH_DARKEN.toFixed(3)} ), diffuseColor.rgb * ${(1 - HATCH_DARKEN).toFixed(3)}, step( 0.22, lum ) );
+		diffuseColor.rgb = mix( diffuseColor.rgb, ink, line );
+	}
+}
+`;
+
+/** Corps de vertex commun : position monde de la case et valeur du calque (après `begin_vertex`). */
+const HATCH_VERTEX_BODY = /* glsl */`
+{
+	vec4 hp = vec4( position, 1.0 );
+	#ifdef USE_INSTANCING
+		hp = instanceMatrix * hp;
+	#endif
+	hp = modelMatrix * hp;
+	vHatchPos = hp.xz;
+	vLayer = aLayer;
+}
+`;
+
+/**
+ * Matériau de la terre : Lambert coloré par instance, plus les hachures du mode daltonien.
+ * { material, uniforms } ; `uniforms.uPattern.value` vaut 0 ou 1.
+ */
+export function createLandMaterial(uniforms = { uPattern: { value: 0 } }) {
+  const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uPattern = uniforms.uPattern;
+    shader.vertexShader = HATCH_VERTEX_PARS + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + HATCH_VERTEX_BODY);
+    shader.fragmentShader = HATCH_FRAGMENT_PARS + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + HATCH_FRAGMENT_BODY);
+  };
+  material.customProgramCacheKey = () => 'tiletown-land-1';
+  return { material, uniforms };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Matériau de l'eau : Lambert modifié par onBeforeCompile (GLSL ES 3.0 via les #define de three.js)
 // ---------------------------------------------------------------------------------------------
 
@@ -116,11 +196,13 @@ uniform float uTime;
 attribute vec2 aFlow;
 attribute vec4 aBanks;
 attribute vec2 aStyle;
+attribute float aQuality;
 varying vec2 vWaterPos;
 varying vec2 vLocalPos;
 varying vec2 vFlow;
 varying vec4 vBanks;
 varying vec2 vStyle;
+varying float vQuality;
 `;
 
 const WATER_VERTEX_BODY = /* glsl */`
@@ -136,6 +218,7 @@ vec3 transformed = vec3( position );
 	vFlow = aFlow;
 	vBanks = aBanks;
 	vStyle = aStyle;
+	vQuality = aQuality;
 	// Ondulation douce : deux fréquences croisées, fonction de la position monde (continue d'une case à l'autre).
 	float w1 = sin( wp.x * 6.1 + wp.z * 2.3 + uTime * 1.9 );
 	float w2 = sin( wp.x * 2.7 - wp.z * 5.3 - uTime * 1.3 );
@@ -145,11 +228,13 @@ vec3 transformed = vec3( position );
 
 const WATER_FRAGMENT_PARS = /* glsl */`
 uniform float uTime;
+uniform vec3 uMurky;
 varying vec2 vWaterPos;
 varying vec2 vLocalPos;
 varying vec2 vFlow;
 varying vec4 vBanks;
 varying vec2 vStyle;
+varying float vQuality;
 `;
 
 /** Corps du fragment, inséré après `color_fragment` (diffuseColor porte déjà la couleur d'instance). */
@@ -172,7 +257,13 @@ const WATER_FRAGMENT_BODY = /* glsl */`
 	foam = max( foam, vBanks.z * ( 1.0 - smoothstep( 0.0, edge, 0.5 - vLocalPos.y ) ) );
 	foam = max( foam, vBanks.w * ( 1.0 - smoothstep( 0.0, edge, 0.5 + vLocalPos.x ) ) );
 	foam *= 0.75 + 0.25 * sin( uTime * 2.1 + along * 7.0 );
-	float light = clamp( bands + shimmer + foam * 0.5, 0.0, 0.6 );
+	// Eau polluée : la couleur de base glisse vers le vert trouble, les reflets s'éteignent, des voiles
+	// d'algues apparaissent (deux ondes lentes), proportionnellement a la pollution (aQuality).
+	float q = clamp( vQuality, 0.0, 1.0 );
+	float algae = smoothstep( 0.35, 1.0, sin( vWaterPos.x * 2.1 + uTime * 0.17 ) * sin( vWaterPos.y * 1.7 - uTime * 0.13 ) ) * q * 0.25;
+	diffuseColor.rgb = mix( diffuseColor.rgb, uMurky, q * ${WATER_MURKY_MIX.toFixed(3)} );
+	diffuseColor.rgb = mix( diffuseColor.rgb, uMurky * 0.8, algae );
+	float light = clamp( bands + shimmer + foam * 0.5, 0.0, 0.6 ) * ( 1.0 - 0.6 * q );
 	diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), light );
 }
 `;
@@ -181,18 +272,26 @@ const WATER_FRAGMENT_BODY = /* glsl */`
  * Matériau partagé par toute l'eau : { material, uniforms } ; `uniforms.uTime.value` est l'horloge (s).
  * La couleur vient de `instanceColor` (terrain ou calque), un léger éclat propre éclaircit l'eau.
  */
-export function createWaterMaterial() {
-  const uniforms = { uTime: { value: 0 } };
+export function createWaterMaterial(shared = {}) {
+  const uniforms = {
+    uTime: { value: 0 },
+    uMurky: { value: new THREE.Color(WATER_MURKY) },
+    uPattern: shared.uPattern || { value: 0 },
+  };
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     emissive: new THREE.Color(PALETTE.river).multiplyScalar(0.22),
   });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
-    shader.vertexShader = WATER_VERTEX_PARS + shader.vertexShader.replace('#include <begin_vertex>', WATER_VERTEX_BODY);
-    shader.fragmentShader = WATER_FRAGMENT_PARS + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + WATER_FRAGMENT_BODY);
+    shader.uniforms.uMurky = uniforms.uMurky;
+    shader.uniforms.uPattern = uniforms.uPattern;
+    shader.vertexShader = WATER_VERTEX_PARS + HATCH_VERTEX_PARS
+      + shader.vertexShader.replace('#include <begin_vertex>', WATER_VERTEX_BODY + HATCH_VERTEX_BODY);
+    shader.fragmentShader = WATER_FRAGMENT_PARS + HATCH_FRAGMENT_PARS
+      + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + WATER_FRAGMENT_BODY + HATCH_FRAGMENT_BODY);
   };
-  material.customProgramCacheKey = () => 'tiletown-water-2';
+  material.customProgramCacheKey = () => 'tiletown-water-3';
   return { material, uniforms };
 }
 
@@ -202,6 +301,7 @@ export function createWaterMaterial() {
 
 /**
  * Crée le sol. API : { group, setWorld(world), update(dt), setTime(t), time, setTileColors(rgb | null),
+ * setLayerValues(norm01 | null), setLayerPattern(on), layerPattern, setWaterQuality(values | null),
  * baseColors(), stats, dispose() }.
  * `setTileColors` reçoit un Float32Array (3 valeurs linéaires par case) pour les calques, ou null
  * pour revenir aux couleurs de terrain. `update(dt)` fait avancer l'eau (à appeler avant chaque image animée).
@@ -210,12 +310,14 @@ export function createGround() {
   const group = new THREE.Group();
   group.name = 'ground';
 
-  const landGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const landMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const landTemplate = new THREE.BoxGeometry(1, 1, 1);
+  // Hachures du mode daltonien : un seul interrupteur pour la terre et l'eau.
+  const patternUniform = { value: 0 };
+  const { material: landMaterial } = createLandMaterial({ uPattern: patternUniform });
   // Plan d'eau 1 × 1 à 2 × 2 segments (neuf sommets) : assez pour que l'ondulation se voie.
   const waterTemplate = new THREE.PlaneGeometry(1, 1, 2, 2);
   waterTemplate.rotateX(-Math.PI / 2);
-  const { material: waterMaterial, uniforms } = createWaterMaterial();
+  const { material: waterMaterial, uniforms } = createWaterMaterial({ uPattern: patternUniform });
   const baseMaterial = new THREE.MeshLambertMaterial({ color: new THREE.Color(PALETTE.soil).multiplyScalar(0.72) });
   const baseGeometry = new THREE.BoxGeometry(1, 1, 1);
   const riverColor = new THREE.Color(PALETTE.river);
@@ -231,7 +333,11 @@ export function createGround() {
   let filmSlots = null;
   /** Couleurs de terrain par case (linéaires), référence pour les calques. */
   let colors = null;
-  const stats = { tiles: 0, land: 0, water: 0, wetland: 0, hills: 0, drawables: 0 };
+  /** Valeurs du calque actif normalisées (0 à 1) par case, ou null : conservées pour les hachures. */
+  let layerField = null;
+  /** Qualité de l'eau par case (0 à 1), ou null : conservée d'un monde à l'autre. */
+  let qualityField = null;
+  const stats = { tiles: 0, land: 0, water: 0, wetland: 0, hills: 0, drawables: 0, pattern: 0 };
 
   const color = new THREE.Color();
   const tint = new THREE.Color();
@@ -242,13 +348,15 @@ export function createGround() {
     return out.copy(src).lerp(riverColor, 0.5);
   }
 
-  /** InstancedMesh d'eau avec ses attributs par instance (aFlow, aBanks, aStyle). */
+  /** InstancedMesh d'eau avec ses attributs par instance (aFlow, aBanks, aStyle, aLayer, aQuality). */
   function createWaterMesh(name, count) {
     const m = Math.max(1, count);
     const geometry = waterTemplate.clone();
     geometry.setAttribute('aFlow', new THREE.InstancedBufferAttribute(new Float32Array(m * 2), 2));
     geometry.setAttribute('aBanks', new THREE.InstancedBufferAttribute(new Float32Array(m * 4), 4));
     geometry.setAttribute('aStyle', new THREE.InstancedBufferAttribute(new Float32Array(m * 2), 2));
+    geometry.setAttribute('aLayer', new THREE.InstancedBufferAttribute(new Float32Array(m).fill(-1), 1));
+    geometry.setAttribute('aQuality', new THREE.InstancedBufferAttribute(new Float32Array(m), 1));
     const mesh = new THREE.InstancedMesh(geometry, waterMaterial, m);
     mesh.name = name;
     mesh.count = count;
@@ -273,7 +381,8 @@ export function createGround() {
     for (const mesh of [land, water, film, base]) {
       if (!mesh) continue;
       group.remove(mesh);
-      if (mesh === water || mesh === film) mesh.geometry.dispose(); // géométrie propre à ce monde (attributs d'instances)
+      // Géométries propres à ce monde (attributs d'instances) ; le socle garde la sienne, partagée.
+      if (mesh === water || mesh === film || mesh === land) mesh.geometry.dispose();
     }
     land = water = film = base = null;
     stats.drawables = 0;
@@ -296,6 +405,8 @@ export function createGround() {
       if (t && isShallowWater(t.terrain)) wetCount++;
     }
 
+    const landGeometry = landTemplate.clone();
+    landGeometry.setAttribute('aLayer', new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, landCount)).fill(-1), 1));
     land = new THREE.InstancedMesh(landGeometry, landMaterial, Math.max(1, landCount));
     land.name = 'land';
     land.castShadow = true;    // les collines et les berges portent une ombre
@@ -357,6 +468,68 @@ export function createGround() {
     group.add(land, water, film, base);
     stats.tiles = n; stats.land = landCount; stats.water = waterCount; stats.wetland = wetCount; stats.hills = hillCount;
     stats.drawables = 2 + (waterCount > 0 ? 1 : 0) + (wetCount > 0 ? 1 : 0);
+    // Les champs d'écologie survivent à la reconstruction du monde (calque actif, qualité de l'eau).
+    if (layerField) writeLayerField(layerField);
+    if (qualityField) writeQualityField(qualityField);
+  }
+
+  /** Écrit l'attribut `aLayer` (valeur normalisée du calque, −1 hors calque) sur la terre et l'eau. */
+  function writeLayerField(field) {
+    if (!world || !land || !water) return;
+    const n = world.cols * world.rows;
+    const landAttr = land.geometry.attributes.aLayer;
+    const waterAttr = water.geometry.attributes.aLayer;
+    const filmAttr = film.geometry.attributes.aLayer;
+    for (let i = 0; i < n; i++) {
+      const v = field ? (i < field.length ? field[i] : 0) : -1;
+      const s = slots[i];
+      if (s >= 0) landAttr.array[s] = v; else waterAttr.array[-s - 1] = v;
+      if (filmSlots[i] >= 0) filmAttr.array[filmSlots[i]] = v;
+    }
+    landAttr.needsUpdate = true; waterAttr.needsUpdate = true; filmAttr.needsUpdate = true;
+  }
+
+  /** Écrit l'attribut `aQuality` (pollution de l'eau, 0 à 1) sur l'eau profonde et les zones humides. */
+  function writeQualityField(field) {
+    if (!world || !water || !film) return;
+    const n = world.cols * world.rows;
+    const waterAttr = water.geometry.attributes.aQuality;
+    const filmAttr = film.geometry.attributes.aQuality;
+    for (let i = 0; i < n; i++) {
+      const v = field ? (i < field.length ? field[i] : 0) : 0;
+      const s = slots[i];
+      if (s < 0) waterAttr.array[-s - 1] = v;
+      if (filmSlots[i] >= 0) filmAttr.array[filmSlots[i]] = v;
+    }
+    waterAttr.needsUpdate = true; filmAttr.needsUpdate = true;
+  }
+
+  /**
+   * Valeurs du calque actif pour les hachures : Float32Array normalisé (0 à 1) par case, ou null pour
+   * couper les hachures (calque « Aucun »). N'alloue rien et ne reconstruit pas le monde.
+   */
+  function setLayerValues(values) {
+    layerField = values || null;
+    writeLayerField(layerField);
+  }
+
+  /** Mode daltonien : hachures diagonales par bandes de valeur sur la terre et l'eau. */
+  function setLayerPattern(on) {
+    patternUniform.value = on ? 1 : 0;
+    stats.pattern = patternUniform.value;
+  }
+
+  /**
+   * Qualité de l'eau par case (`eco.water` de GAME_DESIGN §5.2, 0 à 100 ou 0 à 1) : la teinte de l'eau
+   * glisse vers un vert trouble quand la valeur monte. null ou un tableau vide rend l'eau claire.
+   */
+  function setWaterQuality(values) {
+    if (!values || !values.length) { qualityField = null; writeQualityField(null); return; }
+    const scale = valueScale(values);
+    const field = qualityField && qualityField.length === values.length ? qualityField : new Float32Array(values.length);
+    for (let i = 0; i < values.length; i++) field[i] = layerNormalized(values[i], scale);
+    qualityField = field;
+    writeQualityField(field);
   }
 
   /** Applique des couleurs par case (Float32Array linéaire, 3 par case) ou restaure les terrains. */
@@ -382,7 +555,7 @@ export function createGround() {
 
   function dispose() {
     clear();
-    for (const g of [landGeometry, waterTemplate, baseGeometry]) g.dispose();
+    for (const g of [landTemplate, waterTemplate, baseGeometry]) g.dispose();
     for (const m of [landMaterial, waterMaterial, baseMaterial]) m.dispose();
   }
 
@@ -391,6 +564,11 @@ export function createGround() {
     stats,
     setWorld,
     update,
+    setLayerValues,
+    setLayerPattern,
+    setWaterQuality,
+    /** Mode daltonien actif ? */
+    get layerPattern() { return patternUniform.value > 0.5; },
     /** Fixe l'horloge de l'eau (captures déterministes). */
     setTime(t) { uniforms.uTime.value = Number.isFinite(t) ? t : 0; },
     get time() { return uniforms.uTime.value; },

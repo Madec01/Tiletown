@@ -10,7 +10,13 @@ import { shouldClose } from '../src/ui/sheets.js';
 import { cardsFor, priceText, demandRows, lockTextOf, isUnlocked, DEMAND_ROWS, LAYER_CARDS } from '../src/ui/catalog.js';
 import { costText, costParts, reasonText, ghostStatus, DEMOLISH_COST } from '../src/ui/placement.js';
 import { yieldLines, conditionsTitle } from '../src/ui/sheet-tile.js';
-import { seedFromSearch, hasSeedParam, describeTile, unlockHintFor, monthlyDelta, gaugesOf, eventPresentation } from '../src/main.js';
+import { isLayerKind, layerChoice, layerInfoOf, gradientCss, boundsText, pillText, LAYER_CHOICES, LAYER_KINDS, SOIL_CHOICE } from '../src/ui/layers.js';
+import { sinceLabel, speciesRows, speciesCountText, speciesCellOf, speciesLabel, speciesArt, SPECIES_FALLBACK } from '../src/ui/species-book.js';
+import { scoreRows, scoreWord, natureText, SCORE_ROWS } from '../src/ui/nature-sheet.js';
+import { ecoRows, ecoWord, ecoSpeciesText, ECO_FIELDS } from '../src/ui/sheet-tile.js';
+import { seedFromSearch, hasSeedParam, describeTile, unlockHintFor, monthlyDelta, gaugesOf, eventPresentation, ecoAlertTitle, seeTargetOf, ECO_ALERT_TITLES } from '../src/main.js';
+import { layerInfo as rendererLayerInfo } from '../src/render3d/layers.js';
+import { SPECIES } from '../src/data/species.js';
 import { generateWorld } from '../src/core/worldgen.js';
 import { TILES, TILE_BY_ID } from '../src/data/tiles.js';
 import { SPEEDS, UNLOCKS } from '../src/data/balance.js';
@@ -172,4 +178,129 @@ test('main : graine depuis l’adresse, description d’une case, déblocages, d
   assert.equal(eventPresentation({ type: 'arrivals', text: 'x' }).kind, 'info');
   assert.equal(eventPresentation({ type: 'month' }).channel, null);
   assert.equal(eventPresentation(null).channel, null);
+});
+
+test('calques : quatre choix plus les sols, légende du rendu, dégradé CSS, pastille', () => {
+  assert.deepEqual(LAYER_CHOICES.map((c) => c.id), ['none', 'air', 'water', 'fauna']);
+  assert.equal(SOIL_CHOICE.id, 'soil');
+  assert.deepEqual([...LAYER_KINDS], ['none', 'air', 'water', 'fauna', 'soil']);
+  for (const k of LAYER_KINDS) assert.equal(isLayerKind(k), true, `calque ${k}`);
+  assert.equal(isLayerKind('argent'), false);
+  assert.equal(layerChoice('soil').label, 'Sols');
+  assert.equal(layerChoice('inconnu'), null);
+  // Sans rendu (ou avec un rendu qui ne sait pas encore) : la légende de repli, jamais d'erreur.
+  assert.equal(layerInfoOf('none', null), null);
+  assert.equal(layerInfoOf('air', null).kind, 'air');
+  assert.equal(layerInfoOf('water', { layerInfo: () => { throw new Error('pas encore'); } }).kind, 'water');
+  // Avec le rendu (src/render3d/layers.js) : paliers, bornes et unité réels.
+  const info = layerInfoOf('air', { layerInfo: rendererLayerInfo });
+  assert.equal(info.min, 0);
+  assert.equal(info.max, 100);
+  assert.equal(info.stops.length, 3);
+  assert.match(gradientCss(info), /^linear-gradient\(90deg, #[0-9a-f]{6} 0%, #[0-9a-f]{6} 50%, #[0-9a-f]{6} 100%\)$/);
+  const b = boundsText(info);
+  assert.match(b.min, /^Pur 0/);
+  assert.equal(b.mid, 'Chargé');
+  assert.match(b.max, /^Irrespirable 100/);
+  assert.deepEqual(boundsText(null), { min: '', mid: '', max: '' });
+  assert.equal(gradientCss(null), 'var(--panel-2)');
+  // Arrêts donnés en simples couleurs : répartis régulièrement.
+  assert.equal(gradientCss({ stops: ['#000000', '#ffffff'] }), 'linear-gradient(90deg, #000000 0%, #ffffff 100%)');
+  assert.equal(pillText('fauna'), 'Calque Faune');
+  assert.equal(pillText('none'), '');
+  assert.equal(pillText(null), '');
+});
+
+test('carnet des espèces : date d’apparition, tri, comptage, case à montrer, dessins', () => {
+  assert.equal(sinceLabel(0), 'depuis le printemps de l’an 1');
+  assert.equal(sinceLabel(15), 'depuis l’été de l’an 2');
+  assert.equal(sinceLabel(11), 'depuis l’hiver de l’an 1');
+  assert.equal(sinceLabel(null), '');
+  assert.equal(sinceLabel(-3), '');
+  const rows = speciesRows([
+    { id: 'fox', label: 'Renard', present: false, hint: 'Un corridor entre deux parcelles.' },
+    { id: 'deer', label: 'Cerf', present: true, since: 6 },
+    { id: 'bee', label: 'Abeilles', present: true, since: 3 },
+    { id: 'owl', present: false },
+  ]);
+  assert.deepEqual(rows.map((r) => r.id), ['bee', 'deer', 'owl', 'fox'], 'présentes d’abord (les plus anciennes en tête), puis par ordre alphabétique');
+  assert.equal(rows[0].sinceText, 'depuis l’été de l’an 1');
+  assert.equal(rows[1].sinceText, 'depuis l’automne de l’an 1');
+  assert.equal(rows[2].sinceText, '', 'une espèce absente n’a pas de date');
+  assert.equal(rows[2].since, null, 'une espèce absente n’a pas de mois d’apparition');
+  assert.equal(rows[2].label, 'Chouette', 'nom de repli depuis src/data/species.js');
+  assert.deepEqual(speciesRows(null), []);
+  assert.match(speciesCountText(rows), /sur 4/);
+  assert.match(speciesCountText([{ id: 'x', label: 'X', present: false }]), /Aucune espèce/);
+  assert.match(speciesCountText([]), /premier mois/);
+  assert.deepEqual(speciesCellOf({ species: { deer: { cells: [13, 14, 15] } } }, 'deer', 12), { x: 2, y: 1 });
+  assert.equal(speciesCellOf({ species: { deer: { cells: [] } } }, 'deer', 12), null);
+  assert.equal(speciesCellOf(null, 'deer', 12), null);
+  assert.equal(speciesLabel('deer'), 'Cerf');
+  assert.equal(speciesLabel('bees'), 'Abeilles');
+  assert.equal(speciesLabel('x', 'Loup'), 'Loup');
+  // Chaque espèce du catalogue a son dessin et son nom (jamais l'identifiant brut à l'écran).
+  for (const def of SPECIES) {
+    assert.notEqual(speciesArt(def.id), SPECIES_FALLBACK, `dessin manquant pour ${def.id}`);
+    assert.equal(speciesLabel(def.id), def.label);
+    assert.ok(def.hint && def.hint.length > 10, `condition en une phrase pour ${def.id}`);
+  }
+  assert.equal(speciesArt('licorne'), SPECIES_FALLBACK);
+});
+
+test('fiche Nature : quatre sous-scores, chacun ouvre son calque, appréciation en un mot', () => {
+  assert.deepEqual(SCORE_ROWS.map((r) => r.key), ['air', 'water', 'fauna', 'soil']);
+  assert.deepEqual(SCORE_ROWS.map((r) => r.layer), ['air', 'water', 'fauna', 'soil']);
+  for (const row of SCORE_ROWS) assert.equal(isLayerKind(row.layer), true, `${row.key} : calque connu`);
+  const rows = scoreRows({ scores: { air: 82, water: 55, fauna: 30, soil: 0, nature: 64 } });
+  assert.deepEqual(rows.map((r) => r.value), [82, 55, 30, 0]);
+  assert.deepEqual(rows.map((r) => r.word), ['excellent', 'passable', 'fragile', 'critique']);
+  assert.deepEqual(scoreRows(null).map((r) => r.value), [null, null, null, null]);
+  assert.equal(scoreRows({ scores: { air: 140 } })[0].value, 100, 'note bornée à 100');
+  assert.equal(natureText({ scores: { nature: 64 } }), 'Nature : 64 / 100 · bon');
+  assert.match(natureText(null), /premier mois/);
+  assert.equal(scoreWord(100), 'excellent');
+  assert.equal(scoreWord('x'), '');
+});
+
+test('fiche d’une case : bloc écologie en barres courtes et espèces de la parcelle', () => {
+  assert.deepEqual(ECO_FIELDS.map((f) => f.key), ['air', 'water', 'fauna', 'soil']);
+  const rows = ecoRows({ air: 12, water: 48, fauna: 70, soil: 0 });
+  assert.deepEqual(rows.map((r) => r.key), ['air', 'water', 'fauna'], 'la fertilité d’un sol non cultivé est omise');
+  assert.deepEqual(rows.map((r) => r.word), ['pur', 'trouble', 'riche']);
+  assert.deepEqual(rows.map((r) => r.invert), [true, true, false], 'air et eau : la valeur haute est mauvaise');
+  assert.deepEqual(rows.map((r) => r.pct), [12, 48, 70]);
+  assert.equal(ecoRows({ air: 0, water: 0, fauna: 0, soil: 70 }).length, 4);
+  assert.equal(ecoRows(null).length, 0);
+  assert.equal(ecoWord('air', 95), 'irrespirable');
+  assert.equal(ecoWord('soil', 70), 'bonne');
+  assert.equal(ecoWord('inconnu', 10), '');
+  assert.equal(ecoSpeciesText({ species: ['deer', 'fox'] }), 'Espèces ici : Cerf, Renard');
+  assert.equal(ecoSpeciesText({ species: [] }), '');
+  assert.equal(ecoSpeciesText(null), '');
+});
+
+test('main : alertes d’écologie en bandeau avec « Voir », arrivée et départ d’une espèce', () => {
+  assert.equal(ecoAlertTitle('smog'), ECO_ALERT_TITLES.smog);
+  assert.deepEqual(Object.keys(ECO_ALERT_TITLES), ['smog', 'algae', 'flood', 'heat']);
+  assert.match(ecoAlertTitle('inconnue'), /vallée/, 'jamais une clé brute à l’écran');
+  const alert = eventPresentation({ type: 'eco-alert', key: 'smog', text: 'L’air des quartiers est irrespirable.', x: 3, y: 4, layer: 'air' });
+  assert.equal(alert.channel, 'banner');
+  assert.equal(alert.kind, 'warn');
+  assert.equal(alert.title, ECO_ALERT_TITLES.smog);
+  assert.deepEqual(alert.see, { x: 3, y: 4, layer: 'air' });
+  assert.equal(alert.seeLabel, 'Voir');
+  const arrival = eventPresentation({ type: 'species', key: 'deer', present: true, text: 'Un cerf s’aventure dans le massif.', x: 2, y: 5 });
+  assert.equal(arrival.channel, 'toast');
+  assert.equal(arrival.kind, 'success');
+  assert.deepEqual(arrival.see, { x: 2, y: 5, layer: 'fauna' }, 'le bouton « Voir » allume le calque faune');
+  const departure = eventPresentation({ type: 'species', key: 'deer', present: false, text: 'Le cerf a quitté la vallée.' });
+  assert.equal(departure.channel, 'toast');
+  assert.equal(departure.kind, 'warn');
+  assert.equal(departure.title, null, 'un départ reste sobre');
+  assert.equal(departure.see, null);
+  assert.equal(seeTargetOf({}), null);
+  assert.equal(seeTargetOf(null), null);
+  assert.deepEqual(seeTargetOf({ layer: 'water' }), { x: null, y: null, layer: 'water' });
+  assert.deepEqual(seeTargetOf({ x: 1.7, y: 2.2 }, 'fauna'), { x: 1, y: 2, layer: 'fauna' });
 });

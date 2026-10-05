@@ -6,11 +6,57 @@
 //   tileSheet.close()         tileSheet.isOpen()
 //
 // `describeTile(game, x, y)` (cœur, pur) → { terrainLabel, native, building: { id | type, label, level, levelLabel,
-// family } | null, conditions: [{ label, met }], yields: { income, upkeep, jobs, capacity, residents } }.
-// Fonctions pures exportées (tests) : yieldLines, conditionsTitle.
+// family } | null, conditions: [{ label, met }], yields: { income, upkeep, jobs, capacity, residents },
+// eco: { air, water, fauna, soil, species: [ids] } (étape 4, docs/ARCHITECTURE.md §10.2) }.
+// Fonctions pures exportées (tests) : yieldLines, conditionsTitle, ecoRows, ecoWord, ecoSpeciesText.
 
 import { el, fmt, plural, signed } from './dom.js';
 import { TILE_BY_ID } from '../data/tiles.js';
+import { speciesLabel } from './species-book.js';
+
+/**
+ * Les quatre mesures d'écologie d'une case. `invert` : la valeur haute est mauvaise (air, eau = pollution) ;
+ * `words` : les cinq appréciations, de la valeur basse à la valeur haute.
+ */
+export const ECO_FIELDS = Object.freeze([
+  Object.freeze({ key: 'air', label: 'Air', invert: true, words: Object.freeze(['pur', 'correct', 'chargé', 'mauvais', 'irrespirable']) }),
+  Object.freeze({ key: 'water', label: 'Eau', invert: true, words: Object.freeze(['claire', 'correcte', 'trouble', 'polluée', 'très polluée']) }),
+  Object.freeze({ key: 'fauna', label: 'Faune', invert: false, words: Object.freeze(['déserte', 'timide', 'vivante', 'riche', 'foisonnante']) }),
+  Object.freeze({ key: 'soil', label: 'Fertilité', invert: false, words: Object.freeze(['épuisée', 'pauvre', 'moyenne', 'bonne', 'riche']) }),
+]);
+
+/** Appréciation d'une mesure d'écologie en un mot : ecoWord('air', 12) → « pur ». */
+export function ecoWord(key, value) {
+  const field = ECO_FIELDS.find((f) => f.key === key);
+  const v = Number(value);
+  if (!field || !Number.isFinite(v)) return '';
+  return field.words[Math.min(4, Math.max(0, Math.floor(Math.max(0, Math.min(100, v)) / 20)))];
+}
+
+/**
+ * Lignes du bloc écologie d'une case : [{ key, label, value, pct, word, invert }].
+ * Les mesures absentes sont omises ; la fertilité n'apparaît que sur un sol cultivé (valeur > 0).
+ */
+export function ecoRows(eco) {
+  if (!eco || typeof eco !== 'object') return [];
+  const out = [];
+  for (const field of ECO_FIELDS) {
+    const v = Number(eco[field.key]);
+    if (!Number.isFinite(v)) continue;
+    if (field.key === 'soil' && v <= 0) continue;
+    const pct = Math.round(Math.max(0, Math.min(100, v)));
+    out.push({ key: field.key, label: field.label, value: v, pct, word: ecoWord(field.key, v), invert: field.invert });
+  }
+  return out;
+}
+
+/** « Espèces ici : Cerf, Renard » (chaîne vide si la parcelle n'en abrite aucune). */
+export function ecoSpeciesText(eco) {
+  const ids = eco && Array.isArray(eco.species) ? eco.species : [];
+  if (!ids.length) return '';
+  const names = ids.map((s) => (typeof s === 'string' ? speciesLabel(s) : speciesLabel(s?.id, s?.label))).filter(Boolean);
+  return names.length ? `Espèces ici : ${names.join(', ')}` : '';
+}
 
 /** Lignes des rendements : « Recettes : 40 $/saison », « Entretien : 5 $/saison », « Emplois : 15 », « Capacité : 20 habitants ». */
 export function yieldLines(yields = {}) {
@@ -89,16 +135,43 @@ export function createTileSheet({ sheets, ops = {}, getGame, onDemolish, rendere
           );
         }
       }
-      if (!indestructible) {
-        box.append(
-          el('div.sheet-actions', el('button.btn.btn--danger.tile-demolish', { type: 'button', onclick: () => { buzz(8); const at = openAt; close(); onDemolish?.(at.x, at.y); } }, 'Démolir · 10 $')),
-        );
-      } else {
-        box.append(el('p.sheet-hint', 'La mairie est le cœur de la ville : elle ne se démolit pas.'));
-      }
     } else {
       box.append(el('p.sheet-hint', desc.native ? 'Nature d’origine : la détruire coûte plus que replanter ne rapporte.' : 'Case libre : choisissez une tuile dans le catalogue pour y bâtir.'));
     }
+    // Bloc écologie de la case (étape 4) : air, eau, faune, fertilité en barres courtes, puis les espèces.
+    const eco = ecoSection(desc.eco);
+    if (eco) box.append(eco);
+    if (b && !indestructible) {
+      box.append(
+        el('div.sheet-actions', el('button.btn.btn--danger.tile-demolish', { type: 'button', onclick: () => { buzz(8); const at = openAt; close(); onDemolish?.(at.x, at.y); } }, 'Démolir · 10 $')),
+      );
+    } else if (b) {
+      box.append(el('p.sheet-hint', 'La mairie est le cœur de la ville : elle ne se démolit pas.'));
+    }
+    return box;
+  }
+
+  /** Bloc « Écologie » : une barre courte par mesure, puis les espèces de la parcelle ; null si rien à dire. */
+  function ecoSection(eco) {
+    const rows = ecoRows(eco);
+    const species = ecoSpeciesText(eco);
+    if (!rows.length && !species) return null;
+    const box = el('div.tile-eco', el('h3.tile-sub', 'Écologie'));
+    if (rows.length) {
+      box.append(
+        el(
+          'div.tile-eco-rows',
+          rows.map((row) => el(
+            `div.tile-eco-row${row.invert ? '.is-load' : '.is-life'}`,
+            { dataset: { eco: row.key } },
+            el('span.tile-eco-label', row.label),
+            el('span.tile-eco-bar', { role: 'meter', 'aria-label': `${row.label} : ${row.word}`, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(row.pct) }, el('span.tile-eco-fill', { style: { width: `${row.pct}%` } })),
+            el('span.tile-eco-word', row.word),
+          )),
+        ),
+      );
+    }
+    if (species) box.append(el('p.tile-eco-species', species));
     return box;
   }
 

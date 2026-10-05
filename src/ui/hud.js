@@ -1,11 +1,13 @@
 // Barre du haut, barre d'onglets du catalogue et bandeau d'alertes (saison, année).
 //
-//   const hud = createHud({ hud, tabbar, action, alerts }, { onSpeed, onTab, vibrate, speeds });
+//   const hud = createHud({ hud, tabbar, action, alerts }, { onSpeed, onTab, onGauge, vibrate, speeds });
 //   hud.setGauges({ population, happiness, nature, money, delta })   4 jauges ; delta = recettes − entretien ($/mois)
 //   hud.setDate(calendar(game))                                      « Printemps · mars · an 1 » ({ seasonLabel, monthLabel, year })
 //   hud.setSpeed(0 | 0.5 | 1 | 2 | 4)                                bouton pause / vitesse (⏸ ×½ ×1 ×2 ×4)
 //   hud.setActiveTab(id | null)                                      onglet allumé (feuille ouverte, outil actif)
-//   hud.showBanner({ title, text, kind, actionLabel, onAction })     bandeau d'alerte, un à la fois (file d'attente), bouton OK
+//   hud.showBanner({ title, text, kind, actionLabel, onAction, seeLabel, onSee })
+//                                                                    bandeau d'alerte, un à la fois (file d'attente) : bouton
+//                                                                    « Voir » (si `onSee`, docs/MOBILE.md) puis bouton OK
 //   hud.hideBanner()                                                 ferme le bandeau courant (et montre le suivant)
 //   hud.insets() → { top, bottom }                                   hauteur couverte par la barre du haut et, en bas, par les onglets + la barre d'action
 //
@@ -69,7 +71,7 @@ export function dateParts(cal = {}) {
   return { season: seasonOf(m), month: MONTHS[m], year: `an ${cal.year ?? 1}` };
 }
 
-export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpeed, onTab, vibrate, speeds = DEFAULT_SPEEDS } = {}) {
+export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpeed, onTab, onGauge, vibrate, speeds = DEFAULT_SPEEDS } = {}) {
   const buzz = (n) => { try { vibrate?.(n); } catch { /* rien */ } };
 
   // ── Barre du haut ────────────────────────────────────────────────────────────
@@ -78,7 +80,19 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
   const makeGauge = (id, label, short = label) => {
     const value = el('span.gauge-value', '0');
     const text = short === label ? label : [el('span.gauge-label-long', label), el('span.gauge-label-short', short)];
-    const node = el(`button.gauge.gauge--${id}`, { type: 'button', 'aria-label': label, title: label }, el('span.gauge-label', text), value);
+    // Chaque jauge est un bouton : la jauge Nature ouvre sa fiche détaillée (src/ui/nature-sheet.js).
+    const node = el(
+      `button.gauge.gauge--${id}`,
+      {
+        type: 'button',
+        dataset: { gauge: id },
+        'aria-label': label,
+        title: label,
+        onclick: () => { buzz(6); onGauge?.(id); },
+      },
+      el('span.gauge-label', text),
+      value,
+    );
     gauges[id] = { node, value };
     return node;
   };
@@ -172,7 +186,7 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
     }
   }
 
-  // ── Bandeau d'alertes (saison, année) : un à la fois, bouton OK ─────────────
+  // ── Bandeau d'alertes (saison, année, écologie) : un à la fois, « Voir » puis OK ─────────────
   const queue = [];
   let banner = null; // { node, opts }
   function showBanner(opts) {
@@ -191,6 +205,18 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
       return;
     }
     const kind = opts.kind || 'info';
+    // Bouton « Voir » (alertes d'écologie) : centre la carte sur la case en cause et allume le calque.
+    const see = typeof opts.onSee === 'function'
+      ? el(
+          'button.btn.alert-see',
+          {
+            type: 'button',
+            'aria-label': `${opts.seeLabel || 'Voir'} : ${opts.title || opts.text}`,
+            onclick: () => { buzz(8); hideBanner({ action: false, see: true }); },
+          },
+          opts.seeLabel || 'Voir',
+        )
+      : null;
     const ok = el(
       'button.btn.alert-ok',
       { type: 'button', 'aria-label': `${opts.actionLabel || 'OK'} : ${opts.title || opts.text}`, onclick: () => { buzz(6); hideBanner(); } },
@@ -200,17 +226,23 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
       `div.alert.alert--${kind}`,
       { role: 'status' },
       el('div.alert-body', opts.title ? el('strong.alert-title', opts.title) : null, opts.text ? el('span.alert-text', opts.text) : null),
+      see,
       ok,
     );
     clear(alerts).append(node);
     alerts.classList.add('is-open');
     banner = { node, opts };
   }
-  function hideBanner() {
+  /** Ferme le bandeau courant et montre le suivant. `see` : c'est le bouton « Voir » qui a fermé. */
+  function hideBanner({ action = true, see = false } = {}) {
     if (!banner) return;
     const { opts } = banner;
     banner = null;
-    try { opts.onAction?.(); } catch (err) { console.warn('Alerte :', err); }
+    if (see) {
+      try { opts.onSee?.(); } catch (err) { console.warn('Alerte :', err); }
+    } else if (action) {
+      try { opts.onAction?.(); } catch (err) { console.warn('Alerte :', err); }
+    }
     nextBanner();
   }
 
