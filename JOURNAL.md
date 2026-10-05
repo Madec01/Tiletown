@@ -15,6 +15,74 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 5, chantier PLACEMENT : semis continu de la végétation, abords des rues
+
+(Priorités 2 et 4 du plan de beauté de l'utilisateur, `docs/ARCHITECTURE.md` §11.4. Chantier mené en
+parallèle de TERRAIN — `src/render3d/ground.js`, `renderer.js`, `camera.js` — et de MODÈLES —
+`src/render3d/models.js`, `src/data/palette.js`, `assets/models/`.)
+
+- **Fin des « trois emplacements types par case »** (`src/render3d/buildings.js`). La végétation
+  native n'est plus posée case par case : elle est SEMÉE en coordonnées monde sur une maille
+  régulière secouée (0,40 u pour la canopée, 0,40 à 0,48 u pour le sous-bois). Chaque point est
+  gardé selon :
+  - un **champ de couverture** `coverageAt` (interpolation bilinéaire de l'indicateur de terrain aux
+    centres de case) : 1 au cœur d'un massif, 0,5 au milieu d'une lisière, nul une demi-case au-delà
+    — d'où le **débordement borné à 0,5 u** sur les cases voisines libres et la **densité qui
+    décroît vers la lisière** ; un plancher (0,55 + 0,45 f) garde garnie une case de massif isolée ;
+  - un **bruit de valeur** basse fréquence qui ouvre des **clairières** (2 à 3 cases) et un second
+    qui mêle **feuillus et résineux par plaques** ;
+  - un filtre d'accueil : jamais sur une case bâtie, sur l'eau, sur un champ, ni à moins de 0,30 u
+    d'une rue.
+  Tailles mêlées (grand, moyen, jeune, baliveau — plus de grands au cœur, plus de jeunes en
+  lisière), rotation et échelle tirées par instance. Même traitement pour les **prairies** (fleurs et
+  touffes), les **zones humides** (roseaux) et les **collines** (rochers irréguliers, plus jamais au
+  centre des cases). Les lisières portent arbustes et herbes.
+- **Vent très discret** : les groupes « arbre » et « couvre-sol » emploient un clone du matériau à
+  couleurs de sommets dont le shader incline le haut du feuillage de ± 2° (deux sinus lents, phase
+  tirée de la position monde de l'instance). Coût CPU nul ; `renderer.js` n'ayant pas de rappel pour
+  cette couche, l'horloge est interne (`requestAnimationFrame`), et `buildings.update(dt)` prend la
+  main si un appelant l'utilise un jour.
+- **Trois lots de rendu** au lieu d'un : `solid` (bâtiments, rochers, ombres), `tree` (ombres +
+  vent), `cover` (vent léger, **sans ombre**). Trois `BatchedMesh`, cinq appels de dessin avec la
+  passe d'ombre.
+- **Identifiants de modèles par rôle** (`resolveRoles`) : les futurs `tree-round-s/m/l`,
+  `tree-tall-s/m/l`, `pine-s/m/l`, `shrub-a/b`, `grass-tuft-a/b`, `sapling`, `reed-a/b`, `bench`,
+  `fence`, `veggie-patch` sont employés **s'ils existent** (`models.has(id)`), avec repli sur les
+  modèles actuels et leur propre plage d'échelle.
+- **Abords des rues** (`src/render3d/roads.js`). Les bandes de rue s'arrêtent à une demi-largeur de
+  trottoir du sommet : une **pièce de nœud** referme chaque jonction (cul-de-sac, droit, virage, T,
+  carrefour, orientée au quart de tour). Les **coins de trottoir exposés sont arrondis** ; un
+  **liseré d'herbe** en quart de disque arrondit l'angle du trottoir là où deux rues se rejoignent ;
+  un **virage** (deux arêtes à 90°, sans troisième branche) devient un **arc** (quart de disque de
+  chaussée, anneau de trottoir).
+- **Moins de cadre autour des bâtiments** : chaussée 0,36 → 0,30 u, trottoir 0,50 → 0,40 u,
+  `BUILDING_SCALE` 0,82 → 0,64 ; chaussée, trottoir et parcelle rapprochés en valeur (mélanges en
+  espace sRGB, pas linéaire : l'écart sombre/clair devient une gradation).
+- **Parcelles, jardins et allées** : sous chaque îlot bâti, une parcelle claire (pelouse jusqu'au
+  bord de la chaussée pour un quartier, dallage ou gravier sinon) et une **allée d'entrée** vers la
+  rue de la façade (`entrySide`, partagé par les deux modules) ; autour du bâtiment, deux à trois
+  petits éléments tirés parmi haie, buisson, potager, fleurs selon la famille ; un **arbre de rue**
+  à un coin de treillis sur trois.
+- **Tests** (`tests/render-placements.test.js`, 13 cas) : déterminisme à graine égale, `valueNoise`
+  continu, `coverageAt` (cœur / lisière / au-delà), `resolveRoles` (nouveaux modèles ou repli),
+  débordement borné à 0,5 u, rien sur l'eau ni sur une case bâtie ni sur la chaussée, densité du
+  cœur > 1,5 × celle de la lisière, rochers sans emplacement type, parcelles et allées, pièces de
+  nœud (forme + quart de tour) à chaque sommet.
+- **Vérification** : `tools/placement-fixture.html` (scène de référence fixe : rivière courbe,
+  colline, deux bosquets qui se rejoignent, prairie, zone humide, trois maisons, pâté de ville) et
+  `tools/placement-shot.mjs` (Playwright + SwiftShader) qui recompose un arbre « avant » à partir du
+  dernier commit sans ce chantier et produit `tools/measure-out/placement-{avant,apres,foret,
+  lisiere,rue,maisons,carrefour,jardin}.png` + `placement-report.json`.
+- **Mesures** (scène de référence, 412 × 915) : avant 9 appels / 145 370 triangles / 158 instances →
+  après 19 appels / 138 994 triangles / 321 instances (109 arbres, 173 couvre-sol, 13 parcelles).
+  Carte de jeu réelle (`dev.html`, `tools/measure.mjs`) : 19 → 26 appels, 126 663 → 146 243
+  triangles (budget 250 000), 137 → 285 instances, 1,5 à 3 ms par image sous SwiftShader.
+- **Bug / limite** : sur la carte de charge (24 × 24, 500 îlots bâtis) les abords ajoutent ≈ 1 100
+  instances et le total passe de 1,18 M à 1,53 M triangles ; le critère §7 (150 000) était déjà
+  largement dépassé par les seuls bâtiments. Le repli `flowers` (380 triangles) employé pour les
+  touffes et les potagers en est la part principale : les modèles dédiés de MODÈLES
+  (`grass-tuft-*`, `shrub-*`, `veggie-patch`) le feront retomber.
+
 ## 2026-10-05 — Étape 5, chantier MODÈLES : arbres arrondis, bâtiments à caractère, palette par rôle
 
 (Priorités 2 et 3 du plan de beauté de l'utilisateur, `docs/ARCHITECTURE.md` §11.4. Chantier mené en

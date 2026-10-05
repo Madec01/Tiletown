@@ -34,8 +34,12 @@ const ALL_VIEWS = {
   colline: { query: 'view=colline', label: 'gros plan colline' },
   berge: { query: 'view=berge', label: 'gros plan berge' },
   foret: { query: 'view=foret', label: 'gros plan bosquet' },
+  riviere: { query: 'view=riviere', label: 'la rivière en entier' },
+  coude: { query: 'view=coude', label: 'gros plan coude de rivière' },
+  humide: { query: 'view=humide', label: 'gros plan zone humide' },
   large: { query: 'view=large', label: 'carte entière' },
   calque: { query: 'view=general&layer=air', label: 'calque Air par-dessus le sol' },
+  'calque-eau': { query: 'view=riviere&layer=water', label: 'calque Eau sur la rivière' },
   hachures: { query: 'view=general&layer=air&pattern=1', label: 'calque Air + hachures' },
   pose: { query: 'view=berge&hint=1', label: 'grille locale pendant la pose' },
 };

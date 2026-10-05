@@ -32,13 +32,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/tiletown/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '97d37c943035';
+const VERSION = 'db60ef727f2b';
 // 99 fichiers, 3.01 Mo ; installés d'emblée (core) : 99 fichiers, 3.01 Mo
 const PRECACHE = [
-  ["index.html", '5b006c0562832109', 30114, 'core'],
+  ["index.html", 'c061ec810a8060fc', 30114, 'core'],
   ["manifest.webmanifest", 'd781b7f56357c6a9', 1194, 'core'],
-  ["dist/game.4933d66258.js", 'e12c7401ed4b47a1', 1011711, 'core'],
-  ["dist/game.bec0a58485.css", 'bec0a58485b0dee5', 41074, 'core'],
+  ["dist/game.f6b12ae2d8.js", '1d5cc69c97f23c07', 1011807, 'core'],
+  ["dist/game.1e639b33dd.css", '1e639b33dd59554f', 41162, 'core'],
   ["assets/fonts/Nunito-latin-ext.woff2", '2c8d792869818ecb', 35588, 'core'],
   ["assets/fonts/Nunito-latin.woff2", 'ba344451eab25b21', 39128, 'core'],
   ["assets/icons/apple-touch-icon.png", '89a7440dadb00696', 4356, 'core'],

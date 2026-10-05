@@ -75,8 +75,11 @@ function referenceWorld() {
       set(riverX[y], y, 'river', 'S');
     }
   }
-  // Zones humides sur la rive intérieure du premier coude.
-  for (const [x, y] of [[6, 3], [7, 3], [6, 4]]) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'wetland');
+  // Zones humides sur la rive intérieure du premier coude : une nappe de plusieurs cases, assez
+  // large pour juger son contour (gros plan `humide`).
+  for (const [x, y] of [[7, 3], [8, 3], [7, 4], [8, 4], [9, 4], [7, 5], [8, 5], [9, 3]]) {
+    if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'wetland');
+  }
 
   // --- Colline douce à l'est (groupe de cases : doit donner UNE colline) ------------------------
   const hill = [[10, 9], [11, 9], [12, 9], [10, 10], [11, 10], [12, 10], [13, 10], [11, 11], [12, 11], [10, 8], [11, 8], [12, 12], [13, 9]];
@@ -120,6 +123,9 @@ const VIEWS = {
   colline: { x: 11.6, y: 9.9, zoom: 6.2 },      // gros plan sur la colline
   berge: { x: 5.6, y: 4.6, zoom: 6.2 },         // gros plan sur un coude de la rivière
   foret: { x: 2.8, y: 12.6, zoom: 6.2 },        // gros plan sur le bosquet
+  riviere: { x: 4.6, y: 9.0, zoom: 9 },         // le S de la rivière en entier : la ligne d'eau se juge ici
+  coude: { x: 3.4, y: 12.8, zoom: 4.4 },        // gros plan serré sur un double coude (angles droits ?)
+  humide: { x: 7.8, y: 4.2, zoom: 5.0 },        // gros plan sur la nappe des zones humides
 };
 
 const canvas = document.getElementById('map');

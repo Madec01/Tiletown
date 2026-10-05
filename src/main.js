@@ -302,7 +302,7 @@ async function main() {
       onSpeed: (sp) => { applyGame(setSpeed(game, sp), { silent: true }); app.tutorial?.refresh(); poke(); },
       onTab: (id) => { onTab(id); updateInsets(); poke(); },
       onGauge: (id) => { onGauge(id); updateInsets(); poke(); },
-      onMenu: () => { openTitle(); poke(); },
+      onMenu: () => { confirmLeaving(() => openTitle()); poke(); },
     },
   );
   boot.progress(0.15);

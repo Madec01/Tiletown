@@ -221,7 +221,7 @@ test('semis continu : une forêt lue comme un massif — débordement borné, de
   assert.ok(cover.length > 20, `sous-bois et prairie fleurie : ${cover.length} éléments`);
 });
 
-test('semis des collines : des rochers irréguliers, jamais au centre des cases', () => {
+test('semis des collines : des rochers irréguliers, sans emplacement type', () => {
   const cols = 5, rows = 5;
   const tiles = [];
   for (let y = 0; y < rows; y++) {
@@ -233,11 +233,23 @@ test('semis des collines : des rochers irréguliers, jamais au centre des cases'
   const p = collectPlacements(world);
   const rocks = p.filter((q) => /^rock-/.test(q.id));
   assert.ok(rocks.length >= 6, `des rochers sur le relief : ${rocks.length}`);
-  for (const r of rocks) {
+  for (const r of rocks) assert.ok(Math.abs(r.y - groundAt(world, r.x, r.z)) < 1e-9, 'posé sur le sol continu');
+  // Les rochers ne sont plus accrochés au centre des cases : au plus un s'en approche par hasard.
+  const centred = rocks.filter((r) => {
     const tx = Math.floor(r.x), ty = Math.floor(r.z);
-    assert.ok(Math.abs(r.x - (tx + 0.5)) > 0.02 || Math.abs(r.z - (ty + 0.5)) > 0.02, 'jamais au centre de la case');
-    assert.ok(Math.abs(r.y - groundAt(world, r.x, r.z)) < 1e-9, 'posé sur le sol continu');
+    return Math.abs(r.x - (tx + 0.5)) < 0.06 && Math.abs(r.z - (ty + 0.5)) < 0.06;
+  });
+  assert.ok(centred.length <= Math.ceil(rocks.length * 0.15), `semis irrégulier : ${centred.length} rochers sur ${rocks.length} près d’un centre de case`);
+  // Aucun emplacement type : les décalages dans la case sont presque tous différents
+  const slots = new Set(rocks.map((r) => `${Math.round((r.x % 1) * 20)},${Math.round((r.z % 1) * 20)}`));
+  assert.ok(slots.size >= rocks.length - 1, `décalages variés : ${slots.size} / ${rocks.length}`);
+  // Plusieurs rochers par case : ils ne peuvent pas tous occuper un emplacement type
+  const perTile = new Map();
+  for (const r of rocks) {
+    const key = `${Math.floor(r.x)},${Math.floor(r.z)}`;
+    perTile.set(key, (perTile.get(key) || 0) + 1);
   }
+  assert.ok(Math.max(...perTile.values()) >= 2, 'des cases portent plusieurs rochers');
   assert.ok(new Set(rocks.map((r) => Math.round(r.scale * 50))).size > 2, 'tailles variées');
   assert.deepEqual(collectPlacements(world), p, 'déterminisme');
 });

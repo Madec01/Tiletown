@@ -216,15 +216,15 @@ const BIOMES = Object.freeze({
     host: ['forest', 'grass', 'meadow', 'hill'],
   },
   meadow: {
-    key: 0x20, canopyCell: 0.9, underCell: 0.46, canopy: 0.1, under: 0.56,
+    key: 0x20, canopyCell: 0.9, underCell: 0.48, canopy: 0.1, under: 0.5,
     host: ['meadow', 'grass'],
   },
   wetland: {
-    key: 0x30, canopyCell: 0.9, underCell: 0.4, canopy: 0.12, under: 0.78,
+    key: 0x30, canopyCell: 0.9, underCell: 0.42, canopy: 0.12, under: 0.7,
     host: ['wetland', 'grass', 'meadow'],
   },
   hill: {
-    key: 0x40, canopyCell: 0.95, underCell: 0.44, canopy: 0.07, under: 0.95,
+    key: 0x40, canopyCell: 0.95, underCell: 0.46, canopy: 0.07, under: 0.72,
     host: ['hill', 'grass', 'meadow'],
   },
 });
@@ -271,9 +271,11 @@ function scatterBiome(world, out, roles, terrainId, bounds) {
         const pz = (j + 0.15 + 0.7 * hashUnit(seed, i, j, k + 1)) * s;
         const f = coverageAt(indicator, px, pz);
         if (f <= 0.02) continue;
+        // Plancher : une case du massif reste garnie même isolée (le dégradé ne joue qu'au-delà).
+        const fIn = indicator(Math.floor(px), Math.floor(pz)) ? 0.55 + 0.45 * f : f;
         // Clairières : un bruit basse fréquence creuse des trouées de 2 à 3 cases.
         const open = smoothstep(0.26, 0.56, valueNoise(seed, px * 0.42, pz * 0.42, k + 2));
-        const density = Math.pow(f, 1.2) * cfg.canopy * (0.3 + 0.7 * open);
+        const density = Math.pow(fIn, 1.2) * cfg.canopy * (0.3 + 0.7 * open);
         if (hashUnit(seed, i, j, k + 3) >= density) continue;
         const host = hostAt(px, pz);
         if (!host) continue;
@@ -305,10 +307,11 @@ function scatterBiome(world, out, roles, terrainId, bounds) {
         const pz = (j + 0.12 + 0.76 * hashUnit(seed, i, j, k + 1)) * s;
         const f = coverageAt(indicator, px, pz);
         if (f <= 0.02) continue;
+        const fIn = indicator(Math.floor(px), Math.floor(pz)) ? 0.55 + 0.45 * f : f;
         const open = smoothstep(0.26, 0.56, valueNoise(seed, px * 0.42, pz * 0.42, cfg.key + 2));
         // Bordure : la couverture partielle (lisière) et les clairières portent le couvre-sol.
         const edge = terrainId === 'forest' ? smoothstep(1, 0.3, f) : 1;
-        const density = f * cfg.under * (0.3 + 0.7 * Math.max(edge, 1 - open));
+        const density = fIn * cfg.under * (0.3 + 0.7 * Math.max(edge, 1 - open));
         if (hashUnit(seed, i, j, k + 3) >= density) continue;
         const host = hostAt(px, pz);
         if (!host) continue;
@@ -406,7 +409,7 @@ function collectLotDecor(world, out, roles, tx, ty, tile, def) {
   };
   for (let a = 0; a < LOT_ANCHORS.length; a++) {
     if (a === entryAnchor) continue;
-    if (h(20 + a) > 0.44) continue;                   // on ne garnit pas tous les ancrages
+    if (h(20 + a) > 0.3) continue;                    // on ne garnit pas tous les ancrages
     const [ux, uz] = LOT_ANCHORS[a];
     const r = LOT_DECOR_RADIUS;
     const px = cx + ux * r + (h(30 + a) - 0.5) * 0.05;

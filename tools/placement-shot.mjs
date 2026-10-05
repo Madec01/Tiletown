@@ -2,7 +2,7 @@
 // Captures comparées de l'ORGANISATION DU DÉCOR (semis de la végétation, abords des rues) sur la
 // scène de référence `tools/placement-fixture.html`, avec Playwright + Chromium SwiftShader.
 //
-//   node tools/placement-shot.mjs [--out tools/measure-out] [--ref HEAD] [--only apres]
+//   node tools/placement-shot.mjs [--out tools/measure-out] [--ref <commit>] [--only apres]
 //
 // Produit, dans tools/measure-out/ :
 //   placement-avant.png    la même scène avec les buildings.js / roads.js de la référence git
@@ -30,12 +30,31 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const flag = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def; };
 const OUT = path.resolve(ROOT, flag('--out', 'tools/measure-out'));
-const REF = flag('--ref', 'HEAD');
+const REF = flag('--ref', null);
 const ONLY = flag('--only', null);
 const VIEWPORT = { width: 412, height: 915, dpr: 2 };
 
 /** Les deux fichiers de ce chantier : eux seuls reviennent à la version de référence pour « avant ». */
 const OWNED = ['src/render3d/buildings.js', 'src/render3d/roads.js'];
+/** Marque du présent chantier dans `buildings.js` : sert à retrouver la dernière version d'avant. */
+const MARK = 'collectLotDecor';
+
+/**
+ * Référence « avant » : le commit demandé, sinon le plus récent où `buildings.js` ne porte pas
+ * encore ce chantier (le travail en cours a pu être committé entre-temps).
+ */
+function resolveRef() {
+  if (REF) return REF;
+  const log = execFileSync('git', ['-C', ROOT, 'log', '--format=%H', '-n', '40', '--', OWNED[0]], { encoding: 'utf8' })
+    .split('\n').filter(Boolean);
+  for (const sha of log) {
+    try {
+      const blob = execFileSync('git', ['-C', ROOT, 'show', `${sha}:${OWNED[0]}`], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+      if (!blob.includes(MARK)) return sha;
+    } catch { /* fichier absent à ce commit */ }
+  }
+  return 'HEAD';
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -80,7 +99,7 @@ function findChromium() {
 }
 
 /** Prépare l'arbre « avant » : copie de l'arbre de travail, puis les fichiers de ce chantier à `REF`. */
-function prepareBefore() {
+function prepareBefore(ref) {
   const dir = path.join(os.tmpdir(), `tiletown-avant-${process.pid}`);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
@@ -89,7 +108,7 @@ function prepareBefore() {
   }
   symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
   for (const rel of OWNED) {
-    const content = execFileSync('git', ['-C', ROOT, 'show', `${REF}:${rel}`], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    const content = execFileSync('git', ['-C', ROOT, 'show', `${ref}:${rel}`], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
     writeFileSync(path.join(dir, rel), content);
   }
   return dir;
@@ -128,7 +147,9 @@ async function main() {
   await fs.mkdir(OUT, { recursive: true });
   const exe = findChromium();
   if (!exe) throw new Error('Chromium introuvable (PLAYWRIGHT_BROWSERS_PATH, TILETOWN_CHROMIUM).');
-  const before = ONLY === 'apres' ? null : prepareBefore();
+  const ref = ONLY === 'apres' ? null : resolveRef();
+  if (ref) process.stdout.write(`référence « avant » : ${ref.slice(0, 10)}\n`);
+  const before = ref ? prepareBefore(ref) : null;
   const { server, port } = await serve({ now: ROOT, before: before || ROOT });
   const base = `http://127.0.0.1:${port}/`;
   const browser = await chromium.launch({
@@ -164,7 +185,7 @@ async function main() {
     if (before) rmSync(before, { recursive: true, force: true });
   }
 
-  await fs.writeFile(path.join(OUT, 'placement-report.json'), JSON.stringify({ date: new Date().toISOString(), ref: REF, results }, null, 2));
+  await fs.writeFile(path.join(OUT, 'placement-report.json'), JSON.stringify({ date: new Date().toISOString(), ref, results }, null, 2));
   console.log('\n| Capture | Appels | Triangles | Image (ms) | Instances | Arbres | Couvre-sol | Parcelles |');
   console.log('|---|---:|---:|---:|---:|---:|---:|---:|');
   for (const r of results) {

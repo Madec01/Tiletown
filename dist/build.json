@@ -1,8 +1,8 @@
 {
-  "id": "97d37c943035",
+  "id": "db60ef727f2b",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.4933d66258.js",
-  "css": "dist/game.bec0a58485.css",
+  "js": "dist/game.f6b12ae2d8.js",
+  "css": "dist/game.1e639b33dd.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/fonts/Nunito-latin-ext.woff2": "2c8d792869818ecb",
@@ -101,7 +101,7 @@
     "assets/models/water-tower.glb": "1e0a52d70b358f12",
     "assets/models/wind-turbine.glb": "b8f3d97fc42f273a",
     "css/fonts.css": "f09d0e5ef98a16ba",
-    "css/style.css": "cd6f0386b3355e46",
+    "css/style.css": "8917bea6c826708d",
     "manifest.webmanifest": "d781b7f56357c6a9",
     "package-lock.json": "66cc44e0cd0d4a8b",
     "src/core/actors.js": "0a18d337b01d9e07",
@@ -123,10 +123,10 @@
     "src/data/tutorials.js": "ba4a3b972440503f",
     "src/index.template.html": "6ef59f54379e93b5",
     "src/loader.js": "782328b4f797e591",
-    "src/main.js": "e68220d8c90d2db9",
+    "src/main.js": "bdd1062a05a2fbb3",
     "src/pwa.js": "4600989641d122c6",
     "src/render3d/actors.js": "9d55b68069b8f6c0",
-    "src/render3d/buildings.js": "3084ace88e10c1b9",
+    "src/render3d/buildings.js": "29f1347a95e785b3",
     "src/render3d/camera.js": "da87199cdecbd096",
     "src/render3d/effects.js": "e2049ddb416229d3",
     "src/render3d/ghost.js": "cc1630910515ffa6",
@@ -164,6 +164,22 @@
   },
   "history": [
     {
+      "id": "db60ef727f2b",
+      "files": [
+        "dist/game.f6b12ae2d8.js",
+        "dist/game.f6b12ae2d8.js.map",
+        "dist/game.1e639b33dd.css"
+      ]
+    },
+    {
+      "id": "8dd87dcecd6f",
+      "files": [
+        "dist/game.c18bdab9dd.js",
+        "dist/game.c18bdab9dd.js.map",
+        "dist/game.bec0a58485.css"
+      ]
+    },
+    {
       "id": "97d37c943035",
       "files": [
         "dist/game.4933d66258.js",
@@ -184,22 +200,6 @@
       "files": [
         "dist/game.297cfcc2bf.js",
         "dist/game.297cfcc2bf.js.map",
-        "dist/game.bec0a58485.css"
-      ]
-    },
-    {
-      "id": "8e5eac5df6e8",
-      "files": [
-        "dist/game.617af3d998.js",
-        "dist/game.617af3d998.js.map",
-        "dist/game.bec0a58485.css"
-      ]
-    },
-    {
-      "id": "c25f2e8e85e7",
-      "files": [
-        "dist/game.391c36743d.js",
-        "dist/game.391c36743d.js.map",
         "dist/game.bec0a58485.css"
       ]
     }
