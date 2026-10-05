@@ -27,7 +27,7 @@
   <!-- Chargeur et garde-fou de démarrage (script classique, recopié depuis src/loader.js par
        tools/build.js) : vérifie WebGL 2, télécharge le jeu en montrant la progression, réessaie en cas
        d'échec, affiche la vraie erreur (« Détails ») et le bouton « Réparer le jeu ». -->
-  <script>window.__TILETOWN_BUILD__ = {"id":"cd8436a578b6","js":{"src":"dist/game.2fc136e242.js","sha":"cbfaf168f4c058d2","size":948122},"css":["dist/game.c9d4ef38d1.css"]};</script>
+  <script>window.__TILETOWN_BUILD__ = {"id":"97d37c943035","js":{"src":"dist/game.4933d66258.js","sha":"e12c7401ed4b47a1","size":1011711},"css":["dist/game.bec0a58485.css"]};</script>
   <script>
 /* Chargeur et garde-fou de démarrage de Tiletown (adapté de Seve).
  *
@@ -582,7 +582,7 @@
   else loadByTag(BUILD.js.src, 0);
 })();
   </script>
-  <link rel="stylesheet" href="dist/game.c9d4ef38d1.css" data-boot-css="dist/game.c9d4ef38d1.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
+  <link rel="stylesheet" href="dist/game.bec0a58485.css" data-boot-css="dist/game.bec0a58485.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
 </head>
 <body class="is-loading">
   <!-- Scène 3D (three.js, WebGL 2), sous toute l'interface : plein écran. Aucun texte n'y est dessiné. -->
@@ -594,6 +594,9 @@
   <div id="ui">
     <!-- Barre du haut : Population · Bonheur · Nature · Argent, date, pause / vitesse (src/ui/hud.js) -->
     <header id="hud" aria-label="État de la ville"></header>
+
+    <!-- Bandeau d'objectifs du niveau (carrière) : une ligne sous les jauges, dépliable (src/ui/goals.js) -->
+    <div id="goals" hidden></div>
 
     <!-- Mesures du prototype (?stats=1 ou développement) : appels de dessin, triangles, ms/image, i/s -->
     <div id="stats" aria-hidden="true"></div>
@@ -613,8 +616,14 @@
     <!-- Barre d'action au-dessus des onglets : tuile « en main », résumé du fantôme, ✓ et ✕ (src/ui/placement.js) -->
     <div id="action" aria-hidden="true"></div>
 
+    <!-- Bulle du tutoriel : titre, texte de la leçon et bouton « Compris » (src/ui/tutorial-ui.js) -->
+    <div id="tutorial" hidden></div>
+
     <!-- Barre d'onglets du catalogue : Habitat · Activité · Services · Infrastructures · Nature · Démolir · Calques -->
     <nav id="tabbar" aria-label="Catalogue"></nav>
+
+    <!-- Écrans pleins : titre, carte de carrière, fin de niveau (src/ui/title.js, career-map.js, level-end.js) -->
+    <div id="screens"></div>
 
     <!-- Téléphone tenu à l'horizontale -->
     <div id="rotate" aria-hidden="true">

@@ -6,7 +6,10 @@
    Plan de l'écran (portrait) :
      #stage > #scene      la scène three.js, plein écran, sous tout le reste (touch-action: none)
      #ui                  calque de l'interface (pointer-events: none ; ses enfants le réactivent)
-       #hud               barre du haut : 4 jauges (Population, Bonheur, Nature, Argent + delta), date, pause/vitesse
+       #hud               barre du haut : 4 jauges (Population, Bonheur, Nature, Argent + delta), menu, date, pause/vitesse
+       #goals             bandeau d'objectifs du niveau (carrière), repliable, juste sous les jauges
+       #tutorial          bulle du tutoriel, au-dessus des onglets (ne bloque jamais l'interface)
+       #screens           écrans pleins : titre, carte de carrière, fin de niveau
        #stats             mesures du prototype (appels de dessin, triangles, ms/image, i/s), en haut à droite
        #alerts            bandeau d'alerte (saison, année, écologie), un à la fois, bouton « Voir » puis OK
        #layer-pill        pastille du calque actif (air, eau, faune, sols) avec son ✕, sous la barre du haut
@@ -83,6 +86,8 @@
   /* Zones couvertes par la barre du haut et les onglets (écrites par src/main.js) */
   --inset-top: 0px;
   --inset-bottom: 0px;
+  --hud-h: 0px;
+  --tuto-h: 0px;
   --sheet-h: 0px;
   --tab-h: 64px;
 
@@ -291,7 +296,7 @@ html.reduced-motion *::after { animation-duration: 0.01ms !important; transition
 .gauge-delta.is-down { color: var(--c-roof-red); }
 
 .hud-date {
-  grid-column: 1 / 5;
+  grid-column: 2 / 5;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -633,7 +638,7 @@ html.reduced-motion *::after { animation-duration: 0.01ms !important; transition
   z-index: 35;
   left: 50%;
   /* Au-dessus des onglets et de la feuille ouverte ; jamais sur la barre du haut. */
-  bottom: min(calc(var(--inset-bottom) + var(--sheet-h) + 10px), calc(var(--app-h) - var(--inset-top) - 62px));
+  bottom: min(calc(var(--inset-bottom) + var(--sheet-h) + var(--tuto-h) + 10px), calc(var(--app-h) - var(--inset-top) - 62px));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column-reverse;
@@ -1004,3 +1009,424 @@ body.is-rotated #rotate { display: grid; }
 
 /* Bandeau d'alerte : bouton « Voir » (centre la carte, allume le calque) devant le bouton OK */
 .alert-see { flex: none; min-width: 64px; background: var(--c-river); color: var(--ink); }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   Carrière, tutoriel et écrans (docs/ARCHITECTURE.md §11.3)
+   Écran titre, carte de carrière, fin de niveau : trois écrans pleins posés sur #screens, par-dessus
+   la scène 3D (qui continue de tourner derrière l'écran titre). Bandeau d'objectifs sous les jauges,
+   bulle du tutoriel au-dessus des onglets. Cibles ≥ 48 px, boutons principaux ≥ 56 px, texte ≥ 14 px.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Bouton Menu de la barre du haut (seconde ligne, à gauche de la date) ───── */
+.hud-menu {
+  grid-column: 1;
+  grid-row: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: transform var(--t-fast), filter var(--t-fast);
+}
+.hud-menu:active { transform: translateY(1px); filter: brightness(0.96); }
+.ico-menu { display: block; }
+
+/* ─── Halo du tutoriel : onglet, jauge ou bouton de vitesse à toucher ────────── */
+.is-hinted { position: relative; }
+.is-hinted::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--radius-sm) + 3px);
+  border: 3px solid var(--c-sun);
+  box-shadow: 0 0 0 2px rgba(247, 216, 74, 0.35);
+  pointer-events: none;
+  animation: hint-pulse 1.6s ease-in-out infinite;
+}
+@keyframes hint-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.035); }
+}
+
+/* ─── Bandeau d'objectifs (sous les jauges) ─────────────────────────────────── */
+#goals {
+  position: absolute;
+  z-index: 24;
+  left: 0;
+  right: 0;
+  top: 0;
+  margin-top: var(--hud-h, 0px);
+  display: none;
+  padding: 0 calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
+  background: var(--panel);
+  border-bottom: 2px solid var(--line);
+  box-shadow: 0 2px 0 rgba(58, 58, 66, 0.06);
+}
+#goals.is-open { display: block; }
+.goals-box { margin: 0 auto; max-width: 40rem; }
+.goals-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.goals-head:active { filter: brightness(0.97); }
+.goals-summary { flex: none; font-size: 0.9375rem; font-weight: 800; }
+.goals-head.is-all .goals-summary { color: var(--btn-bg); }
+.goals-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8125rem; /* 13 px : mention secondaire */
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.goals-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-right: 3px solid var(--ink-soft);
+  border-bottom: 3px solid var(--ink-soft);
+  border-radius: 2px;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform var(--t-fast) ease;
+}
+.goals-box.is-expanded .goals-chevron { transform: rotate(-135deg) translate(-3px, -3px); }
+.goals-list { margin: 0 0 8px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.goal {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 4.5rem auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.goal-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--btn-ink);
+  font-size: 0.8125rem;
+  font-weight: 900;
+}
+.goal.is-done .goal-mark { background: var(--btn-bg); box-shadow: none; }
+.goal-label { font-size: 0.875rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal.is-done .goal-label { color: var(--btn-bg); }
+.goal-bar { display: block; height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(58, 58, 66, 0.08); }
+.goal-fill { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--c-grass), var(--c-forest-dark)); transition: width var(--t-med) ease; }
+.goal-value { font-size: 0.8125rem; font-weight: 800; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal--empty { grid-template-columns: minmax(0, 1fr); }
+.goal--empty .goal-label { white-space: normal; font-weight: 600; color: var(--ink-soft); }
+
+/* ─── Bulle du tutoriel (au-dessus des onglets et de la barre d'action) ──────── */
+#tutorial {
+  position: absolute;
+  z-index: 34;
+  left: 50%;
+  /* Au-dessus des onglets ET de la feuille ouverte : la leçon reste lisible pendant qu'on cherche sa
+     carte dans le catalogue, sans jamais couvrir ce qu'elle demande de toucher. */
+  bottom: min(calc(var(--inset-bottom) + var(--sheet-h) + 10px), calc(var(--app-h) - var(--inset-top) - 150px));
+  transform: translateX(-50%);
+  display: none;
+  width: min(30rem, calc(100vw - 16px));
+}
+#tutorial.is-open { display: block; }
+.tuto-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border-left: 6px solid var(--c-sun);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  animation: toast-in 300ms var(--ease-pop);
+}
+.tuto-mark {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: radial-gradient(circle at 35% 30%, var(--c-sun), var(--c-roof-orange));
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12);
+}
+.tuto-body { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.tuto-title { margin: 0; font-size: 1rem; font-weight: 800; line-height: 1.15; }
+.tuto-text { margin: 0; font-size: 0.9375rem; line-height: 1.3; color: var(--ink-soft); }
+.tuto-ok {
+  flex: none;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.tuto-ok:active { transform: translateY(1px); filter: brightness(0.96); }
+
+/* ─── Écrans pleins (titre, carrière, fin de niveau) ─────────────────────────── */
+#screens {
+  position: absolute;
+  z-index: 60;
+  inset: 0;
+  pointer-events: none;
+}
+.screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity var(--t-med) ease;
+}
+.screen.is-visible { opacity: 1; }
+html.reduced-motion .screen { transition: none; }
+
+/* Écran titre : la vallée tourne derrière, un voile en dégradé garde le texte lisible */
+.screen--title {
+  place-items: end center;
+  padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 20px);
+  background:
+    linear-gradient(180deg, rgba(31, 53, 33, 0.35) 0%, rgba(31, 53, 33, 0.1) 32%, rgba(31, 53, 33, 0.72) 68%, rgba(31, 53, 33, 0.92) 100%);
+  color: var(--c-wall-cream);
+  text-align: center;
+}
+.title-box { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(26rem, 100%); }
+.title-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, var(--c-grass-light), var(--c-grass));
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.12), 0 6px 0 rgba(0, 0, 0, 0.22);
+  position: relative;
+}
+.title-mark::before { content: ''; position: absolute; left: 19px; top: 27px; width: 26px; height: 20px; background: var(--c-wall-cream); border-radius: 2px; }
+.title-mark::after { content: ''; position: absolute; left: 15px; top: 14px; width: 0; height: 0; border-left: 17px solid transparent; border-right: 17px solid transparent; border-bottom: 15px solid var(--c-roof-red); }
+.title-name {
+  margin: 0;
+  font-size: 2.75rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+}
+.title-sub { margin: 0 0 6px; font-size: 1rem; line-height: 1.3; max-width: 22rem; }
+.title-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.title-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28);
+  transition: transform var(--t-fast) ease, filter var(--t-fast) ease;
+}
+.title-btn:active { transform: translateY(2px); box-shadow: none; filter: brightness(0.97); }
+.title-btn--primary { background: var(--btn-bg); color: var(--btn-ink); }
+.title-btn-label { font-size: 1.125rem; font-weight: 800; line-height: 1.1; }
+.title-btn-sub { font-size: 0.875rem; font-weight: 600; opacity: 0.85; line-height: 1.2; }
+
+/* Carte de carrière : liste verticale défilante, une carte par niveau */
+.screen--career {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  padding: calc(var(--safe-t) + 10px) calc(var(--safe-r) + 12px) calc(var(--safe-b) + 12px) calc(var(--safe-l) + 12px);
+  background: linear-gradient(180deg, rgba(31, 53, 33, 0.95), rgba(31, 53, 33, 0.99));
+  color: var(--c-wall-cream);
+}
+.career-head { display: flex; align-items: center; gap: 10px; }
+.career-title { flex: 1 1 auto; margin: 0; font-size: 1.75rem; font-weight: 900; line-height: 1.1; }
+.career-back {
+  flex: none;
+  min-height: 48px;
+  min-width: 72px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: rgba(244, 239, 230, 0.18);
+  color: var(--c-wall-cream);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.career-back:active { transform: translateY(1px); filter: brightness(0.92); }
+.career-progress { margin: 4px 0 8px; font-size: 0.9375rem; opacity: 0.9; }
+.career-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+.level-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.level-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.22);
+}
+.level-card.is-locked { background: rgba(244, 239, 230, 0.14); color: var(--c-wall-cream); box-shadow: none; }
+.level-head { display: flex; align-items: center; gap: 8px; }
+.level-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1.125rem; font-weight: 800; line-height: 1.15; }
+.level-stars { flex: none; display: inline-flex; gap: 2px; color: var(--c-sun); }
+.level-card.is-locked .level-stars { color: rgba(244, 239, 230, 0.5); }
+.ico-star { display: block; }
+.level-sub { margin: 0; font-size: 0.9375rem; line-height: 1.3; color: var(--ink-soft); }
+.level-card.is-locked .level-sub { color: rgba(244, 239, 230, 0.78); }
+.level-goals { margin: 2px 0 0; font-size: 0.875rem; line-height: 1.3; color: var(--ink-soft); }
+.level-card.is-locked .level-goals { color: rgba(244, 239, 230, 0.7); }
+.level-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.level-badge {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: var(--panel-2);
+  color: var(--ink-soft);
+}
+.level-badge--done { background: var(--btn-bg); color: var(--btn-ink); }
+.level-badge--open { background: var(--c-sun); color: var(--ink); }
+.level-badge--locked { background: rgba(244, 239, 230, 0.2); color: var(--c-wall-cream); }
+.level-years { flex: none; font-size: 0.75rem; font-weight: 700; color: var(--ink-soft); }
+.level-card.is-locked .level-years { color: rgba(244, 239, 230, 0.7); }
+.level-play {
+  flex: none;
+  margin-left: auto;
+  min-height: 48px;
+  min-width: 96px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+}
+.level-play--primary { min-height: 56px; background: var(--btn-bg); color: var(--btn-ink); }
+.level-play:active { transform: translateY(2px); box-shadow: none; }
+.level-lock { margin: 0 0 0 auto; font-size: 0.875rem; font-weight: 700; color: rgba(244, 239, 230, 0.85); text-align: right; }
+
+/* Fin de niveau : voile par-dessus le jeu, trois étoiles, objectifs, score */
+.screen--end {
+  place-items: center;
+  padding: calc(var(--safe-t) + 12px) 12px calc(var(--safe-b) + 12px);
+  background: rgba(31, 53, 33, 0.9);
+}
+.end-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(26rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 14px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.end-title { margin: 0; font-size: 1.5rem; font-weight: 900; line-height: 1.1; }
+.end-text { margin: 0 0 4px; font-size: 0.9375rem; line-height: 1.3; color: var(--ink-soft); }
+.end-stars { display: flex; gap: 8px; justify-content: center; color: var(--line); }
+.end-star { display: block; color: var(--line); }
+.end-star.is-on { color: var(--c-sun); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.18)); animation: star-pop 420ms var(--ease-pop) backwards; }
+.end-star.is-on:nth-child(2) { animation-delay: 120ms; }
+.end-star.is-on:nth-child(3) { animation-delay: 240ms; }
+@keyframes star-pop { from { opacity: 0; transform: scale(0.4) rotate(-20deg); } to { opacity: 1; transform: none; } }
+.end-star-list { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.end-star-row { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; color: var(--ink-soft); text-align: left; }
+.end-star-row.is-done { color: var(--ink); font-weight: 700; }
+.end-star-mark { flex: none; display: grid; place-items: center; width: 20px; color: var(--line); }
+.end-star-row.is-done .end-star-mark { color: var(--c-sun); }
+.end-star-label { flex: 1 1 auto; min-width: 0; }
+.end-sub { margin: 10px 0 0; font-size: 1rem; font-weight: 800; align-self: flex-start; }
+.end-goals { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.end-goal { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; text-align: left; color: var(--ink-soft); }
+.end-goal.is-done { color: var(--btn-bg); font-weight: 700; }
+.end-goal-mark { flex: none; display: grid; place-items: center; width: 20px; font-weight: 900; }
+.end-goal-label { flex: 1 1 auto; min-width: 0; }
+.end-goal-value { flex: none; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
+.end-score { margin: 10px 0 4px; font-size: 1.125rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.end-actions { display: flex; gap: 8px; width: 100%; }
+.end-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 56px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+}
+.end-btn--primary { background: var(--btn-bg); color: var(--btn-ink); }
+.end-btn:active { transform: translateY(2px); box-shadow: none; }
+
+/* L'écran titre ou la carte de carrière est ouvert : l'interface de jeu s'efface complètement
+   (jauges, onglets, bandeaux, bulle). L'écran de fin, lui, reste un voile POSÉ SUR le jeu : on voit
+   encore la vallée qu'on vient de faire pousser, en sourdine. */
+body.has-title #hud,
+body.has-title #goals,
+body.has-title #tabbar,
+body.has-title #action,
+body.has-title #alerts,
+body.has-title #layer-pill,
+body.has-title #stats,
+body.has-career-map #hud,
+body.has-career-map #goals,
+body.has-career-map #tabbar,
+body.has-career-map #action,
+body.has-career-map #alerts,
+body.has-career-map #layer-pill,
+body.has-career-map #stats { display: none !important; }
+body.has-title #tutorial,
+body.has-career-map #tutorial,
+body.has-level-end #tutorial,
+body.has-level-end #action,
+body.has-title #toasts,
+body.has-career-map #toasts { display: none; }

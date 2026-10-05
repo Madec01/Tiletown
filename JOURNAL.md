@@ -15,6 +15,43 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 5, chantier MODÈLES : arbres arrondis, bâtiments à caractère, palette par rôle
+
+(Priorités 2 et 3 du plan de beauté de l'utilisateur, `docs/ARCHITECTURE.md` §11.4. Chantier mené en
+parallèle de TERRAIN — `src/render3d/ground.js`, `renderer.js`, `camera.js` — et de PLACEMENT —
+`src/render3d/buildings.js`, `roads.js`.)
+
+- **Palette par rôle** (`src/data/palette.js`). Les 24 teintes du jeu ne bougent pas (une variable CSS
+  chacune). Elles sont prolongées, pour les modèles 3D seulement, par 17 teintes (`MODEL_TINTS` :
+  terracotta, ardoise foncée, brun doux, tuile claire, pastels bleu/vert/rose/ocre, pierre et enduit
+  chauds, trois verts, deux écorces, deux vitrages) et par 12 sous-palettes (`ROOF_COLORS`,
+  `ROOF_FLAT_COLORS`, `WALL_COLORS`, `BASE_COLORS`, `FOLIAGE_COLORS`, `TRUNK_COLORS`, `TRIM_COLORS`,
+  `GLASS_COLORS`, `ROCK_COLORS`, `METAL_COLORS`, `GROUND_COLORS`, `ACCENT_COLORS`) avec
+  `roleColor(rôle, graine, rang)`.
+- **Import par rôle** (`tools/import-models.js`). `nearestPaletteHex` ne sert plus aux modèles
+  statiques : la couleur de chaque sommet est échantillonnée dans la texture-palette du kit, les aplats
+  sont regroupés en rampes (même rôle, même famille de teinte), le rôle est deviné (couleur + hauteur
+  dans la boîte englobante + orientation des faces + profil du kit), puis une teinte est tirée dans la
+  sous-palette du rôle avec l'identifiant du modèle comme graine. La façade est la rampe de plus grande
+  AIRE VISIBLE (les dessous ne comptent pas). Les accents gardent leur famille de teinte.
+  Les couleurs sont cuites en COLOR_0 : **plus aucune texture dans les GLB** (≈ 11 Ko gagnés par modèle).
+- **Arbres** : famille de 14 nouveaux modèles en primitives Tiletown (CC0) — `tree-round-s/m/l`,
+  `tree-tall-s/m/l`, `pine-s/m/l`, `shrub-a/b`, `grass-tuft-a/b`, `sapling` — en volumes lisses
+  (ellipsoïdes à normales analytiques, rayon bruité) sur troncs fuselés et penchés. `tree-a/b/c`,
+  `pine-a/b` et `bush` pointent vers ces recettes (autres graines) : rien ne casse côté jeu.
+- **Bâtiments** : 9 nouvelles variantes (`house-d/e/f`, `building-small-c`, `building-tall-c`,
+  `shop-c`, `office-b`, `factory-c`) de silhouettes nettement différentes, et des détails de caractère
+  ajoutés en primitives BISEAUTÉES après mise à l'échelle : débord de toiture, corniche, cheminée,
+  porche, lucarne, édicule de toit, repérés sur une tranche de hauteur du modèle (`slice`).
+- **Vérifications** : planche `tools/measure-out/models-sheet.png` (85 modèles, 0 problème) et planche
+  avant/après `tools/measure-out/models-avant-apres.png` (nouveau script `tools/preview-before-after.mjs`).
+  `assets/models/` passe de 1,88 à 1,95 Mo pour 22 modèles de plus (objectif < 2,5 Mo) ; les 85 modèles
+  se chargent par `src/render3d/models.js` sans aucun repli ni texture.
+- À faire / faible : les variantes ne sont pas encore référencées par `src/data/tiles.js` ni
+  `src/data/terrain.js` (à câbler avec le chantier PLACEMENT) ; les volumes des kits gardent leurs
+  facettes (seules les pièces ajoutées par Tiletown sont biseautées) ; `crop-wheat`, `crop-corn`,
+  `rock-a/b` et `flowers` restent des modèles de kit non retravaillés.
+
 ## 2026-10-05 — Étape 5 lancée : carrière, tutoriel et beauté
 
 - Retours de l'utilisateur : « on démarre directement avec une ville, il faut une carrière avec tuto » et « le jeu n'est pas très beau ».

@@ -35,8 +35,8 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, prune, weld, join, flatten, meshopt, getBounds, transformMesh, clearNodeTransform, mergeDocuments, unpartition } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 import { PNG } from 'pngjs';
-import { PALETTE, PALETTE_LIST, hexToRgb, nearestPaletteHex } from '../src/data/palette.js';
-import { MODEL_MAP, KIT_MATERIALS, kitUrl, kitManifestName } from './model-map.js';
+import { PALETTE, PALETTE_LIST, MODEL_PALETTE, MODEL_COLORS, ROLE_PALETTES, hexToRgb, rgbToHsl, nearestPaletteHex, roleColor } from '../src/data/palette.js';
+import { MODEL_MAP, KIT_MATERIALS, KIT_ROLE_PROFILES, kitUrl, kitManifestName } from './model-map.js';
 import { KITS, kitDir } from './fetch-kits.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,12 +58,17 @@ const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055
 const PALETTE_INDEX = new Map(PALETTE_LIST.map((hex, i) => [hex, i]));
 const PALETTE_ROLE = new Map(Object.entries(PALETTE).map(([role, hex]) => [hex, role]));
 
-/** Rôle de palette → baseColorFactor linéaire. */
+/** Teinte nommée de la palette des modèles → baseColorFactor linéaire. */
 export function roleToLinearFactor(role) {
-  const hex = PALETTE[role];
-  if (!hex) throw new Error(`rôle de palette inconnu : ${role}`);
+  const hex = MODEL_PALETTE[role];
+  if (!hex) throw new Error(`teinte de palette inconnue : ${role}`);
   const [r, g, b] = hexToRgb(hex).map((v) => toLinear(v / 255));
   return [r, g, b, 1];
+}
+
+/** Teinte « #rrggbb » → [r, g, b] linéaires. */
+export function hexToLinear(hex) {
+  return hexToRgb(hex).map((v) => toLinear(v / 255));
 }
 
 /** baseColorFactor linéaire → teinte de palette la plus proche (comparée en sRGB). */
@@ -188,10 +193,396 @@ export function prepareMaterials(doc, kit, materialOverrides = {}) {
   }
 }
 
+// ─── Attribution des couleurs PAR RÔLE ──────────────────────────────────────────────────────────
+// Les kits Kenney partagent une texture-palette (colormap.png) où chaque zone d'un modèle pioche un
+// aplat. Ramener chaque aplat à « la teinte la plus proche » laissait tous les toits verts et toutes
+// les façades grises. On devine donc le RÔLE de chaque aplat :
+//   - sa couleur d'origine (teinte, saturation, luminosité),
+//   - sa hauteur moyenne dans la boîte englobante du modèle ENTIER et l'orientation moyenne de ses
+//     faces (normale y, pondérées par l'aire des triangles),
+//   - le nom du matériau quand le kit en a un parlant (Nature Kit) et le profil du kit,
+// puis on tire dans la SOUS-PALETTE de ce rôle (src/data/palette.js) une teinte stable pour ce modèle.
+// Deux variantes d'un même type (house-a, house-d…) reçoivent ainsi des toits et des façades différents.
+//
+// Marche à suivre : chaque source est d'abord « aplatie » (texture échantillonnée par sommet dans
+// COLOR_0, matériau renommé `src|<kit>|<rôle imposé>`), les pièces sont assemblées, puis l'attribution
+// se fait une seule fois sur le modèle complet (`assignRoleColors`).
+
+/** Préfixe des matériaux en attente d'attribution de rôle. */
+const SRC_MATERIAL = 'src|';
+
+/** Cache : empreinte de l'image → pixels décodés. */
+const texturePixelsCache = new Map();
+function texturePixels(imageBytes) {
+  const hash = createHash('sha1').update(imageBytes).digest('hex');
+  let png = texturePixelsCache.get(hash);
+  if (!png) { png = PNG.sync.read(Buffer.from(imageBytes)); texturePixelsCache.set(hash, png); }
+  return png;
+}
+
+/**
+ * Prépare un document source pour l'attribution par rôle : la couleur d'origine de chaque sommet
+ * (texel de la texture-palette, ou baseColorFactor) est écrite dans COLOR_0 en sRGB 0..1, les textures
+ * et les UV sont retirés, et le matériau porte le kit et le rôle imposé par le plan.
+ */
+export function prepareSourceColors(doc, kit, materialOverrides = {}) {
+  const root = doc.getRoot();
+  for (const material of root.listMaterials()) {
+    const name = material.getName();
+    const forced = materialOverrides[name] || '';
+    material.setMetallicFactor(0).setRoughnessFactor(1).setEmissiveFactor([0, 0, 0]).setAlphaMode('OPAQUE');
+    material.setExtension('KHR_materials_unlit', null);
+    material.setMetallicRoughnessTexture(null).setNormalTexture(null).setOcclusionTexture(null).setEmissiveTexture(null);
+    const texture = material.getBaseColorTexture();
+    const png = texture ? texturePixels(texture.getImage()) : null;
+    const factorSrgb = material.getBaseColorFactor().slice(0, 3).map((c) => toSrgb(Math.min(1, Math.max(0, c))));
+    for (const mesh of root.listMeshes()) {
+      for (const prim of mesh.listPrimitives()) {
+        if (prim.getMaterial() !== material) continue;
+        const pos = prim.getAttribute('POSITION');
+        const uv = prim.getAttribute('TEXCOORD_0');
+        const n = pos.getCount();
+        const colors = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) {
+          let rgb;
+          if (png && uv) {
+            const el = uv.getElement(i, []);
+            const px = Math.min(png.width - 1, Math.max(0, Math.floor(el[0] * png.width)));
+            const py = Math.min(png.height - 1, Math.max(0, Math.floor(el[1] * png.height)));
+            const k = (py * png.width + px) * 4;
+            rgb = [png.data[k] / 255, png.data[k + 1] / 255, png.data[k + 2] / 255];
+          } else {
+            rgb = factorSrgb;
+          }
+          colors[i * 3] = rgb[0]; colors[i * 3 + 1] = rgb[1]; colors[i * 3 + 2] = rgb[2];
+        }
+        prim.setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(colors).setBuffer(doc.getRoot().listBuffers()[0] || doc.createBuffer()));
+        prim.setAttribute('TANGENT', null);
+        for (let i = 0; i < 8; i++) prim.setAttribute(`TEXCOORD_${i}`, null);
+      }
+    }
+    material.setBaseColorTexture(null).setBaseColorFactor([1, 1, 1, 1]).setName(`${SRC_MATERIAL}${kit}|${forced}`);
+  }
+}
+
+/**
+ * Rôle d'un aplat : 'roof', 'roofFlat', 'wall', 'base', 'trim', 'glass', 'foliage', 'trunk', 'rock',
+ * 'metal', 'ground' ou 'accent'. `yNorm` ∈ [0, 1] (hauteur dans la boîte), `ny` ∈ [-1, 1] (normale
+ * moyenne), `profile` = profil du kit (tools/model-map.js).
+ */
+export function detectRole({ rgb, yNorm = 0.5, ny = 0, profile = {} }) {
+  const [h, , l] = rgbToHsl(rgb);
+  // Le CHROMA (max - min) mesure mieux la « couleur » que la saturation HSL, qui s'emballe près du
+  // blanc et du noir : sans lui, un mur #f8f8fb passerait pour une vitre bleue.
+  const chroma = (Math.max(...rgb) - Math.min(...rgb)) / 255;
+  // Vitrage : bleu franc et clair
+  if (chroma >= 0.22 && h >= 180 && h <= 262 && l >= 0.45) return profile.glass || 'glass';
+  // Vert : toiture (les toits des kits de ville de Kenney sont verts), pelouse au pied, ou feuillage
+  if (chroma >= 0.10 && h >= 65 && h <= 180) {
+    const green = profile.green || 'foliage';
+    if (green === 'roof') return yNorm >= 0.3 ? 'roof' : 'grassLight'; // pelouse de la dalle du kit
+    return green;
+  }
+  // Brun, orange, ocre : terre, bois, enduit crème, menuiserie, accents chauds
+  if (chroma >= 0.12 && h >= 15 && h < 65) {
+    if (yNorm < 0.16 && ny > 0.5) return 'soil';     // allée, chemin de la dalle du kit
+    if (l < 0.42) return profile.bark || 'trunk';    // écorce, bois sombre
+    if (l >= 0.72) return profile.light || 'wall';   // enduit crème, pierre chaude (Modular Buildings)
+    if (chroma >= 0.35) return 'accent';             // auvent, enseigne, store
+    return profile.warm || 'trim';
+  }
+  // Rouge, rose, violet : accents
+  if (chroma >= 0.18 && (h >= 300 || h < 15)) return 'accent';
+  // Peu saturé : toiture-terrasse au sommet (kits de bâtiments seulement), façade, soubassement, menuiserie
+  if (profile.flat && yNorm >= 0.8 && ny >= 0.45) return profile.flat;
+  if (l >= 0.70) return profile.light || 'wall';
+  if (l >= 0.38) return profile.mid || 'base';
+  return profile.dark || 'trim';
+}
+
+/**
+ * Attribue une teinte de palette à chaque aplat du modèle assemblé, par rôle.
+ * Les aplats proches (même rôle, même famille de teinte) forment une RAMPE : le dégradé d'ombrage
+ * cuit dans la texture Kenney devient un seul aplat, sinon un toit se retrouverait bariolé.
+ * Renvoie la liste lisible { role, tint, part } pour le manifeste.
+ */
+export function assignRoleColors(doc, seed, overrideProfile = null) {
+  const root = doc.getRoot();
+  const scene = root.getDefaultScene() || root.listScenes()[0];
+  const bounds = getBounds(scene);
+  const minY = bounds.min[1], height = Math.max(1e-6, bounds.max[1] - bounds.min[1]);
+  const prims = [];
+  for (const mesh of root.listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const mat = prim.getMaterial();
+      if (mat && mat.getName().startsWith(SRC_MATERIAL) && prim.getAttribute('COLOR_0')) prims.push(prim);
+    }
+  }
+  if (!prims.length) return [];
+
+  // 1) aplats : aire, hauteur et normale moyennes, par (kit, rôle imposé, couleur exacte)
+  const groups = new Map();
+  for (const prim of prims) {
+    const [, kit, forced] = prim.getMaterial().getName().split('|');
+    const pos = prim.getAttribute('POSITION');
+    const col = prim.getAttribute('COLOR_0');
+    const nor = prim.getAttribute('NORMAL');
+    const idx = prim.getIndices();
+    const count = idx ? idx.getCount() : pos.getCount();
+    for (let t = 0; t + 2 < count; t += 3) {
+      const ia = idx ? idx.getScalar(t) : t, ib = idx ? idx.getScalar(t + 1) : t + 1, ic = idx ? idx.getScalar(t + 2) : t + 2;
+      const A = pos.getElement(ia, []), B = pos.getElement(ib, []), C = pos.getElement(ic, []);
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const cr = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const area = Math.hypot(cr[0], cr[1], cr[2]) / 2;
+      const c = col.getElement(ia, []);
+      const rgb = [Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)];
+      const key = `${kit}|${forced}|${rgb.join(',')}`;
+      let g = groups.get(key);
+      if (!g) { g = { kit, forced, rgb, area: 0, visArea: 0, yA: 0, nyA: 0 }; groups.set(key, g); }
+      const yN = ((A[1] + B[1] + C[1]) / 3 - minY) / height;
+      const ny = nor ? (nor.getElement(ia, [])[1] + nor.getElement(ib, [])[1] + nor.getElement(ic, [])[1]) / 3 : 0;
+      g.area += area; g.yA += yN * area; g.nyA += ny * area;
+      if (ny > -0.25) g.visArea += area; // faces tournées vers le ciel ou l'horizon : ce que le joueur voit
+    }
+  }
+
+  // 2) rôle de chaque aplat, puis regroupement en rampes (même rôle, même famille de teinte)
+  const ramps = new Map();
+  for (const g of groups.values()) {
+    const profile = overrideProfile ? { ...(KIT_ROLE_PROFILES[g.kit] || {}), ...overrideProfile } : (KIT_ROLE_PROFILES[g.kit] || {});
+    const [h, s, l] = rgbToHsl(g.rgb);
+    g.l = l;
+    if (g.forced && !ROLE_PALETTES[g.forced]) { g.role = null; g.tint = g.forced; continue; } // teinte imposée
+    g.role = g.forced || detectRole({ rgb: g.rgb, yNorm: g.area ? g.yA / g.area : 0.5, ny: g.area ? g.nyA / g.area : 0, profile });
+    // Une rampe = un même rôle ET une même famille de teinte (le dégradé d'ombrage cuit dans la
+    // texture Kenney est alors un seul aplat). Un rôle IMPOSÉ par le plan garde son aplat à lui.
+    const family = g.forced ? `f${g.rgb.join(',')}` : (s < 0.18 ? 'n' : `h${Math.round(h / 40)}`);
+    const key = `${g.role}|${family}`;
+    let ramp = ramps.get(key);
+    if (!ramp) { ramp = { role: g.role, area: 0, visArea: 0, lA: 0, groups: [] }; ramps.set(key, ramp); }
+    ramp.area += g.area; ramp.visArea += g.visArea; ramp.lA += l * g.area; ramp.groups.push(g);
+  }
+  // 2 bis) façade contre soubassement : c'est la rampe la plus étendue en AIRE VISIBLE (faces tournées
+  // vers le ciel ou l'horizon) qui porte la façade. Les kits Kenney n'ont pas de convention de clarté,
+  // et une grande partie de leurs aplats sombres sont des DESSOUS (débords, dalle) que le joueur ne voit
+  // jamais : les compter fausserait le choix.
+  const faces = [...ramps.values()].filter((r) => r.role === 'wall' || r.role === 'base');
+  if (faces.length) {
+    faces.sort((a, b) => b.visArea - a.visArea);
+    faces.forEach((ramp, i) => { ramp.role = i === 0 ? 'wall' : 'base'; for (const g of ramp.groups) g.role = ramp.role; });
+  }
+
+  // 3) une teinte par rampe : les rampes d'un même rôle sont décalées dans la sous-palette
+  const byRole = new Map();
+  for (const ramp of ramps.values()) {
+    if (!byRole.has(ramp.role)) byRole.set(ramp.role, []);
+    byRole.get(ramp.role).push(ramp);
+  }
+  const legend = [];
+  const totalArea = [...ramps.values()].reduce((n, r) => n + r.area, 0) || 1;
+  for (const [role, list] of byRole) {
+    list.sort((a, b) => (b.area ? b.lA / b.area : 0) - (a.area ? a.lA / a.area : 0)); // du plus clair au plus sombre
+    list.forEach((ramp, rank) => {
+      // Les accents gardent leur FAMILLE de teinte : un store orange reste orange, une enseigne rouge
+      // reste rouge. C'est le seul rôle où la couleur d'origine porte un sens.
+      const tint = role === 'accent' ? accentTint(ramp.groups[0].rgb) : roleColor(role, seed, rank);
+      for (const g of ramp.groups) g.tint = tint;
+      legend.push({ role, tint });
+      vlog(`rampe ${role} #${rank} → ${tint} : ${(100 * ramp.area / totalArea).toFixed(1)} % de l'aire (${(100 * ramp.visArea / totalArea).toFixed(1)} % visible), ${ramp.groups.length} aplats (${ramp.groups.slice(0, 3).map((g) => '#' + g.rgb.map((v) => v.toString(16).padStart(2, '0')).join('')).join(' ')})`);
+    });
+  }
+
+  // 4) réécriture des couleurs de sommets (linéaire)
+  const linear = new Map();
+  const tintOf = (rgb) => {
+    for (const g of groups.values()) if (g.rgb[0] === rgb[0] && g.rgb[1] === rgb[1] && g.rgb[2] === rgb[2]) return g.tint;
+    return 'wallCream';
+  };
+  const index = new Map();
+  for (const g of groups.values()) index.set(`${g.kit}|${g.forced}|${g.rgb.join(',')}`, g.tint);
+  for (const prim of prims) {
+    const [, kit, forced] = prim.getMaterial().getName().split('|');
+    const col = prim.getAttribute('COLOR_0');
+    const n = col.getCount();
+    const out = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const c = col.getElement(i, []);
+      const rgb = [Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)];
+      const tint = index.get(`${kit}|${forced}|${rgb.join(',')}`) || tintOf(rgb);
+      let lin = linear.get(tint);
+      if (!lin) { lin = hexToLinear(MODEL_PALETTE[tint] || PALETTE.wallCream); linear.set(tint, lin); }
+      out[i * 3] = lin[0]; out[i * 3 + 1] = lin[1]; out[i * 3 + 2] = lin[2];
+    }
+    col.setArray(out);
+  }
+  return legend;
+}
+
+/** Teinte d'accent la plus proche de la famille de couleur d'origine (jaune, orange, rouge, bleu). */
+function accentTint(rgb) {
+  const [h] = rgbToHsl(rgb);
+  if (h >= 40 && h < 72) return 'sun';
+  if (h >= 15 && h < 40) return 'roofOrange';
+  if (h >= 160 && h < 280) return 'river';
+  return 'blossom';
+}
+
+/**
+ * Cuit toutes les couleurs de matériaux dans COLOR_0 et ne garde qu'UN matériau blanc : les primitives
+ * géométriques de Tiletown (`flat-<teinte>`) rejoignent ainsi les pièces des kits dans une seule
+ * primitive après `join()`. Le rendu (src/render3d/models.js) n'a plus aucune texture à échantillonner.
+ */
+export function flattenToVertexColors(doc) {
+  const root = doc.getRoot();
+  const buffer = root.listBuffers()[0] || doc.createBuffer();
+  const white = doc.createMaterial('vertex-colors').setBaseColorFactor([1, 1, 1, 1]).setMetallicFactor(0).setRoughnessFactor(1);
+  for (const mesh of root.listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const mat = prim.getMaterial();
+      const n = prim.getAttribute('POSITION').getCount();
+      if (!prim.getAttribute('COLOR_0')) {
+        const factor = mat ? mat.getBaseColorFactor() : [1, 1, 1, 1];
+        const out = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { out[i * 3] = factor[0]; out[i * 3 + 1] = factor[1]; out[i * 3 + 2] = factor[2]; }
+        prim.setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(out).setBuffer(buffer));
+      }
+      prim.setAttribute('TANGENT', null);
+      for (let i = 0; i < 8; i++) prim.setAttribute(`TEXCOORD_${i}`, null);
+      prim.setMaterial(white);
+    }
+  }
+  for (const m of root.listMaterials()) if (m !== white) m.dispose();
+  for (const t of root.listTextures()) t.dispose();
+}
+
 // ─── Primitives procédurales (boîte, cylindre, cône) aux couleurs de la palette ────────────────
 
-/** Géométrie d'une boîte posée sur y = 0, centrée en x/z, normales plates. */
-export function boxGeometry([w, h, d]) {
+/** Ajoute une face plane (polygone convexe, sommets dans l'ordre antihoraire vu de l'extérieur). */
+function addFace(g, verts) {
+  const [a, b, c] = verts;
+  const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const len = Math.hypot(n[0], n[1], n[2]) || 1;
+  const nn = [n[0] / len, n[1] / len, n[2] / len];
+  const base = g.positions.length / 3;
+  for (const pt of verts) { g.positions.push(...pt); g.normals.push(...nn); }
+  for (let i = 1; i < verts.length - 1; i++) g.indices.push(base, base + i, base + i + 1);
+}
+
+/**
+ * Boîte BISEAUTÉE posée sur y = 0, centrée en x/z : 6 faces, 12 biseaux, 8 coins.
+ * Un chanfrein de quelques millimètres suffit à accrocher la lumière sur les arêtes (une fine bande
+ * claire en haut, sombre en bas) : c'est ce qui donne du relief aux pièces ajoutées par Tiletown.
+ */
+export function chamferBoxGeometry([w, h, d], bevel) {
+  const g = { positions: [], normals: [], indices: [] };
+  const hx = w / 2, hy = h / 2, hz = d / 2;
+  const b = Math.min(bevel, hx * 0.9, hy * 0.9, hz * 0.9);
+  const cy = h / 2;
+  const P = (sx, sy, sz, ax, ay, az) => [sx * (hx - (ax ? 0 : b)), cy + sy * (hy - (ay ? 0 : b)), sz * (hz - (az ? 0 : b))];
+  addFace(g, [P(-1, -1, 1, 0, 0, 1), P(1, -1, 1, 0, 0, 1), P(1, 1, 1, 0, 0, 1), P(-1, 1, 1, 0, 0, 1)]);
+  addFace(g, [P(1, -1, -1, 0, 0, 1), P(-1, -1, -1, 0, 0, 1), P(-1, 1, -1, 0, 0, 1), P(1, 1, -1, 0, 0, 1)]);
+  addFace(g, [P(1, -1, 1, 1, 0, 0), P(1, -1, -1, 1, 0, 0), P(1, 1, -1, 1, 0, 0), P(1, 1, 1, 1, 0, 0)]);
+  addFace(g, [P(-1, -1, -1, 1, 0, 0), P(-1, -1, 1, 1, 0, 0), P(-1, 1, 1, 1, 0, 0), P(-1, 1, -1, 1, 0, 0)]);
+  addFace(g, [P(-1, 1, 1, 0, 1, 0), P(1, 1, 1, 0, 1, 0), P(1, 1, -1, 0, 1, 0), P(-1, 1, -1, 0, 1, 0)]);
+  addFace(g, [P(-1, -1, -1, 0, 1, 0), P(1, -1, -1, 0, 1, 0), P(1, -1, 1, 0, 1, 0), P(-1, -1, 1, 0, 1, 0)]);
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) { // arêtes parallèles à X
+    const a = P(-1, sy, sz, 0, 1, 0), b2 = P(1, sy, sz, 0, 1, 0), c2 = P(1, sy, sz, 0, 0, 1), d2 = P(-1, sy, sz, 0, 0, 1);
+    addFace(g, sy * sz > 0 ? [a, b2, c2, d2] : [d2, c2, b2, a]);
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { // arêtes parallèles à Y
+    const a = P(sx, -1, sz, 1, 0, 0), b2 = P(sx, 1, sz, 1, 0, 0), c2 = P(sx, 1, sz, 0, 0, 1), d2 = P(sx, -1, sz, 0, 0, 1);
+    addFace(g, sx * sz > 0 ? [d2, c2, b2, a] : [a, b2, c2, d2]);
+  }
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) { // arêtes parallèles à Z
+    const a = P(sx, sy, -1, 1, 0, 0), b2 = P(sx, sy, 1, 1, 0, 0), c2 = P(sx, sy, 1, 0, 1, 0), d2 = P(sx, sy, -1, 0, 1, 0);
+    addFace(g, sx * sy > 0 ? [a, b2, c2, d2] : [d2, c2, b2, a]);
+  }
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const px = P(sx, sy, sz, 1, 0, 0), py = P(sx, sy, sz, 0, 1, 0), pz = P(sx, sy, sz, 0, 0, 1);
+    addFace(g, sx * sy * sz > 0 ? [px, py, pz] : [px, pz, py]);
+  }
+  return g;
+}
+
+/** Bruit déterministe dans [0, 1] à partir de trois entiers et d'une graine. */
+function noise3(i, j, seed) {
+  let h = (Math.imul(i + 1, 374761393) ^ Math.imul(j + 1, 668265263) ^ Math.imul(seed + 1, 2246822519)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * VOLUME ARRONDI (ellipsoïde) à normales LISSES et rayon légèrement irrégulier : la brique des
+ * feuillages. Sommets partagés par anneau (le maillage est indexé), normale analytique de
+ * l'ellipsoïde NON déformée — la lumière glisse en dégradé doux au lieu d'accrocher des facettes.
+ * `jitter` déforme le rayon de ± jitter (volume « pas tout à fait rond »), `seed` rend le tirage stable.
+ * Triangles = 2 × segments × (rings - 1) : 64 pour 8 × 5.
+ */
+export function blobGeometry([rx, ry, rz], { segments = 8, rings = 5, jitter = 0, seed = 1 } = {}) {
+  const positions = [], normals = [], indices = [];
+  const vert = (i, j) => {
+    const phi = (j / rings) * Math.PI, theta = ((i % segments) / segments) * Math.PI * 2;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    const ct = Math.cos(theta), st = Math.sin(theta);
+    const k = jitter ? 1 + (noise3(i % segments, j, seed) - 0.5) * 2 * jitter : 1;
+    const nx = sp * ct, nyv = cp, nz = sp * st;
+    positions.push(rx * nx * k, ry * nyv * k, rz * nz * k);
+    const n = [nx / rx, nyv / ry, nz / rz];
+    const len = Math.hypot(n[0], n[1], n[2]) || 1;
+    normals.push(n[0] / len, n[1] / len, n[2] / len);
+    return positions.length / 3 - 1;
+  };
+  const grid = [];
+  for (let j = 0; j <= rings; j++) {
+    const row = [];
+    if (j === 0 || j === rings) { const v = vert(0, j); for (let i = 0; i < segments; i++) row.push(v); }
+    else for (let i = 0; i < segments; i++) row.push(vert(i, j));
+    grid.push(row);
+  }
+  for (let j = 0; j < rings; j++) {
+    for (let i = 0; i < segments; i++) {
+      const i2 = (i + 1) % segments;
+      const a = grid[j][i], b = grid[j + 1][i], c = grid[j + 1][i2], d = grid[j][i2];
+      if (j === 0) indices.push(a, b, c);
+      else if (j === rings - 1) indices.push(a, b, d);
+      else indices.push(a, b, c, a, c, d);
+    }
+  }
+  return { positions, normals, indices };
+}
+
+/** Fait tourner une géométrie autour de X puis de Z (degrés) : troncs légèrement inclinés. */
+export function tiltGeometry(geom, [degX = 0, degZ = 0]) {
+  if (!degX && !degZ) return geom;
+  const rx = (degX * Math.PI) / 180, rz = (degZ * Math.PI) / 180;
+  const cx = Math.cos(rx), sx = Math.sin(rx), cz = Math.cos(rz), sz = Math.sin(rz);
+  const apply = (arr) => {
+    for (let i = 0; i < arr.length; i += 3) {
+      let [x, y, z] = [arr[i], arr[i + 1], arr[i + 2]];
+      [y, z] = [y * cx - z * sx, y * sx + z * cx];
+      [x, y] = [x * cz - y * sz, x * sz + y * cz];
+      arr[i] = x; arr[i + 1] = y; arr[i + 2] = z;
+    }
+  };
+  apply(geom.positions); apply(geom.normals);
+  return geom;
+}
+
+/** Translate une géométrie. */
+export function translateGeometry(geom, [tx, ty, tz]) {
+  for (let i = 0; i < geom.positions.length; i += 3) { geom.positions[i] += tx; geom.positions[i + 1] += ty; geom.positions[i + 2] += tz; }
+  return geom;
+}
+
+/** Géométrie d'une boîte posée sur y = 0, centrée en x/z, normales plates (ou biseautée si `bevel`). */
+export function boxGeometry([w, h, d], bevel = 0) {
+  if (bevel > 0) return chamferBoxGeometry([w, h, d], bevel);
+  return rawBoxGeometry([w, h, d]);
+}
+
+function rawBoxGeometry([w, h, d]) {
   const hx = w / 2, hz = d / 2;
   const faces = [
     { n: [0, 0, 1], v: [[-hx, 0, hz], [hx, 0, hz], [hx, h, hz], [-hx, h, hz]] },
@@ -211,7 +602,7 @@ export function boxGeometry([w, h, d]) {
 }
 
 /** Cylindre (ou cône si topRadius = 0) posé sur y = 0 ; facettes plates ; renvoie côté et chapeau séparés. */
-export function cylinderGeometry(radius, height, segments = 16, topRadius = radius) {
+export function cylinderGeometry(radius, height, segments = 16, topRadius = radius, smooth = false) {
   const side = { positions: [], normals: [], indices: [] };
   const cap = { positions: [], normals: [], indices: [] };
   const bottom = { positions: [], normals: [], indices: [] };
@@ -225,7 +616,13 @@ export function cylinderGeometry(radius, height, segments = 16, topRadius = radi
     const n = [Math.cos(am) / nl, slope / nl, Math.sin(am) / nl];
     const b = side.positions.length / 3;
     side.positions.push(radius * c0, 0, radius * s0, radius * c1, 0, radius * s1, topRadius * c1, height, topRadius * s1, topRadius * c0, height, topRadius * s0);
-    for (let k = 0; k < 4; k++) side.normals.push(...n);
+    if (smooth) {
+      // normales radiales par sommet : le cylindre se fond en dégradé (troncs doux)
+      const n0 = [c0 / nl, slope / nl, s0 / nl], n1 = [c1 / nl, slope / nl, s1 / nl];
+      side.normals.push(...n0, ...n1, ...n1, ...n0);
+    } else {
+      for (let k = 0; k < 4; k++) side.normals.push(...n);
+    }
     if (topRadius > 0) side.indices.push(b, b + 2, b + 1, b, b + 3, b + 2);
     else side.indices.push(b, b + 2, b + 1);
     if (topRadius > 0) {
@@ -261,23 +658,89 @@ export function addGeometry(doc, buffer, node, geom, material) {
   mesh.addPrimitive(prim);
 }
 
-/** Ajoute une primitive du plan (box, cylinder, cone) à la scène. */
-function addPrimitivePart(doc, buffer, scene, part) {
+/**
+ * Ajoute une primitive du plan à la scène. Formes : `box` (chanfrein `bevel`), `cylinder` / `cone`
+ * (`topRadius`, `smooth` pour des normales radiales), `blob` (ellipsoïde lisse et irrégulier :
+ * `radii`, `segments`, `rings`, `jitter`, `seed`). `tilt: [degX, degZ]` penche la pièce autour de son
+ * pied (troncs), `at` la pose, `yaw` la fait pivoter.
+ */
+export function addPrimitivePart(doc, buffer, scene, part) {
   const node = doc.createNode(`${part.primitive}-${part.color}`).setTranslation(part.at || [0, 0, 0]);
   if (part.yaw) node.setRotation(quatY(part.yaw));
   const material = flatMaterial(doc, part.color);
+  const tilt = part.tilt;
+  const place = (geom) => (tilt ? tiltGeometry(geom, tilt) : geom);
   if (part.primitive === 'box') {
-    addGeometry(doc, buffer, node, boxGeometry(part.size), material);
+    addGeometry(doc, buffer, node, place(boxGeometry(part.size, part.bevel || 0)), material);
+  } else if (part.primitive === 'blob') {
+    const geom = blobGeometry(part.radii, { segments: part.segments || 8, rings: part.rings || 5, jitter: part.jitter || 0, seed: part.seed || 1 });
+    translateGeometry(geom, [0, part.radii[1], 0]); // posé sur son pied : centre à ry
+    addGeometry(doc, buffer, node, place(geom), material);
   } else if (part.primitive === 'cylinder' || part.primitive === 'cone') {
-    const topRadius = part.primitive === 'cone' ? 0 : part.radius;
-    const { side, cap, bottom } = cylinderGeometry(part.radius, part.height, part.segments || 16, topRadius);
-    addGeometry(doc, buffer, node, side, material);
-    if (cap.indices.length) addGeometry(doc, buffer, node, cap, part.topColor ? flatMaterial(doc, part.topColor) : material);
-    addGeometry(doc, buffer, node, bottom, material);
+    const topRadius = part.primitive === 'cone' ? 0 : (part.topRadius ?? part.radius);
+    const { side, cap, bottom } = cylinderGeometry(part.radius, part.height, part.segments || 16, topRadius, part.smooth || false);
+    addGeometry(doc, buffer, node, place(side), material);
+    if (cap.indices.length) addGeometry(doc, buffer, node, place(cap), part.topColor ? flatMaterial(doc, part.topColor) : material);
+    if (!part.noBottom) addGeometry(doc, buffer, node, place(bottom), material);
   } else {
     throw new Error(`primitive inconnue : ${part.primitive}`);
   }
   scene.addChild(node);
+}
+
+/** Emprise en x/z de la tranche de hauteur [a, b] (fractions de la hauteur) d'une scène. */
+function sliceBounds(scene, bounds, a, b) {
+  const y0 = bounds.min[1] + a * (bounds.max[1] - bounds.min[1]);
+  const y1 = bounds.min[1] + b * (bounds.max[1] - bounds.min[1]);
+  const out = { min: [Infinity, bounds.min[1], Infinity], max: [-Infinity, bounds.max[1], -Infinity] };
+  const visit = (node) => {
+    const mesh = node.getMesh();
+    if (mesh) {
+      for (const prim of mesh.listPrimitives()) {
+        const pos = prim.getAttribute('POSITION');
+        for (let i = 0; i < pos.getCount(); i++) {
+          const v = pos.getElement(i, []);
+          if (v[1] < y0 || v[1] > y1) continue;
+          if (v[0] < out.min[0]) out.min[0] = v[0];
+          if (v[0] > out.max[0]) out.max[0] = v[0];
+          if (v[2] < out.min[2]) out.min[2] = v[2];
+          if (v[2] > out.max[2]) out.max[2] = v[2];
+        }
+      }
+    }
+    for (const child of node.listChildren()) visit(child);
+  };
+  for (const node of scene.listChildren()) visit(node);
+  if (!Number.isFinite(out.min[0]) || !Number.isFinite(out.min[2])) return bounds;
+  return out;
+}
+
+/**
+ * Pièce de DÉTAIL posée APRÈS la mise à l'échelle : ses repères sont relatifs à la boîte englobante
+ * du modèle (`atRel: [x, y, z]` avec x, z ∈ [-1, 1] = bord de la boîte, y ∈ [0, 1] = du sol au faîte ;
+ * `sizeRel` donne une taille en fraction de la boîte, `pad` l'élargit de quelques millimètres).
+ * C'est ainsi qu'on ajoute un débord de toiture, une cheminée, un porche ou une lucarne sans
+ * connaître d'avance les dimensions du modèle Kenney.
+ */
+function addDetailPart(doc, buffer, scene, detail, bounds, slices) {
+  // `slice: [a, b]` mesure l'emprise en x/z de la seule TRANCHE de hauteur [a, b] du modèle : un
+  // débord de toiture doit border le haut du bâtiment, pas la dalle de pelouse du kit, bien plus large.
+  const band = detail.slice ? slices(detail.slice[0], detail.slice[1]) : bounds;
+  const sx = (band.max[0] - band.min[0]) / 2, sz = (band.max[2] - band.min[2]) / 2;
+  const sy = bounds.max[1] - bounds.min[1];
+  const cx = (band.min[0] + band.max[0]) / 2, cz = (band.min[2] + band.max[2]) / 2;
+  const rel = detail.atRel || [0, 0, 0];
+  const off = detail.at || [0, 0, 0];
+  const at = [cx + rel[0] * sx + off[0], bounds.min[1] + rel[1] * sy + off[1], cz + rel[2] * sz + off[2]];
+  const part = { ...detail, at };
+  if (detail.sizeRel) {
+    const pad = detail.pad || 0;
+    const hAbs = detail.height != null ? detail.height : detail.sizeRel[1] * sy;
+    part.size = [detail.sizeRel[0] * sx * 2 + pad * 2, hAbs, detail.sizeRel[2] * sz * 2 + pad * 2];
+  }
+  if (detail.radiiRel) part.radii = [detail.radiiRel[0] * sx, detail.radiiRel[1] * sy, detail.radiiRel[2] * sz];
+  if (detail.heightRel != null && part.size) part.size = [part.size[0], detail.heightRel * sy, part.size[2]];
+  addPrimitivePart(doc, buffer, scene, part);
 }
 
 // ─── Transformations ────────────────────────────────────────────────────────────────────────────
@@ -363,7 +826,7 @@ async function buildModel(id, spec) {
     const path = sourcePath(part.kit, part.source);
     if (!path) { missing.push(`${part.kit}/${part.source}`); continue; }
     const src = await io.read(path);
-    prepareMaterials(src, part.kit, { ...(KIT_MATERIALS[part.kit] || {}), ...(spec.materials || {}), ...(part.materials || {}) });
+    prepareSourceColors(src, part.kit, { ...(KIT_MATERIALS[part.kit] || {}), ...(spec.materials || {}), ...(part.materials || {}) });
     const srcScene = src.getRoot().getDefaultScene() || src.getRoot().listScenes()[0];
     const map = mergeDocuments(doc, src);
     const merged = map.get(srcScene);
@@ -400,6 +863,26 @@ async function buildModel(id, spec) {
   translateAll(doc, [-cx, -bounds.min[1], -cz], keepNodes);
   bounds = getBounds(scene);
 
+  // 2 bis) détails de caractère (débord de toiture, cheminée, porche, lucarne…) : repères relatifs à
+  // la boîte englobante, donc posés APRÈS la mise à l'échelle. Puis attribution des couleurs par rôle
+  // sur le modèle complet, et cuisson de toutes les couleurs dans les sommets (plus aucune texture).
+  const sliceCache = new Map();
+  const slices = (a, b) => {
+    const key = `${a}|${b}`;
+    if (!sliceCache.has(key)) sliceCache.set(key, sliceBounds(scene, bounds, a, b));
+    return sliceCache.get(key);
+  };
+  for (const detail of spec.details || []) addDetailPart(doc, buffer, scene, detail, bounds, slices);
+  if (spec.details && spec.details.length) {
+    await bakeTransforms(doc, keepNodes);
+    bounds = getBounds(scene);
+    const dx = (bounds.min[0] + bounds.max[0]) / 2, dz = (bounds.min[2] + bounds.max[2]) / 2;
+    translateAll(doc, [-dx, -bounds.min[1], -dz], keepNodes);
+    bounds = getBounds(scene);
+  }
+  const legend = assignRoleColors(doc, spec.seed || id, spec.profile || null);
+  flattenToVertexColors(doc);
+
   // 3) nettoyage : matériaux/textures dédoublonnés, une primitive par matériau, soudure, élagage
   for (const node of scene.listChildren()) if (!keepNodes.includes(node.getName())) node.setName('');
   for (const mesh of doc.getRoot().listMeshes()) if (!mesh.listParents().some((p) => p.propertyType === 'Node' && keepNodes.includes(p.getName()))) mesh.setName('');
@@ -409,8 +892,9 @@ async function buildModel(id, spec) {
   for (const mesh of doc.getRoot().listMeshes()) if (!mesh.getName()) mesh.setName(id);
 
   const triangles = countTriangles(doc);
-  const materials = doc.getRoot().listMaterials().map((m) => m.getName());
   const draws = doc.getRoot().listMeshes().reduce((n, m) => n + m.listPrimitives().length, 0);
+  const roles = {};
+  for (const { role, tint } of legend) if (!roles[role]) roles[role] = tint;
 
   // 4) compression meshopt (quantification incluse)
   await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
@@ -439,11 +923,12 @@ async function buildModel(id, spec) {
       .map((s) => ({ kit: kitManifestName(s.kit), source: s.source }));
     if (parts.some((p) => p.primitive)) entry.parts.push({ kit: 'tiletown-primitives', source: 'primitives' });
   }
+  if (Object.keys(roles).length) entry.roles = roles;
   if (spec.keepNodes) entry.nodes = spec.keepNodes;
   if (spec.orientation) entry.orientation = spec.orientation;
   if (spec.provisional) entry.provisional = true;
   if (spec.note) entry.note = spec.note;
-  vlog(`matériaux : ${materials.join(', ')} ; primitives : ${draws}`);
+  vlog(`rôles : ${Object.entries(roles).map(([r, t]) => `${r}→${t}`).join(', ')} ; primitives : ${draws}`);
   return { ok: true, entry, missing };
 }
 
@@ -497,7 +982,7 @@ async function main() {
   // Manifeste existant : conservé pour les identifiants non régénérés (import partiel)
   // Manifeste existant : relu pour conserver les identifiants non régénérés (import partiel) et, dans
   // tous les cas, les modèles animés (import-animated.js, build-fauna.js) qui ne sont pas dans MODEL_MAP.
-  let manifest = { palette: PALETTE_LIST, unit: UNIT, models: {} };
+  let manifest = { palette: MODEL_COLORS, unit: UNIT, models: {} };
   if (existsSync(MANIFEST_PATH)) {
     try { manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')); } catch { /* manifeste illisible : on repart de zéro */ }
   }
@@ -505,7 +990,7 @@ async function main() {
   if (!ONLY.length) {
     for (const [id, entry] of Object.entries(manifest.models)) if (!entry || !entry.animated) delete manifest.models[id];
   }
-  manifest.palette = PALETTE_LIST;
+  manifest.palette = MODEL_COLORS;
   manifest.unit = UNIT;
   manifest.generated = new Date().toISOString().slice(0, 10);
   manifest.models = manifest.models || {};

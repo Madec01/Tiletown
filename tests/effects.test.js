@@ -130,7 +130,7 @@ test('collectSmokeEmitters : 1 à 2 cheminées par usine et centrale, au-dessus 
   for (const e of emitters) {
     const tx = e.tile % 5, ty = Math.floor(e.tile / 5);
     assert.ok(e.x > tx && e.x < tx + 1 && e.z > ty && e.z < ty + 1, `dans sa case (${e.x}, ${e.z})`);
-    assert.ok(e.y > 0.45, `au-dessus du sol : ${e.y}`);
+    assert.ok(e.y > BUILDING_SCALE * 0.6, `au-dessus du sol : ${e.y}`);
     assert.ok(e.seed >= 0 && e.seed < 1);
     assert.equal(typeof e.model, 'string');
   }
