@@ -1,16 +1,17 @@
 // Rues sur les arêtes (docs/GAME_DESIGN.md §4, docs/ARCHITECTURE.md §3).
 //
 // Les rues ne consomment aucune case : elles vivent sur les arêtes du treillis, entre deux cases.
-// Valeurs d'arête : 0 rien, 1 chemin (bâti | nature), 2 rue (bâti | bâti, ou tracé de raccordement),
+// Valeurs d'arête : 0 rien, 1 passage piéton, 2 rue de façade ou de raccordement,
 // 3 pont (rue entre deux cases de rivière). Les coins du treillis sont les nœuds des parcours.
 //
 // Toutes les fonctions sont pures : elles rendent un nouveau monde ou un résultat, sans toucher à
 // l'ancien. Les natures plantées (famille `nature`) ne comptent pas comme bâties.
 
 import {
-  cloneWorld, tileAt, inBounds, edgeRef, edgeTiles, edgeValue, edgesOfTile, cornersOfTile,
-  cornerIndex, cornerCoords, edgesOfCorner, createTraffic, DIRS4,
+  cloneWorld, tileAt, inBounds, edgeRef, edgeTiles, edgeValue, edgesOfTile,
+  cornerIndex, cornerCoords, edgesOfCorner, createTraffic, createEdges, edgeCorners, DIRS4,
 } from './grid.js';
+import { ROAD_VERSION, frontageCandidates, isBlockInterior, courtyards, courtyardPaths, blockAt } from './blocks.js';
 import { TERRAINS } from '../data/terrain.js';
 import { isBuiltTile, jobsOfTile, residentsOfTile, YAW_BY_DIR } from '../data/tiles.js';
 
@@ -65,46 +66,67 @@ function isRiver(tile) {
   return Boolean(tile) && tile.terrain === 'river';
 }
 
-/** Valeur que doit prendre une arête d'après ses deux cases et sa valeur actuelle. */
-function automaticValue(world, ref) {
-  const [a, b] = edgeTiles(world, ref);
-  const ta = a ? tileAt(world, a.x, a.y) : null;
-  const tb = b ? tileAt(world, b.x, b.y) : null;
-  const builtA = isBuiltTile(ta);
-  const builtB = isBuiltTile(tb);
-  const existing = edgeValue(world, ref);
-  // Les rues et ponts tracés par raccordement sont conservés (et normalisés : pont ⇔ rivière des deux
-  // côtés), y compris le long du bord de la carte.
-  if (existing >= EDGE.STREET) return isRiver(ta) && isRiver(tb) ? EDGE.BRIDGE : EDGE.STREET;
-  if (!ta || !tb) return EDGE.NONE; // bord de la carte : rien d'automatique
-  // Un îlot bâti est entouré de rues sur ses quatre côtés (rue partagée entre deux îlots voisins,
-  // rue de ceinture face à la nature ou à l'eau : un quai).
-  if (builtA || builtB) return EDGE.STREET;
-  // Une nature plantée (parc, forêt plantée, haie…) n'est pas un îlot : un simple chemin la borde.
-  if ((ta.building && !builtA) || (tb.building && !builtB)) return EDGE.PATH;
-  return EDGE.NONE;
-}
-
 /**
- * Recalcule les rues automatiques : rue (2) sur chaque côté d'un îlot bâti (partagée entre voisins,
- * de ceinture face à la nature), chemin (1) autour d'une nature plantée, rien (0) entre deux natures.
- * Les rues et ponts de raccordement existants sont gardés.
- * @returns {object} un nouveau monde
+ * Prépare les façades et les cours communes. Les rues existantes restent stables.
+ * `connect` raccorde une ville générée / migrée ; les poses ordinaires ont déjà leur tracé payé.
+ * `reset` migre l'ancien quadrillage en conservant les ponts, puis redessine les dessertes.
  */
-export function rebuildRoads(world) {
-  const next = cloneWorld(world);
-  const { cols, rows } = world;
-  for (let y = 0; y <= rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const ref = edgeRef(world, 'h', x, y);
-      next.edges.h[ref.index] = automaticValue(world, ref);
+export function rebuildRoads(world, { connect = false, reset = false } = {}) {
+  let next = cloneWorld(world);
+  next.roadVersion = ROAD_VERSION;
+  next.avenues ||= createEdges(world.cols, world.rows);
+  if (reset) {
+    for (const kind of ['h', 'v']) {
+      for (let i = 0; i < next.edges[kind].length; i++) {
+        if (next.edges[kind][i] !== EDGE.BRIDGE) next.edges[kind][i] = EDGE.NONE;
+      }
+      next.avenues[kind].fill(0);
     }
   }
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x <= cols; x++) {
-      const ref = edgeRef(world, 'v', x, y);
-      next.edges.v[ref.index] = automaticValue(world, ref);
+  // Les chemins de jardin sont dérivés : une démolition peut en enlever un.
+  for (const kind of ['h', 'v']) for (let i = 0; i < next.edges[kind].length; i++) {
+    if (next.edges[kind][i] === EDGE.PATH) next.edges[kind][i] = EDGE.NONE;
+  }
+  const root = findRoots(next)[0];
+  const built = [];
+  for (let y = 0; y < next.rows; y++) for (let x = 0; x < next.cols; x++) {
+    if (isBuiltTile(tileAt(next, x, y))) built.push({ x, y });
+  }
+  built.sort((a, b) => (Math.abs(a.x-root.x)+Math.abs(a.y-root.y)) - (Math.abs(b.x-root.x)+Math.abs(b.y-root.y)) || a.y-b.y || a.x-b.x);
+  for (const { x, y } of built) {
+    const tile = tileAt(next, x, y);
+    const candidates = frontageCandidates(next, x, y).filter(ref => edgeBuildCost(next, ref, { x, y }));
+    if (!candidates.length && reset) {
+      // Ancienne façade de berge, autorisée par le moteur précédent : ne pas enclaver sa maison.
+      for (const [side, ref] of Object.entries(edgesOfTile(world, x, y))) {
+        if (edgeValue(world, ref) >= EDGE.STREET) candidates.push({ ...ref, yaw: { s: 0, e: 90, n: 180, w: 270 }[side] });
+      }
     }
+    if (!candidates.length) continue;
+    let front = candidates.find(ref => ref.yaw === tile.building.yaw && edgeValue(next, ref) >= EDGE.STREET)
+      || candidates.find(ref => edgeValue(next, ref) >= EDGE.STREET)
+      || candidates[0];
+    if (connect && !(x === root.x && y === root.y)) {
+      let plan = connectTile(next, x, y);
+      if (!plan.ok && reset) plan = connectTile(next, x, y, { relax: true, legacy: world });
+      if (plan.ok) {
+        next = applyPath(next, plan.path);
+        front = { ...edgesOfTile(next, x, y)[{ 0: 's', 90: 'e', 180: 'n', 270: 'w' }[plan.yaw]], yaw: plan.yaw };
+      }
+    }
+    if (edgeValue(next, front) < EDGE.STREET) next.edges[front.kind][front.index] = EDGE.STREET;
+    if (tile.building.type === 'townhall') next.avenues[front.kind][front.index] = 1;
+    tileAt(next, x, y).building.yaw = front.yaw;
+  }
+  for (const court of courtyards(next)) for (const ref of courtyardPaths(next, court)) {
+    if (edgeValue(next, ref) < EDGE.STREET) next.edges[ref.kind][ref.index] = EDGE.PATH;
+  }
+  // Parcs : une seule promenade reliée, pas une ceinture autour de chaque plantation.
+  for (let y = 0; y < next.rows; y++) for (let x = 0; x < next.cols; x++) {
+    const t = tileAt(next, x, y);
+    if (t.building?.type !== 'park') continue;
+    const ref = Object.values(edgesOfTile(next, x, y)).find(r => edgeCorners(r).some(c => edgesOfCorner(next, c.cx, c.cy).some(e => edgeValue(next, e.ref) >= EDGE.STREET)));
+    if (ref && edgeValue(next, ref) === EDGE.NONE) next.edges[ref.kind][ref.index] = EDGE.PATH;
   }
   return next;
 }
@@ -125,7 +147,7 @@ export function countEdges(world) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Réseau : composante des coins reliés à la mairie par des arêtes équipées (≥ 1).
+// Réseau : composante des coins reliés à la mairie par des chaussées (≥ 2).
 
 function findRoots(world) {
   const built = [];
@@ -149,7 +171,7 @@ export function networkCorners(world) {
   if (roots.length === 0) return seen;
   const stack = [];
   for (const r of roots) {
-    for (const c of cornersOfTile(world, r.x, r.y)) {
+    for (const c of accessCorners(world, r.x, r.y)) {
       const i = cornerIndex(world, c.cx, c.cy);
       if (!seen.has(i)) { seen.add(i); stack.push(c); }
     }
@@ -157,7 +179,7 @@ export function networkCorners(world) {
   while (stack.length) {
     const c = stack.pop();
     for (const { ref, to } of edgesOfCorner(world, c.cx, c.cy)) {
-      if (edgeValue(world, ref) < EDGE.PATH) continue;
+      if (edgeValue(world, ref) < EDGE.STREET) continue;
       const i = cornerIndex(world, to.cx, to.cy);
       if (!seen.has(i)) { seen.add(i); stack.push(to); }
     }
@@ -165,9 +187,19 @@ export function networkCorners(world) {
   return seen;
 }
 
-/** Vrai si la case (x, y) touche le réseau par au moins un de ses coins. */
+/** Coins accessibles par une chaussée qui longe réellement la parcelle. */
+function accessCorners(world, x, y) {
+  const unique = new Map();
+  for (const ref of Object.values(edgesOfTile(world, x, y))) {
+    if (edgeValue(world, ref) < EDGE.STREET) continue;
+    for (const c of edgeCorners(ref)) unique.set(cornerIndex(world, c.cx, c.cy), c);
+  }
+  return [...unique.values()];
+}
+
+/** Vrai si une rue longeant la case (x, y) appartient au réseau. */
 function touchesNetwork(world, x, y, net) {
-  return cornersOfTile(world, x, y).some((c) => net.has(cornerIndex(world, c.cx, c.cy)));
+  return Object.values(edgesOfTile(world, x, y)).some(ref => edgeValue(world, ref) >= EDGE.STREET && edgeCorners(ref).some(c => net.has(cornerIndex(world, c.cx, c.cy))));
 }
 
 /** Les îlots bâtis qui ne touchent pas le réseau de la mairie : [{ x, y }]. */
@@ -231,58 +263,62 @@ export function edgeBuildCost(world, ref, target = null) {
 
 /**
  * Trace la rue la plus courte depuis la case (x, y) jusqu'au réseau existant (Dijkstra sur les coins).
- * @returns {{ ok: true, path: Array<{kind, index, x, y, value}>, cost: number, bridges: number }
+ * @returns {{ ok: true, path: Array<{kind, index, x, y, value}>, cost: number, bridges: number, yaw: number }
  *          | { ok: false, reason: 'out_of_bounds' | 'no_network' | 'unreachable' }}
  * Une case qui touche déjà le réseau rend `{ ok: true, path: [], cost: 0, bridges: 0 }`.
  * Le tracé n'est pas appliqué : voir `applyPath`.
  */
-export function connectTile(world, x, y) {
+export function connectTile(world, x, y, { relax = false, legacy = null } = {}) {
   if (!inBounds(world, x, y)) return { ok: false, reason: 'out_of_bounds' };
   const net = networkCorners(world);
   if (net.size === 0) return { ok: false, reason: 'no_network' };
-  if (touchesNetwork(world, x, y, net)) return { ok: true, path: [], cost: 0, bridges: 0 };
-
   const target = { x, y };
-  const n = (world.cols + 1) * (world.rows + 1);
-  const dist = new Float64Array(n).fill(Infinity);
-  const prev = new Array(n).fill(null);
-  const done = new Uint8Array(n);
-  const heap = new MinHeap();
-  for (const c of cornersOfTile(world, x, y)) {
-    const i = cornerIndex(world, c.cx, c.cy);
-    dist[i] = 0;
-    heap.push(0, i);
-  }
-  let goal = -1;
-  while (heap.size) {
-    const { cost, node } = heap.pop();
-    if (done[node] || cost > dist[node]) continue;
-    done[node] = 1;
-    if (net.has(node)) { goal = node; break; }
-    const c = cornerCoords(world, node);
-    for (const { ref, to } of edgesOfCorner(world, c.cx, c.cy)) {
-      const ec = edgeBuildCost(world, ref, target);
-      if (!ec) continue;
-      const j = cornerIndex(world, to.cx, to.cy);
-      const nd = cost + ec.cost;
-      if (nd < dist[j]) {
-        dist[j] = nd;
-        prev[j] = { from: node, ref, bridge: ec.bridge };
-        heap.push(nd, j);
+  // Migration seulement : un ancien quai peut être l'unique accès à une maison. Réutiliser
+  // ses tronçons nécessaires est préférable à abandonner le bâtiment ou rétablir tout le quadrillage.
+  const buildCost = ref => legacy && edgeValue(legacy, ref) >= EDGE.STREET
+    ? { cost: REUSE_COST, bridge: edgeValue(legacy, ref) === EDGE.BRIDGE } : edgeBuildCost(world, ref, target);
+  let best = null;
+  const fronts = relax ? Object.entries(edgesOfTile(world, x, y)).map(([side, ref]) => ({ ...ref, yaw: { n: 180, e: 90, s: 0, w: 270 }[side], exception: true })) : frontageCandidates(world, x, y);
+  for (const front of fronts) {
+    const fc = buildCost(front);
+    if (!fc) continue;
+    const n = (world.cols + 1) * (world.rows + 1);
+    const dist = new Float64Array(n).fill(Infinity), prev = new Array(n).fill(null);
+    const heap = new MinHeap();
+    for (const c of edgeCorners(front)) {
+      const i = cornerIndex(world, c.cx, c.cy);
+      dist[i] = edgeValue(world, front) >= EDGE.STREET ? 0 : fc.cost;
+      heap.push(dist[i], i);
+    }
+    let goal = -1;
+    while (heap.size) {
+      const { cost, node } = heap.pop();
+      if (cost > dist[node]) continue;
+      if (net.has(node)) { goal = node; break; }
+      const c = cornerCoords(world, node);
+      for (const { ref, to } of edgesOfCorner(world, c.cx, c.cy)) {
+        const interior = isBlockInterior(world, ref) && edgeValue(world, ref) < EDGE.STREET;
+        // Dernier recours : la seule ouverture d'une berge peut traverser l'îlot voisin.
+        // La pénalité privilégie toujours le périmètre et limite cette desserte intérieure.
+        if (interior && !relax && !(front.exception && edgeTiles(world, ref).some(p => p && blockAt(world, p.x, p.y).id === blockAt(world, x, y).id))) continue;
+        const ec = buildCost(ref);
+        if (!ec) continue;
+        const j = cornerIndex(world, to.cx, to.cy), nd = cost + ec.cost + (interior ? 8 : 0);
+        if (nd < dist[j]) { dist[j] = nd; prev[j] = { from: node, ref, bridge: ec.bridge }; heap.push(nd, j); }
       }
     }
+    if (goal < 0 || (best && dist[goal] >= best.cost)) continue;
+    const route = [];
+    for (let node = goal; prev[node]; node = prev[node].from) {
+      const { ref, bridge } = prev[node]; route.push({ ...ref, value: bridge ? EDGE.BRIDGE : EDGE.STREET });
+    }
+    route.reverse();
+    const path = [...route, { kind: front.kind, index: front.index, x: front.x, y: front.y, value: EDGE.STREET }]
+      .filter((ref, i, all) => edgeValue(world, ref) < EDGE.STREET && all.findIndex(r => r.kind === ref.kind && r.index === ref.index) === i)
+      .map(ref => ({ ...ref, main: ref.value === EDGE.BRIDGE || (route.length >= 3 && !(ref.kind === front.kind && ref.index === front.index)) }));
+    best = { ok: true, path, cost: dist[goal], bridges: path.filter(ref => ref.value === EDGE.BRIDGE).length, yaw: front.yaw };
   }
-  if (goal < 0) return { ok: false, reason: 'unreachable' };
-
-  const path = [];
-  let bridges = 0;
-  for (let node = goal; prev[node]; node = prev[node].from) {
-    const { ref, bridge } = prev[node];
-    if (bridge) bridges++;
-    path.push({ ...ref, value: bridge ? EDGE.BRIDGE : EDGE.STREET });
-  }
-  path.reverse();
-  return { ok: true, path, cost: dist[goal], bridges };
+  return best || (relax ? { ok: false, reason: 'unreachable' } : connectTile(world, x, y, { relax: true, legacy }));
 }
 
 /**
@@ -292,6 +328,7 @@ export function connectTile(world, x, y) {
  */
 export function applyPath(world, path) {
   const next = cloneWorld(world);
+  next.avenues ||= createEdges(world.cols, world.rows);
   for (const ref of path) {
     const [a, b] = edgeTiles(world, ref);
     const ta = a ? tileAt(world, a.x, a.y) : null;
@@ -299,6 +336,7 @@ export function applyPath(world, path) {
     const value = isRiver(ta) && isRiver(tb) ? EDGE.BRIDGE : (ref.value || EDGE.STREET);
     const arr = next.edges[ref.kind];
     arr[ref.index] = Math.max(arr[ref.index], value);
+    if (ref.main || value === EDGE.BRIDGE) next.avenues[ref.kind][ref.index] = 1;
   }
   return next;
 }
@@ -338,7 +376,7 @@ export function faceTowardRoad(world, x, y, towards = null) {
 
 // ---------------------------------------------------------------------------------------------
 // Trafic : chaque quartier fait un trajet vers l'emploi le plus proche et un vers le commerce le plus
-// proche, sur les arêtes équipées (rue ou pont : coût 1, chemin : coût 2) ; somme par arête.
+// proche, sur les chaussées (rue ou pont : coût 1), sans emprunter les passages piétons.
 
 /** Identifiant unique d'arête (h puis v) dans un tableau plat. */
 function edgeId(world, ref) {
@@ -350,7 +388,7 @@ function markTargets(world, tiles) {
   const corners = new Uint8Array((world.cols + 1) * (world.rows + 1));
   const edges = new Uint8Array(world.edges.h.length + world.edges.v.length);
   for (const { x, y } of tiles) {
-    for (const c of cornersOfTile(world, x, y)) corners[cornerIndex(world, c.cx, c.cy)] = 1;
+    for (const c of accessCorners(world, x, y)) corners[cornerIndex(world, c.cx, c.cy)] = 1;
     for (const ref of Object.values(edgesOfTile(world, x, y))) edges[edgeId(world, ref)] = 1;
   }
   return { corners, edges };
@@ -358,7 +396,7 @@ function markTargets(world, tiles) {
 
 function travelCost(value) {
   if (value >= EDGE.STREET) return 1;
-  if (value === EDGE.PATH) return 2;
+  // Le trafic motorisé ne traverse pas les passages piétons.
   return null;
 }
 
@@ -374,7 +412,7 @@ function tripToTargets(world, x, y, targets) {
   const done = new Uint8Array(n);
   const isSource = new Uint8Array(n);
   const heap = new MinHeap();
-  for (const c of cornersOfTile(world, x, y)) {
+  for (const c of accessCorners(world, x, y)) {
     const i = cornerIndex(world, c.cx, c.cy);
     dist[i] = 0;
     isSource[i] = 1;

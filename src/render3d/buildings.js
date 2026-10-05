@@ -25,6 +25,7 @@
 // et des options) : testables sous Node.
 
 import * as THREE from 'three';
+import { frontageOffset, courtyards } from '../core/blocks.js';
 import { TERRAINS } from '../data/terrain.js';
 import { TILE_BY_ID, modelOfBuilding } from '../data/tiles.js';
 import { familyOf } from './models.js';
@@ -378,16 +379,8 @@ export function entrySide(world, tx, ty) {
 }
 
 /**
- * Huit ancrages dans la bande de parcelle : quatre milieux de côté (indices pairs), quatre coins
- * (indices impairs), donnés en (dx, dz) relatifs au centre de la case et à multiplier par le rayon.
- */
-const LOT_ANCHORS = Object.freeze([
-  [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1],
-]);
-
-/**
- * Décor des abords d'un îlot bâti : deux à quatre petits éléments dans la bande de parcelle
- * (entre le trottoir et le bâtiment), variés par famille de tuile et par case, plus un arbre de rue
+ * Décor des abords d'un îlot bâti : deux plantations dans le jardin arrière,
+ * variées par famille de tuile et par case, plus un arbre de rue
  * à un coin sur deux ou trois le long des rues. Pur.
  */
 function collectLotDecor(world, out, roles, tx, ty, tile, def) {
@@ -398,26 +391,25 @@ function collectLotDecor(world, out, roles, tx, ty, tile, def) {
   const family = def ? def.family : 'habitat';
 
   const entry = entrySide(world, tx, ty);
-  const entryAnchor = entry === null ? -1 : entry * 2;   // le milieu de côté de l'entrée
 
-  // Haies, buissons, potagers : sur deux à quatre ancrages tirés au hasard, jamais devant l'entrée.
+  // Haies, buissons, potagers : dans le jardin arrière, jamais devant l'entrée.
   const roleAt = (k) => {
     const u = h(10 + k);
     if (family === 'habitat') return u < 0.38 ? 'hedge' : u < 0.68 ? 'shrub' : u < 0.86 ? 'veggie' : 'flower';
     if (family === 'infrastructure') return u < 0.6 ? 'shrub' : 'tuft';
     return u < 0.42 ? 'hedge' : u < 0.78 ? 'flower' : 'shrub';
   };
-  for (let a = 0; a < LOT_ANCHORS.length; a++) {
-    if (a === entryAnchor) continue;
-    if (h(20 + a) > 0.3) continue;                    // on ne garnit pas tous les ancrages
-    const [ux, uz] = LOT_ANCHORS[a];
-    const r = LOT_DECOR_RADIUS;
-    const px = cx + ux * r + (h(30 + a) - 0.5) * 0.05;
-    const pz = cz + uz * r + (h(40 + a) - 0.5) * 0.05;
-    pushRole(out, roles, roleAt(a), {
-      x: px, y: groundAt(world, px, pz), z: pz, yaw: h(50 + a) * TAU, tile: i,
-      uPick: h(60 + a), uScale: h(70 + a),
-    });
+  if (entry !== null) {
+    const back = (entry + 2) % 4;
+    const [dx, dz] = [[0,-1],[1,0],[0,1],[-1,0]][back];
+    if (sideEdge(world, tx, ty, back) < 2) for (const sign of [-1, 1]) {
+      const px = cx + dx * .36 + dz * sign * .23;
+      const pz = cz + dz * .36 - dx * sign * .23;
+      pushRole(out, roles, roleAt(sign+1), {
+        x: px, y: groundAt(world, px, pz), z: pz, yaw: h(50+sign) * TAU, tile: i,
+        uPick: h(60+sign), uScale: h(70+sign), scale: .75,
+      });
+    }
   }
 
   // Arbre de rue : à un coin sur deux ou trois, dans l'angle de la parcelle qui borde deux rues.
@@ -530,7 +522,8 @@ export function collectPlacements(world, options = {}) {
             }
           }
         } else {
-          out.push({ id, x: cx, y: ground, z: cz, yaw, scale: BUILDING_SCALE, tile: i, group: GROUP_SOLID });
+          const offset = def && def.family !== 'nature' ? frontageOffset(world, tx, ty, Number(b.yaw) || 0) : { x: 0, z: 0 };
+          out.push({ id, x: cx + offset.x, y: ground, z: cz + offset.z, yaw, scale: BUILDING_SCALE, tile: i, group: GROUP_SOLID });
           if (def && def.family !== 'nature') collectLotDecor(world, out, roles, tx, ty, tile, def);
         }
         continue;
@@ -559,6 +552,16 @@ export function collectPlacements(world, options = {}) {
   for (const terrainId of Object.keys(BIOMES)) {
     const bounds = terrainBounds(world, terrainId);
     if (bounds) scatterBiome(world, out, roles, terrainId, bounds);
+  }
+  for (const court of courtyards(world)) {
+    for (const t of [.55, (court.horizontal ? court.width : court.height) - .55]) {
+      const px = court.x + (court.horizontal ? t : .80);
+      const pz = court.y + (court.horizontal ? .80 : t);
+      const ref = court.refs[Math.min(court.refs.length-1, Math.floor(t))];
+      if (world.edges[ref.kind][ref.index] >= 2) continue;
+      pushRole(out, roles, 'streetTree', { x: px, y: groundAt(world, px, pz), z: pz,
+        yaw: 0, tile: Math.floor(pz)*world.cols+Math.floor(px), uPick: hashUnit(seed,court.x,court.y,34), uScale: .2, scale: .75 });
+    }
   }
   return out;
 }

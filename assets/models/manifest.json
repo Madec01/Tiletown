@@ -48,7 +48,7 @@
       "file": "house-a.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.132,
       "yaw": 0,
       "footprint": [
         1,
@@ -58,23 +58,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.417,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.106,
-          0.426
+          0.417,
+          1.175,
+          0.43
         ],
         "size": [
-          0.86,
-          1.106,
-          0.852
+          0.834,
+          1.175,
+          0.86
         ]
       },
-      "triangles": 4188,
-      "bytes": 56480,
+      "triangles": 4016,
+      "bytes": 53736,
       "assembled": true,
       "parts": [
         {
@@ -88,7 +88,7 @@
       "file": "house-b.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.116,
       "yaw": 0,
       "footprint": [
         1,
@@ -100,21 +100,21 @@
         "min": [
           -0.43,
           0,
-          -0.426
+          -0.424
         ],
         "max": [
           0.43,
-          1.106,
-          0.426
+          1.159,
+          0.424
         ],
         "size": [
           0.86,
-          1.106,
-          0.852
+          1.159,
+          0.848
         ]
       },
-      "triangles": 5412,
-      "bytes": 74148,
+      "triangles": 5240,
+      "bytes": 71648,
       "assembled": true,
       "parts": [
         {
@@ -128,7 +128,7 @@
       "file": "house-c.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.132,
       "yaw": 0,
       "footprint": [
         1,
@@ -138,23 +138,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.417,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.347,
-          0.426
+          0.417,
+          1.436,
+          0.43
         ],
         "size": [
-          0.86,
-          1.347,
-          0.852
+          0.834,
+          1.436,
+          0.86
         ]
       },
-      "triangles": 6004,
-      "bytes": 77900,
+      "triangles": 5832,
+      "bytes": 75024,
       "assembled": true,
       "parts": [
         {
@@ -168,7 +168,7 @@
       "file": "house-d.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.042,
+      "scale": 1.1,
       "yaw": 0,
       "footprint": [
         1,
@@ -180,21 +180,21 @@
         "min": [
           -0.43,
           0,
-          -0.423
+          -0.418
         ],
         "max": [
           0.43,
-          1.183,
-          0.423
+          1.231,
+          0.418
         ],
         "size": [
           0.86,
-          1.183,
-          0.847
+          1.231,
+          0.836
         ]
       },
-      "triangles": 3884,
-      "bytes": 53764,
+      "triangles": 3712,
+      "bytes": 51044,
       "assembled": true,
       "parts": [
         {
@@ -208,7 +208,7 @@
       "file": "house-e.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.124,
       "yaw": 0,
       "footprint": [
         1,
@@ -218,23 +218,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.414,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.098,
-          0.426
+          0.414,
+          1.159,
+          0.43
         ],
         "size": [
-          0.86,
-          1.098,
-          0.852
+          0.829,
+          1.159,
+          0.86
         ]
       },
-      "triangles": 6676,
-      "bytes": 90852,
+      "triangles": 6504,
+      "bytes": 88096,
       "assembled": true,
       "parts": [
         {
@@ -248,7 +248,7 @@
       "file": "house-f.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.132,
       "yaw": 0,
       "footprint": [
         1,
@@ -258,23 +258,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.417,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.062,
-          0.426
+          0.417,
+          1.128,
+          0.43
         ],
         "size": [
-          0.86,
-          1.062,
-          0.852
+          0.834,
+          1.128,
+          0.86
         ]
       },
-      "triangles": 3876,
-      "bytes": 53824,
+      "triangles": 3704,
+      "bytes": 51128,
       "assembled": true,
       "parts": [
         {
@@ -288,7 +288,7 @@
       "file": "building-small-a.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
@@ -298,23 +298,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.408,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          0.933,
-          0.426
+          0.408,
+          0.967,
+          0.43
         ],
         "size": [
-          0.86,
-          0.933,
-          0.852
+          0.816,
+          0.967,
+          0.86
         ]
       },
-      "triangles": 2982,
-      "bytes": 40516,
+      "triangles": 2894,
+      "bytes": 39180,
       "assembled": true,
       "parts": [
         {
@@ -328,7 +328,7 @@
       "file": "building-small-b.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
@@ -338,23 +338,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.408,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.259,
-          0.426
+          0.408,
+          1.31,
+          0.43
         ],
         "size": [
-          0.86,
-          1.259,
-          0.852
+          0.816,
+          1.31,
+          0.86
         ]
       },
-      "triangles": 4078,
-      "bytes": 53384,
+      "triangles": 3990,
+      "bytes": 52376,
       "assembled": true,
       "parts": [
         {
@@ -368,7 +368,7 @@
       "file": "building-small-c.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
@@ -378,23 +378,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.408,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          0.933,
-          0.426
+          0.408,
+          0.967,
+          0.43
         ],
         "size": [
-          0.86,
-          0.933,
-          0.852
+          0.816,
+          0.967,
+          0.86
         ]
       },
-      "triangles": 2982,
-      "bytes": 40516,
+      "triangles": 2894,
+      "bytes": 39180,
       "assembled": true,
       "parts": [
         {
@@ -408,7 +408,7 @@
       "file": "building-tall-a.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
@@ -418,23 +418,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.408,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.584,
-          0.426
+          0.408,
+          1.653,
+          0.43
         ],
         "size": [
-          0.86,
-          1.584,
-          0.852
+          0.816,
+          1.653,
+          0.86
         ]
       },
-      "triangles": 5174,
-      "bytes": 66024,
+      "triangles": 5086,
+      "bytes": 64996,
       "assembled": true,
       "parts": [
         {
@@ -448,7 +448,7 @@
       "file": "building-tall-b.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
@@ -458,23 +458,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.408,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.909,
-          0.426
+          0.408,
+          1.995,
+          0.43
         ],
         "size": [
-          0.86,
-          1.909,
-          0.852
+          0.816,
+          1.995,
+          0.86
         ]
       },
-      "triangles": 6270,
-      "bytes": 78808,
+      "triangles": 6182,
+      "bytes": 77084,
       "assembled": true,
       "parts": [
         {
@@ -488,7 +488,7 @@
       "file": "building-tall-c.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.106,
       "yaw": 0,
       "footprint": [
         1,
@@ -498,23 +498,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.408,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          2.234,
-          0.426
+          0.408,
+          2.338,
+          0.43
         ],
         "size": [
-          0.86,
-          2.234,
-          0.852
+          0.816,
+          2.338,
+          0.86
         ]
       },
-      "triangles": 7366,
-      "bytes": 90640,
+      "triangles": 7278,
+      "bytes": 89796,
       "assembled": true,
       "parts": [
         {
@@ -528,7 +528,7 @@
       "file": "shop-a.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.024,
+      "scale": 1.085,
       "yaw": 0,
       "footprint": [
         1,
@@ -538,23 +538,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.42,
+          -0.403,
           0,
           -0.43
         ],
         "max": [
-          0.42,
-          1.157,
+          0.403,
+          1.221,
           0.43
         ],
         "size": [
-          0.84,
-          1.157,
+          0.807,
+          1.221,
           0.86
         ]
       },
-      "triangles": 2954,
-      "bytes": 40864,
+      "triangles": 2866,
+      "bytes": 39500,
       "assembled": true,
       "parts": [
         {
@@ -568,7 +568,7 @@
       "file": "shop-b.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.024,
+      "scale": 1.085,
       "yaw": 0,
       "footprint": [
         1,
@@ -578,23 +578,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.42,
+          -0.403,
           0,
           -0.43
         ],
         "max": [
-          0.42,
-          1.157,
+          0.403,
+          1.221,
           0.43
         ],
         "size": [
-          0.84,
-          1.157,
+          0.807,
+          1.221,
           0.86
         ]
       },
-      "triangles": 2954,
-      "bytes": 40872,
+      "triangles": 2866,
+      "bytes": 39512,
       "assembled": true,
       "parts": [
         {
@@ -608,7 +608,7 @@
       "file": "shop-c.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.124,
       "yaw": 0,
       "footprint": [
         1,
@@ -618,23 +618,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.418,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.185,
-          0.426
+          0.418,
+          1.264,
+          0.43
         ],
         "size": [
-          0.86,
-          1.185,
-          0.852
+          0.836,
+          1.264,
+          0.86
         ]
       },
-      "triangles": 2850,
-      "bytes": 39728,
+      "triangles": 2762,
+      "bytes": 38360,
       "assembled": true,
       "parts": [
         {
@@ -648,7 +648,7 @@
       "file": "office-a.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.099,
       "yaw": 0,
       "footprint": [
         1,
@@ -658,23 +658,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.405,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.26,
-          0.426
+          0.405,
+          1.314,
+          0.43
         ],
         "size": [
-          0.86,
-          1.26,
-          0.852
+          0.81,
+          1.314,
+          0.86
         ]
       },
-      "triangles": 3780,
-      "bytes": 53216,
+      "triangles": 3692,
+      "bytes": 51832,
       "assembled": true,
       "parts": [
         {
@@ -688,7 +688,7 @@
       "file": "office-b.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
+      "scale": 1.099,
       "yaw": 0,
       "footprint": [
         1,
@@ -698,23 +698,23 @@
       "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.43,
+          -0.405,
           0,
-          -0.426
+          -0.43
         ],
         "max": [
-          0.43,
-          1.585,
-          0.426
+          0.405,
+          1.655,
+          0.43
         ],
         "size": [
-          0.86,
-          1.585,
-          0.852
+          0.81,
+          1.655,
+          0.86
         ]
       },
-      "triangles": 4656,
-      "bytes": 64636,
+      "triangles": 4568,
+      "bytes": 63268,
       "assembled": true,
       "parts": [
         {
@@ -862,21 +862,21 @@
         "min": [
           -0.43,
           0,
-          -0.399
+          -0.371
         ],
         "max": [
           0.43,
-          0.983,
-          0.399
+          0.967,
+          0.371
         ],
         "size": [
           0.86,
-          0.983,
-          0.799
+          0.967,
+          0.742
         ]
       },
-      "triangles": 4072,
-      "bytes": 58816,
+      "triangles": 3984,
+      "bytes": 57676,
       "assembled": true,
       "parts": [
         {
@@ -890,87 +890,7 @@
       "file": "clinic.glb",
       "kit": "tiletown-primitives",
       "source": "primitives",
-      "scale": 1.049,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://github.com/Madec01/Tiletown",
-      "bbox": {
-        "min": [
-          -0.43,
-          0,
-          -0.426
-        ],
-        "max": [
-          0.43,
-          0.895,
-          0.426
-        ],
-        "size": [
-          0.86,
-          0.895,
-          0.852
-        ]
-      },
-      "triangles": 2182,
-      "bytes": 31324,
-      "assembled": true,
-      "parts": [
-        {
-          "kit": "tiletown-primitives",
-          "source": "primitives"
-        }
-      ],
-      "note": "Équipement civique original avec architecture identifiable"
-    },
-    "townhall": {
-      "file": "townhall.glb",
-      "kit": "tiletown-primitives",
-      "source": "primitives",
-      "scale": 1.049,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://github.com/Madec01/Tiletown",
-      "bbox": {
-        "min": [
-          -0.43,
-          0,
-          -0.426
-        ],
-        "max": [
-          0.43,
-          1.3,
-          0.426
-        ],
-        "size": [
-          0.86,
-          1.3,
-          0.852
-        ]
-      },
-      "triangles": 2500,
-      "bytes": 34848,
-      "assembled": true,
-      "parts": [
-        {
-          "kit": "tiletown-primitives",
-          "source": "primitives"
-        }
-      ],
-      "note": "Équipement civique original avec architecture identifiable"
-    },
-    "market": {
-      "file": "market.glb",
-      "kit": "tiletown-primitives",
-      "source": "primitives",
-      "scale": 1.036,
+      "scale": 1.152,
       "yaw": 0,
       "footprint": [
         1,
@@ -986,17 +906,97 @@
         ],
         "max": [
           0.425,
-          0.534,
+          0.964,
           0.43
         ],
         "size": [
-          0.85,
-          0.534,
+          0.849,
+          0.964,
           0.86
         ]
       },
-      "triangles": 2352,
-      "bytes": 28972,
+      "triangles": 2094,
+      "bytes": 30064,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Équipement civique original avec architecture identifiable"
+    },
+    "townhall": {
+      "file": "townhall.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.11,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.43,
+          0,
+          -0.416
+        ],
+        "max": [
+          0.43,
+          1.37,
+          0.416
+        ],
+        "size": [
+          0.86,
+          1.37,
+          0.832
+        ]
+      },
+      "triangles": 2412,
+      "bytes": 33432,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "Équipement civique original avec architecture identifiable"
+    },
+    "market": {
+      "file": "market.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1.132,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.43,
+          0,
+          -0.318
+        ],
+        "max": [
+          0.43,
+          0.572,
+          0.318
+        ],
+        "size": [
+          0.86,
+          0.572,
+          0.636
+        ]
+      },
+      "triangles": 2264,
+      "bytes": 28012,
       "assembled": true,
       "parts": [
         {

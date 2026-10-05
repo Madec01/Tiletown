@@ -25,7 +25,7 @@ Le jeu se joue **d'abord sur téléphone, en portrait** (Android + Chrome), inst
 
 ## Décisions prises (2026-10-04)
 
-- Grille **carrée**, un îlot = une unité 3D, caméra orthographique inclinée fixe, zoom continu.
+- Grille **carrée**, une parcelle = une unité 3D, îlots de 4 à 6 parcelles avec rues périphériques, caméra orthographique inclinée fixe, zoom continu.
 - **Catalogue libre** : argent, catalogue par familles (Habitat, Activité, Services, Infrastructures, Nature), barres de demande, une politique municipale à choisir chaque année.
 - **Temps réel accéléré** avec pause et vitesses 0, ½, 1, 2, 4 (comme Seve) ; 1 mois = 30 s à vitesse 1.
 - Partie de carrière = **3 ans** (18 min à vitesse 1, en plusieurs sessions).

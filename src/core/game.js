@@ -25,8 +25,9 @@
 // encaissés par tiers chaque mois ; un quartier rapporte INCOME_PER_RESIDENT $ par habitant présent et
 // consomme au prorata de ses habitants (ses `consume` valent pour la pleine capacité).
 
-import { cloneWorld, cloneTile, tileAt, inBounds, index, neighbors4, edgesOfTile, edgeValue, createTraffic } from './grid.js';
+import { cloneWorld, cloneTile, tileAt, inBounds, index, neighbors4, edgesOfTile, edgeValue, createTraffic, createEdges } from './grid.js';
 import { generateWorld, centerOf } from './worldgen.js';
+import { ROAD_VERSION } from './blocks.js';
 import {
   EDGE, rebuildRoads, connectTile, applyPath, computeTraffic, faceTowardRoad, countEdges, networkConnected,
 } from './roads.js';
@@ -632,15 +633,17 @@ export function canPlace(game, x, y, tileId) {
   }
   let path = [];
   let road = { street: 0, bridge: 0, cost: 0 };
+  let yaw = 0;
   if (isUrbanFamily(def.family)) {
     const c = connectTile(world, x, y);
     if (!c.ok) return { ok: false, reason: 'unreachable', price: def.price, clearing };
     path = c.path;
+    yaw = c.yaw;
     road = roadCostOfPath(world, path);
   }
   const cost = def.price + clearing + road.cost;
-  if (game.money < cost) return { ok: false, reason: 'money', cost, price: def.price, clearing, path, road };
-  return { ok: true, cost, price: def.price, clearing, path, road, reason: null };
+  if (game.money < cost) return { ok: false, reason: 'money', cost, price: def.price, clearing, path, road, yaw };
+  return { ok: true, cost, price: def.price, clearing, path, road, yaw, reason: null };
 }
 
 function placedText(def, cost) {
@@ -671,10 +674,10 @@ export function place(game, x, y, tileId, nowSeconds = Date.now() / 1000) {
     tile.flow = null;
   }
   tile.native = false;
-  tile.building = { type: tileId, level: 1, variant: hashSeed(game.seed, `${game.month}:${x}:${y}:${tileId}`) % 3, yaw: 0 };
+  tile.building = { type: tileId, level: 1, variant: hashSeed(game.seed, `${game.month}:${x}:${y}:${tileId}`) % def.models[1].length, yaw: check.yaw || 0 };
   if (check.path.length > 0) world = applyPath(world, check.path);
   world = rebuildRoads(world);
-  if (isBuiltTile(world.tiles[i])) world.tiles[i].building.yaw = faceTowardRoad(world, x, y, centerOf(world));
+  if (isBuiltTile(world.tiles[i])) world.tiles[i].building.yaw = check.yaw ?? faceTowardRoad(world, x, y, centerOf(world));
   world = computeTraffic(world);
 
   const events = [event('placed', game.month, placedText(def, check.cost), { x, y, tileId, cost: check.cost })];
@@ -961,6 +964,7 @@ export function serialize(game) {
       ...w,
       tiles: w.tiles.map(cloneTile),
       edges: { h: Array.from(w.edges.h), v: Array.from(w.edges.v) },
+      avenues: w.avenues ? { h: Array.from(w.avenues.h), v: Array.from(w.avenues.v) } : null,
       traffic: w.traffic ? { h: Array.from(w.traffic.h), v: Array.from(w.traffic.v) } : null,
     },
   };
@@ -993,13 +997,18 @@ export function deserialize(obj) {
     ...w,
     tiles: w.tiles.map((t) => ({ terrain: t.terrain, flow: t.flow ?? null, native: Boolean(t.native), building: t.building ? { ...t.building } : null })),
     edges: { h: Uint8Array.from(w.edges.h), v: Uint8Array.from(w.edges.v) },
+    avenues: w.avenues?.h?.length === hLen && w.avenues?.v?.length === vLen
+      ? { h: Uint8Array.from(w.avenues.h), v: Uint8Array.from(w.avenues.v) } : createEdges(w.cols, w.rows),
     traffic: w.traffic && Array.isArray(w.traffic.h) && w.traffic.h.length === hLen && Array.isArray(w.traffic.v) && w.traffic.v.length === vLen
       ? { h: Float32Array.from(w.traffic.h), v: Float32Array.from(w.traffic.v) }
       : createTraffic(w.cols, w.rows),
   };
-  if (!w.traffic) world = computeTraffic(world);
+  const migratedRoads = world.roadVersion !== ROAD_VERSION;
+  if (migratedRoads) world = computeTraffic(rebuildRoads(world, { reset: true, connect: true }));
+  else if (!w.traffic) world = computeTraffic(world);
   // Version 1 : aucune écologie sauvée, tout est recalculé (migration).
   const eco = obj.version >= 2 && obj.eco ? reviveEcology(obj.eco, world) : createEcology(world);
+  if (migratedRoads) syncEcology(eco, world);
   const game = {
     version: GAME_VERSION,
     mode: obj.mode === 'sandbox' ? 'sandbox' : 'career',

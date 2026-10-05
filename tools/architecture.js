@@ -93,12 +93,11 @@ function builder() {
     }
     if(front) door(x+w*.23,y+.025,z+d/2,accent);
   }
-  function garden({fence=true}={}) {
-    box(.82,.014,.8,0,0,0,'baseWarm',.02);
-    box(.25,.017,.31,-.24,.015,.22,'foliageOlive',.02);
+  function garden() {
+    // La parcelle et ses jardins sont continus dans le rendu du quartier.
+    // Le GLB ne porte que ses plantations d'entrée, sans socle carré ni clôture périphérique.
     for(const x of [-.33,.32]) plant(x,.018,.29,.048,true);
-    if(fence) for(let i=0;i<6;i++) box(.026,.10,.018,-.37+i*.09,.02,-.38,'wallCream');
-    if(fence) box(.48,.017,.02,-.145,.095,-.38,'wallCream');
+
     for(let i=0;i<3;i++) box(.09,.019,.065,.12,.016,.25+i*.065,'wallCream',.006);
   }
   function awning(x,y,z,w,color='roofTerracotta') {
@@ -160,7 +159,7 @@ function house(variant) {
 function apartment(variant,tall=false) {
   const b=builder(), floors=tall?4+variant:2+variant%2, height=floors*.31;
   const wall=['wallOchre','wallCream','wallPink'][variant], roof=['roofSlateDark','roofTerracotta','roofBrown'][variant];
-  b.garden({fence:false});
+  b.garden();
   b.facade(.64,.52,height,0,.025,-.065,wall,{floors,balconies:true,shutters:false,accent:'trunkDark'});
   b.box(.71,.045,.59,0,height+.025,-.065,'wallCream',.008);
   b.prism([[-.35,0],[.35,0],[.26,.17],[-.26,.17]],.60,0,height+.07,-.065,roof);
@@ -178,7 +177,7 @@ function apartment(variant,tall=false) {
 
 function shop(variant) {
   const b=builder(), wall=['wallCream','wallPink','wallOchre'][variant], accent=['foliageDeep','roofTerracotta','roofSlateDark'][variant];
-  b.garden({fence:false});
+  b.garden();
   b.facade(.64,.46,.69,0,.025,-.07,wall,{floors:2,shutters:false,front:false});
   b.roof(.71,.53,.24,0,.715,-.07,variant===1?'roofSlateDark':'roofTerracotta',{dormer:true});
   // Grande vitrine en retrait, soubassement coloré et porte séparée.
@@ -199,7 +198,7 @@ function shop(variant) {
 
 function office(variant) {
   const b=builder(), floors=variant?4:3,height=floors*.31;
-  b.garden({fence:false});
+  b.garden();
   b.box(.62,height,.53,0,.02,-.065,variant?'wallBeige':'wallCream',.016);
   for(let f=0;f<floors;f++) {
     b.box(.66,.026,.57,0,.02+f*.31,-.065,'wallCream');
@@ -219,7 +218,7 @@ function office(variant) {
 }
 
 function civic(kind) {
-  const b=builder();b.garden({fence:false});
+  const b=builder();b.garden();
   if(kind==='townhall') {
     b.facade(.69,.46,.62,0,.025,-.055,'wallCream',{floors:2,shutters:false,front:false});
     b.roof(.76,.53,.24,0,.645,-.055,'roofSlateDark');
@@ -256,7 +255,7 @@ function civic(kind) {
 }
 
 function market() {
-  const b=builder();b.garden({fence:false});
+  const b=builder();b.garden();
   for(const sign of [-1,1]) {
     const x=sign*.21;
     b.box(.30,.18,.26,x,.02,0,'wood');

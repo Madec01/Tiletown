@@ -395,7 +395,7 @@ test('game : canPlace (chaque raison)', () => {
   assert.ok(canPlace(island, 6, 1, 'tree-planting').ok, 'une nature plantée n’a pas besoin de rue');
 });
 
-test('game : place (débit exact, rue de ceinture, raccordement facturé, forêt plantée, orientation, événements)', () => {
+test('game : place (débit exact, desserte partagée, raccordement facturé, forêt plantée, orientation, événements)', () => {
   const g = createGame({ seed: SEED });
   // Case déjà contre le réseau : seulement le prix.
   const near = findPlaceable(g, 'house', (check, tile) => check.path.length === 0 && tile.terrain === 'grass');
@@ -409,9 +409,8 @@ test('game : place (débit exact, rue de ceinture, raccordement facturé, forêt
   assert.equal(placed.building.level, 1);
   assert.equal(placed.native, false);
   assert.ok([0, 90, 180, 270].includes(placed.building.yaw));
-  for (const ref of Object.values(edgesOfTile(r.game.world, near.x, near.y))) {
-    assert.ok(edgeValue(r.game.world, ref) >= EDGE.STREET, 'rue de ceinture sur chaque côté');
-  }
+  assert.ok(Object.values(edgesOfTile(r.game.world, near.x, near.y)).some(ref => edgeValue(r.game.world, ref) >= EDGE.STREET), 'une desserte réelle longe la parcelle');
+  assert.deepEqual(r.game.world.edges, g.world.edges, 'une maison déjà desservie ne crée pas de rue');
   assert.ok(networkConnected(r.game.world));
   assert.equal(r.game.stats.capacity, g.stats.capacity + 20);
   assert.equal(r.game.population, g.population);

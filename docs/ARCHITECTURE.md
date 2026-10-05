@@ -73,6 +73,8 @@ world = {
     v: Uint8Array(rows * (cols + 1)),
     // valeurs : 0 rien, 1 chemin, 2 rue, 3 pont ; trafic dans traffic.h / traffic.v (Float32Array mêmes tailles)
   },
+  roadVersion: 2,                  // migration des anciens quadrillages au chargement
+  avenues: { h: Uint8Array, v: Uint8Array }, // même indexation ; 1 = axe principal
   traffic: { h: Float32Array, v: Float32Array }
 }
 ```
@@ -81,7 +83,9 @@ Fonctions pures attendues :
 
 - `grid.js` : `index(world, x, y)`, `inBounds(world, x, y)`, `neighbors4(world, x, y)`, `neighbors8(...)`, `edgeH(world, x, y)`, `edgeV(world, x, y)` (indices), `edgesOfTile(world, x, y)` → `{ n, s, e, w }` (indices + orientation).
 - `worldgen.js` : `generateWorld({ seed, cols, rows, map: 'valley' })` → `world`. Rivière continue d'un bord à l'autre avec `flow`, 1 à 2 lacs, massifs de forêt, prairies, champs, collines ; la mairie est posée au centre sur de l'herbe, raccordée à rien (c'est le point de départ du réseau).
-- `roads.js` : `rebuildRoads(world)` → nouveau `world` : une rue (2) sur chaque arête d'une case bâtie (partagée entre voisins, de ceinture face à la nature) ; un chemin (1) autour d'une nature plantée ; rien entre deux natures. `connectTile(world, x, y)` → `{ ok, path: [edgeRefs], cost }` : plus court chemin sur le treillis d'arêtes jusqu'au réseau existant avec coûts (prairie 1, champ 1, forêt 3, rivière 5 → pont, lac et zone humide interdits). `computeTraffic(world)` : trajets quartier → emploi/commerce le plus proche, somme par arête.
+- `blocks.js` : découpage déterministe par graine en îlots de 2×2, 3×2 ou 2×3 ; façades périphériques, exceptions de desserte près de l'eau, passages piétons et raccords aux trottoirs. Les bords de carte peuvent tronquer un îlot.
+- `roads.js` : `rebuildRoads(world, { connect, reset })` conserve les chaussées existantes et recalcule les passages. `connect` raccorde les villes générées/migrées ; `reset` supprime l'ancien quadrillage sauf les ponts (et les anciens quais strictement nécessaires à une maison enclavée). `connectTile(world, x, y)` rend `{ ok, path, cost, bridges, yaw }` : façade complète et Dijkstra sur le périmètre des îlots. Une desserte dans l'îlot est autorisée en dernier recours près d'un obstacle. Le réseau part des vraies rues de la mairie ; un coin isolé ne donne pas accès. `computeTraffic` n'emprunte que rues/ponts ; `streetGraph({ pedestrian: true })` ajoute les passages pour les habitants.
+- `game.js` facture uniquement les nouvelles chaussées annoncées, conserve l'orientation du fantôme, sérialise `roadVersion` et `avenues` et migre les anciennes sauvegardes sans débit. L'annulation restaure aussi le classement des rues.
 
 ## 4. Catalogue (`src/data/tiles.js`)
 
@@ -265,7 +269,7 @@ Le fantôme est **un seul objet** (Mesh translucide + segments) mis à jour sans
 
 ### 9.4 Critères (étape 3)
 
-Un parcours automatisé Playwright (`tools/play.mjs`) : charger, sélectionner une carte du catalogue, poser une maison sur une case libre (l'argent baisse du prix, une rue de ceinture apparaît), poser une forêt plantée, démolir, annuler, passer la vitesse à ×4 et attendre un mois (recettes encaissées, événement de saison au 3e mois), recharger la page (la partie est restaurée). Cibles tactiles ≥ 48 px ; 0 erreur console ; appels de dessin ≤ 60 avec le fantôme affiché.
+Un parcours automatisé Playwright (`tools/play.mjs`) : charger, sélectionner une carte du catalogue, poser une maison sur une case libre (l'argent baisse du prix, la façade est raccordée au réseau), poser une forêt plantée, démolir, annuler, passer la vitesse à ×4 et attendre un mois (recettes encaissées, événement de saison au 3e mois), recharger la page (la partie est restaurée). Cibles tactiles ≥ 48 px ; 0 erreur console ; appels de dessin ≤ 60 avec le fantôme affiché.
 
 ## 10. Écologie : air, eau, faune, sols (étape 4)
 
@@ -434,5 +438,11 @@ Diagnostic : **l'aspect cubique vient du terrain et de l'organisation du décor*
 - Les données du moteur sont toujours interprétées sur **0 à 100**, y compris lorsque toutes les valeurs sont inférieures à 1. Air : turquoise → rouge ; eau : bleu → rouge ; faune : sable → vert ; sols : brun → vert. Couper le calque restaure la palette naturelle.
 - `ui/layers.js` laisse une légende au-dessus de la carte, avec bornes et moyenne ; le toucher d’une case affiche sa valeur. La légende disparaît pendant l’ouverture d’une feuille et laisse les deux outils flottants accessibles à 360 px. Le bouton « Voir la carte colorée » referme le sélecteur.
 - `tools/architecture.js` définit 21 modèles originaux exportés en GLB : six maisons, six immeubles, trois commerces, deux bureaux, mairie, école, clinique et marché. Le pipeline accepte les profils convexes extrudés (pignons, mansardes et portes cintrées). Les identifiants existants sont conservés ; les variantes supplémentaires sont reliées au catalogue. Un import partiel conserve les textes de licence si les kits bruts sont absents.
-- Emprise des bâtiments : environ 0,65 unité après l’échelle de rendu de 0,76. Rues de 0,24 unité, trottoirs compris 0,32 ; caméra mobile à 6,5 unités de largeur. Les 22 aperçus de construction sont rendus depuis les GLB courants.
+- Emprise des bâtiments : environ 0,65 unité après l’échelle de rendu de 0,76. Rues résidentielles de 0,18 unité (0,26 avec trottoirs), axes principaux de 0,26 (0,34 avec trottoirs) ; caméra mobile à 6,5 unités de largeur. Les 22 aperçus de construction sont rendus depuis les GLB courants.
 - `npm run review:layers` compare les pixels réellement dessinés, suit les boutons tactiles des quatre calques, vérifie les valeurs 0 / 0,8 / 100, les hachures, le retour aux couleurs naturelles et la disposition à 360 px. Les captures sont produites dans `artifacts/layers/`.
+
+### Quartiers continus (2026-10-05)
+
+Les 21 GLB d'architecture ne portent plus de socle ni de clôture périphérique ; les pelouses et dallages sont instanciés avec des dimensions adaptées aux rues réellement présentes. Les maisons se décalent de 0,045 unité vers leur rue résidentielle, et leur jardin arrière reçoit deux plantations. Les passages sont placés au-dessus des pelouses pour éviter la superposition de faces. Arbres et bancs complètent le cœur d'îlot. Les cinq types de nœuds de rue existent aux deux largeurs ; seules les voies principales portent un marquage axial.
+
+Validation spécifique : `node --test tests/blocks.test.js` (îlot de six maisons, accès réel, coûts, migration, ponts, annulation, géométrie des rues, 150 graines) et `node tools/review-blocks.mjs` (six poses tactiles sur la version publiée, prix/angles vérifiés, captures 412×915 et 360×740, rechargement). Les cinq vallées restent gagnables en trois ans ; le parcours simulé peut désormais obtenir trois étoiles sur Rivière et Bocage grâce à la réduction des charges et de la fragmentation, sans changer les seuils de carrière.

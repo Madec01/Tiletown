@@ -192,5 +192,6 @@ export function cloneWorld(world) {
     tiles: world.tiles.map(cloneTile),
     edges,
     traffic,
+    ...(world.avenues ? { avenues: { h: Uint8Array.from(world.avenues.h), v: Uint8Array.from(world.avenues.v) } } : {}),
   };
 }

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createStorage, createCareerStorage, wantsNewGame, normalizeMode, SAVE_KEY, CAREER_KEY } from '../src/storage.js';
 import { createCareer, finishLevel, serializeCareer } from '../src/core/career.js';
 import { LEVELS } from '../src/data/levels.js';
+import { edgesOfTile, edgeValue } from '../src/core/grid.js';
 import { createGame, place, serialize, deserialize } from '../src/core/game.js';
 
 /** localStorage factice : Map + mêmes méthodes ; `failWrite` simule un stockage plein ou interdit. */
@@ -78,7 +79,7 @@ test('une pose sauvée est relue : le bâtiment et ses rues sont là', () => {
   const tile = back.world.tiles[placed.y * back.world.cols + placed.x];
   assert.equal(tile.building && tile.building.type, 'house');
   assert.equal(back.money, placed.game.money);
-  assert.ok(back.world.edges.h[placed.y * back.world.cols + placed.x] >= 2 || back.world.edges.h[(placed.y + 1) * back.world.cols + placed.x] >= 2, 'une rue borde le quartier');
+  assert.ok(Object.values(edgesOfTile(back.world, placed.x, placed.y)).some(ref => edgeValue(back.world, ref) >= 2), 'une rue borde le quartier');
 });
 
 test('stockage indisponible, plein ou cassé : jamais d’exception, false / null', () => {

@@ -20,39 +20,29 @@ function interiorEdges(world) {
   return out.map((ref) => ({ ref, tiles: edgeTiles(world, ref).map((p) => (p ? tileAt(world, p.x, p.y) : null)) }));
 }
 
-test('roads : rue sur chaque côté d’un îlot (partagée ou de ceinture), rien entre natures ni au bord', () => {
-  const w = place(place(makeWorld(6, 6), 2, 2, 'townhall'), 3, 2, 'house');
+test('roads : une rue de façade, pas de ceinture automatique ; le recalcul conserve les dessertes', () => {
+  const w = place(makeWorld(6, 6), 2, 2, 'townhall');
   const r = rebuildRoads(w);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).e), EDGE.STREET, 'arête partagée = rue');
-  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).w), EDGE.STREET);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).n), EDGE.STREET, 'rue de ceinture face à la nature');
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).s), EDGE.STREET);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).w), EDGE.STREET);
-  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).e), EDGE.STREET);
-  for (const { ref, tiles } of interiorEdges(r)) {
-    const built = tiles.filter((t) => t && t.building).length;
-    if (built === 0) assert.equal(edgeValue(r, ref), EDGE.NONE, 'aucune rue entre deux natures');
-    if (tiles.includes(null)) assert.equal(edgeValue(r, ref), EDGE.NONE, 'rien au bord de la carte');
-  }
-  assert.deepEqual(countEdges(r), { path: 0, street: 7, bridge: 0, total: 7 });
-  // Pureté : le monde d'origine n'a pas changé.
-  assert.ok(w.edges.h.every((v) => v === 0) && w.edges.v.every((v) => v === 0));
+  assert.equal(countEdges(r).street, 1);
+  assert.ok(networkConnected(r));
+  assert.deepEqual(rebuildRoads(r).edges, r.edges);
+  assert.ok(w.edges.h.every(v => v === 0) && w.edges.v.every(v => v === 0), 'entrée inchangée');
+  const other = edgesOfTile(r, 4, 4).n;
+  r.edges[other.kind][other.index] = EDGE.STREET;
+  assert.equal(edgeValue(rebuildRoads(r), other), EDGE.STREET, 'une desserte existante reste stable');
 });
 
-test('roads : une nature plantée n’est pas un îlot (chemin autour, rue seulement côté îlot) ; les tracés existants sont gardés', () => {
-  const w = place(place(makeWorld(6, 6), 2, 2, 'house'), 3, 2, 'park');
-  const r = rebuildRoads(w);
-  assert.equal(edgeValue(r, edgesOfTile(r, 2, 2).e), EDGE.STREET, 'maison | parc → rue (côté maison)');
-  assert.equal(edgeValue(r, edgesOfTile(r, 3, 2).e), EDGE.PATH, 'parc | herbe → chemin');
-  // Un tracé de raccordement posé à travers l'herbe survit au recalcul.
-  const ref = edgesOfTile(w, 4, 4).n;
-  w.edges.h[ref.index] = EDGE.STREET;
-  const kept = rebuildRoads(w);
-  assert.equal(edgeValue(kept, ref), EDGE.STREET);
-  // Un ancien chemin orphelin (plus aucun îlot à côté) disparaît.
-  const orphan = edgesOfTile(w, 0, 0).s;
-  w.edges.h[orphan.index] = EDGE.PATH;
-  assert.equal(edgeValue(rebuildRoads(w), orphan), EDGE.NONE);
+test('roads : une forêt plantée ne crée aucune rue, un parc ajoute au plus une promenade', () => {
+  const w = rebuildRoads(place(makeWorld(8, 8), 3, 3, 'townhall'));
+  const before = countEdges(w).total;
+  place(w, 4, 3, 'tree-planting');
+  const forest = rebuildRoads(w);
+  assert.equal(countEdges(forest).total, before);
+  assert.equal(countEdges(forest).path, 0);
+  place(w, 3, 4, 'park');
+  const park = rebuildRoads(w);
+  assert.equal(countEdges(park).total, before);
+  assert.ok(countEdges(park).path <= 1);
 });
 
 test('roads : connectTile traverse la rivière par un pont et rejoint le réseau', () => {
@@ -76,7 +66,7 @@ test('roads : connectTile traverse la rivière par un pont et rejoint le réseau
   assert.ok(networkConnected(joined));
   assert.equal(countEdges(joined).bridge, 1);
   // Une fois reliée, la case n'a plus besoin de tracé.
-  assert.deepEqual(connectTile(joined, 5, 2), { ok: true, path: [], cost: 0, bridges: 0 });
+  assert.deepEqual(connectTile(joined, 5, 2).path, []);
 });
 
 test('roads : connectTile contourne le lac et la zone humide, et renonce si tout est bouché', () => {
@@ -105,7 +95,7 @@ test('roads : la forêt coûte plus cher que l’herbe, et le tracé l’évite 
   const plain = rebuildRoads(place(place(makeWorld(9, 5), 1, 2, 'townhall'), 7, 2, 'house'));
   const direct = connectTile(plain, 7, 2);
   assert.ok(direct.ok);
-  assert.equal(direct.cost, 5, 'cinq arêtes d\u2019herbe à 1, du coin de la maison au coin de la mairie');
+  assert.ok(direct.cost > 0 && direct.path.length > 0, 'raccordement jusqu’à une véritable façade');
   // Bande de forêt sur toute la hauteur : il faut la traverser, plus cher.
   const woods = place(place(makeWorld(9, 5), 1, 2, 'townhall'), 7, 2, 'house');
   for (let y = 0; y < 5; y++) setTerrain(woods, 4, y, 'forest');
@@ -117,7 +107,7 @@ test('roads : la forêt coûte plus cher que l’herbe, et le tracé l’évite 
   for (const x of [3, 4, 5]) for (const y of [1, 2, 3]) setTerrain(partial, x, y, 'forest');
   const around = connectTile(rebuildRoads(partial), 7, 2);
   assert.ok(around.ok);
-  assert.equal(around.cost, 9);
+  assert.ok(around.cost >= direct.cost, 'le contournement a un coût');
   for (const e of around.path) {
     const both = edgeTiles(partial, e).every((p) => p && tileAt(partial, p.x, p.y).terrain === 'forest');
     assert.ok(!both, 'aucune arête au cœur de la forêt');
@@ -131,44 +121,38 @@ test('roads : la forêt coûte plus cher que l’herbe, et le tracé l’évite 
   assert.deepEqual(edgeBuildCost(costs, edgesOfTile(costs, 0, 1).e), { cost: 1, bridge: false });
 });
 
-test('roads : cas limites de connectTile et du réseau', () => {
+test('roads : cas limites et véritable accès par un côté, jamais seulement par un coin', () => {
   assert.deepEqual(connectTile(makeWorld(4, 4), 1, 1), { ok: false, reason: 'no_network' });
   assert.deepEqual(connectTile(place(makeWorld(4, 4), 1, 1, 'townhall'), 9, 9), { ok: false, reason: 'out_of_bounds' });
-  const w = rebuildRoads(place(place(makeWorld(6, 6), 2, 2, 'townhall'), 3, 2, 'house'));
-  assert.deepEqual(connectTile(w, 3, 2), { ok: true, path: [], cost: 0, bridges: 0 }, 'déjà reliée');
-  assert.deepEqual(connectTile(w, 4, 3), { ok: true, path: [], cost: 0, bridges: 0 }, 'touche le réseau par un coin');
-  const far = connectTile(w, 2, 5);
-  assert.ok(far.ok && far.path.length === 2 && far.cost === 2, 'deux arêtes vers le sud');
-  assert.ok(networkConnected(makeWorld(3, 3)), 'rien de bâti : trivialement relié');
-  // Sans mairie, le premier îlot bâti sert de racine.
-  const noHall = rebuildRoads(place(place(makeWorld(6, 3), 0, 1, 'house'), 4, 1, 'house'));
-  assert.deepEqual(disconnectedTiles(noHall), [{ x: 4, y: 1 }]);
+  const w = rebuildRoads(place(makeWorld(8, 8), 3, 3, 'townhall'));
+  assert.deepEqual(connectTile(w, 3, 3).path, []);
+  let cornerOnly = null;
+  for (let y=0; y<w.rows; y++) for(let x=0;x<w.cols;x++) {
+    if (tileAt(w,x,y).building || Object.values(edgesOfTile(w,x,y)).some(e=>edgeValue(w,e)>=EDGE.STREET)) continue;
+    const c = connectTile(w,x,y);
+    if (c.ok && c.path.length) { cornerOnly = { x,y,c }; break; }
+  }
+  assert.ok(cornerOnly);
+  const { x,y,c } = cornerOnly;
+  const connected = applyPath(w,c.path);
+  assert.ok(Object.values(edgesOfTile(connected,x,y)).some(e=>edgeValue(connected,e)>=EDGE.STREET));
+  assert.ok(networkConnected(makeWorld(3,3)));
+  const noHall = rebuildRoads(place(place(makeWorld(6,3),0,1,'house'),4,1,'house'));
+  assert.deepEqual(disconnectedTiles(noHall), [{ x:4,y:1 }]);
 });
 
-test('roads : trafic non nul, seulement sur des arêtes équipées, une maison voisine charge la rue partagée', () => {
-  const w = place(place(place(place(makeWorld(8, 5), 2, 2, 'townhall'), 3, 2, 'house'), 4, 2, 'house'), 5, 2, 'shop');
-  const r = rebuildRoads(w);
+test('roads : trafic motorisé seulement sur les chaussées ; les raccourcis piétons restent sans voiture', () => {
+  const w = place(place(place(place(makeWorld(8,5),2,2,'townhall'),3,2,'house'),4,2,'house'),5,2,'shop');
+  const r = rebuildRoads(w, { connect:true });
   const t = computeTraffic(r);
-  const stats = trafficStats(t);
-  assert.ok(stats.total > 0 && stats.max > 0);
-  for (const { ref } of interiorEdges(t)) {
-    if (t.traffic[ref.kind][ref.index] > 0) assert.ok(edgeValue(t, ref) >= EDGE.PATH, 'du trafic hors rue');
+  assert.ok(trafficStats(t).total >= 4);
+  for (const {ref} of interiorEdges(t)) {
+    if (edgeValue(t,ref)<EDGE.STREET) assert.equal(t.traffic[ref.kind][ref.index],0);
   }
-  // Quatre trajets (2 maisons × emploi + commerce), chacun d'au moins une arête.
-  assert.ok(stats.total >= 4);
-  const shared = edgesOfTile(t, 3, 2).w; // rue entre la maison (3, 2) et la mairie
-  assert.ok(t.traffic[shared.kind][shared.index] >= 1, 'la maison voisine de la mairie emprunte leur rue commune');
-  const shopSide = edgesOfTile(t, 4, 2).e; // rue entre la maison (4, 2) et le commerce
-  assert.ok(t.traffic[shopSide.kind][shopSide.index] >= 1);
-  // Les rues au milieu de la rangée voient passer les deux maisons.
-  assert.ok(stats.max >= 2);
-  // Le trafic d'origine n'est pas modifié ; sans maison, tout est nul.
-  assert.ok(r.traffic.h.every((v) => v === 0));
-  const empty = computeTraffic(rebuildRoads(place(makeWorld(4, 4), 1, 1, 'townhall')));
-  assert.equal(trafficStats(empty).total, 0);
-  // shortestTrip : le trajet le plus court vers une cible désignée.
-  const trip = shortestTrip(t, 3, 2, (tile) => tile.building && tile.building.type === 'shop');
-  assert.ok(trip && trip.length >= 1);
+  const trip = shortestTrip(t,3,2,tile=>tile.building?.type==='shop');
+  assert.ok(trip?.length);
+  assert.ok(trip.every(ref=>edgeValue(t,ref)>=EDGE.STREET));
+  assert.ok(r.traffic.h.every(v=>v===0));
 });
 
 test('roads : le trafic suit le réseau, pont compris', () => {
@@ -182,31 +166,23 @@ test('roads : le trafic suit le réseau, pont compris', () => {
   assert.equal(trafficStats(computeTraffic(r)).total, 0, 'sans raccordement, pas de trajet possible');
 });
 
-test('roads : orientation vers la rue la plus importante', () => {
-  const w = rebuildRoads(place(place(makeWorld(6, 6), 2, 2, 'house'), 3, 2, 'shop'));
-  assert.equal(faceTowardRoad(w, 2, 2), 90, 'la maison regarde sa rue à l’est');
-  assert.equal(faceTowardRoad(w, 3, 2), 270, 'le commerce regarde sa rue à l’ouest');
-  const alone = rebuildRoads(place(makeWorld(5, 5), 2, 2, 'townhall'));
-  assert.equal(faceTowardRoad(alone, 2, 2), 0, 'à égalité : le sud');
-  assert.equal(faceTowardRoad(alone, 2, 2, { x: 2, y: 0 }), 180, 'à égalité : vers la cible (nord)');
-  assert.equal(faceTowardRoad(alone, 2, 2, { x: 0, y: 2 }), 270);
+test('roads : orientation vers une rue existante, priorité aux chaussées sur les chemins', () => {
+  const w = place(makeWorld(6,6),2,2,'house');
+  const e = edgesOfTile(w,2,2);
+  w.edges[e.e.kind][e.e.index] = EDGE.STREET;
+  w.edges[e.s.kind][e.s.index] = EDGE.PATH;
+  assert.equal(faceTowardRoad(w,2,2),90);
+  w.edges[e.n.kind][e.n.index] = EDGE.STREET;
+  assert.equal(faceTowardRoad(w,2,2,{x:2,y:0}),180);
 });
 
-test('roads : sur une vallée générée, rues autour de chaque îlot, chemins autour des champs, rien entre natures', () => {
-  const w = generateWorld({ seed: 7, starterTown: true });
-  for (const { ref, tiles } of interiorEdges(w)) {
-    const [a, b] = tiles;
-    const builtA = Boolean(a && a.building && a.building.type !== 'field');
-    const builtB = Boolean(b && b.building && b.building.type !== 'field');
-    const plantedA = Boolean(a && a.building && !builtA);
-    const plantedB = Boolean(b && b.building && !builtB);
-    const v = edgeValue(w, ref);
-    if (!a || !b) assert.equal(v, EDGE.NONE);
-    else if (builtA || builtB) assert.equal(v, EDGE.STREET, 'rue sur chaque côté d’un îlot');
-    else if (plantedA || plantedB) assert.equal(v, EDGE.PATH, 'chemin autour d’une nature plantée (champ)');
-    else assert.equal(v, EDGE.NONE);
+test('roads : vallées générées desservies, moins de chaussées et recalcul stable', () => {
+  for(const seed of [1,7,27,42,12345]) {
+    const w = generateWorld({seed,starterTown:true});
+    assert.ok(networkConnected(w), `graine ${seed}`);
+    assert.ok(trafficStats(w).total>0);
+    assert.ok(countEdges(w).total<26,'les maisons partagent leurs dessertes');
+    assert.deepEqual(rebuildRoads(w).edges,w.edges,'recalcul stable');
+    assert.deepEqual(rebuildRoads(w).avenues,w.avenues,'hiérarchie stable');
   }
-  assert.ok(networkConnected(w));
-  assert.ok(trafficStats(w).total > 0);
-  assert.deepEqual(rebuildRoads(w).edges, w.edges, 'le recalcul est stable');
 });

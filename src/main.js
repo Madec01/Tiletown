@@ -485,6 +485,7 @@ async function main() {
     describeTile: describeGameTile,
     /** Orientation du fantôme (degrés) : vers la rue la plus proche, tracé de raccordement compris. */
     previewYaw(g, x, y, res) {
+      if (Number.isFinite(res?.yaw)) return res.yaw;
       try {
         const w = res && Array.isArray(res.path) && res.path.length ? applyPath(g.world, res.path) : g.world;
         return faceTowardRoad(w, x, y, centerOf(g.world));
