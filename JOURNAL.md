@@ -15,6 +15,13 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 5 lancée : carrière, tutoriel et beauté
+
+- Retours de l'utilisateur : « on démarre directement avec une ville, il faut une carrière avec tuto » et « le jeu n'est pas très beau ».
+- Sauvegarde : branche `backup/avant-etape5-2026-10-05`. Contrat : `docs/ARCHITECTURE.md` §11.
+- **Carrière** : la partie commence sur une vallée vierge avec la seule mairie ; cinq niveaux (vallée, rivière, bocage, coteau, grande vallée), objectifs et trois étoiles chacun, catalogue débloqué cumulatif, bac à sable à part. **Tutoriel** : dix leçons guidées, jamais bloquantes. **Interface** : écran titre, carte de carrière, bandeau d'objectifs, bulle de tutoriel avec surbrillance, écran de fin de niveau.
+- **Beauté** : l'utilisateur a analysé le code et les captures et fourni un plan en cinq priorités, repris tel quel en §11.4. Diagnostic : l'aspect cubique vient du terrain (chaque case est une boîte, les collines sont des boîtes plus hautes) et de l'organisation du décor, pas de la lumière. Trois chantiers : terrain continu et lumière ; modèles d'arbres et de bâtiments avec palette par rôle ; placement de la végétation et abords des rues. Méthode imposée : valider sur une petite scène de référence avant de tout refaire.
+
 ## 2026-10-05 — Étape 4 livrée : la nature compte vraiment
 
 - **Écologie** (`src/core/ecology.js`, `src/data/species.js`, purs) : air avec diffusion et vent dominant, eau transportée vers l'aval avec lacs et nappe, parcelles d'habitat et corridors coupés par le trafic (rétablis par la nouvelle tuile « passage à faune »), fertilité des sols, sept espèces emblématiques avec leurs seuils, scores et alertes (smog, algues, crue, canicule). Avancée à chaque mois, avant les stats.

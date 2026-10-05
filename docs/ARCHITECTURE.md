@@ -384,9 +384,29 @@ Un scénario est une liste de **leçons** ; chacune attend une condition et prop
 - **Tutoriel** (`src/ui/tutorial-ui.js`) : bulle en bas de l'écran avec le texte de la leçon et un bouton « Compris » ; surbrillance de l'élément visé (onglet, case via `r.setHighlight`, jauge) ; se range dès que la leçon est faite.
 - **Fin de niveau** (`src/ui/level-end.js`) : étoiles obtenues, objectifs atteints, score, boutons Rejouer et Niveau suivant.
 
-### 11.4 Beauté du rendu (`src/render3d/`)
+### 11.4 Beauté du rendu : plan de l'utilisateur (2026-10-05)
 
-Travail séparé, mené par variantes comparées sur captures : lumière (soleil plus chaud et rasant, hémisphérique teintée ciel et sol, ombres douces), fond en dégradé plutôt qu'aplat, sol moins uniforme (variation de teinte par case), végétation plus dense et plus variée (rotation, échelle, teintes), toits et murs variés, eau retravaillée, teintes de saison, ombre de contact sous les objets, et un léger traitement d'image (vignette, saturation) si le coût sur téléphone le permet. Chaque variante est mesurée : appels de dessin, triangles, temps par image.
+Diagnostic : **l'aspect cubique vient du terrain et de l'organisation du décor**, pas de la lumière. Objectif : une petite vallée miniature, douce et légèrement illustrée. On garde la grille carrée pour construire, mais elle devient très peu visible dans le paysage.
+
+| Priorité | Chantier | Fichiers principaux |
+|---|---|---|
+| 1 | Terrain continu, collines et berges | `src/render3d/ground.js` |
+| 2 | Arbres plus doux et bosquets moins réguliers | `src/render3d/buildings.js`, `assets/models/` |
+| 3 | Couleurs et silhouettes des bâtiments | `tools/model-map.js`, `tools/import-models.js`, `src/data/palette.js` |
+| 4 | Trottoirs, virages et abords des maisons | `src/render3d/roads.js`, `src/render3d/buildings.js` |
+| 5 | Lumière, ombres et eau | `src/render3d/renderer.js`, `src/render3d/ground.js` |
+
+**1. Terrain continu.** Aujourd'hui chaque case terrestre est une boîte et les collines sont les mêmes boîtes plus hautes, d'où les marches rocheuses carrées. À la place : collines arrondies et continues sur plusieurs cases avec quelques affleurements rocheux ; berges en pente, aux contours irréguliers et aux virages doux ; transitions progressives entre prairie, forêt et terre ; herbe aux variations de couleur qui traversent les limites des cases. Plusieurs cases de forêt doivent lire comme une seule forêt : arrondir chaque carré séparément redonnerait un plateau de pavés. La grille reste affichée **localement pendant la construction**, pour la précision (`ground.setGridHint(cells | null)`). `surfaceHeight(world, x, y)` reste exporté et exact ; `heightAt(x, z)` est ajouté pour les positions continues.
+
+**2. Silhouettes des arbres.** Feuillages plus ronds, composés de plusieurs volumes légèrement irréguliers ; arbres jeunes, moyens et grands mélangés ; bosquets qui débordent d'une case à l'autre ; lisières avec arbustes, petites clairières et herbes ; mouvement de vent très discret. But : casser les alignements et les silhouettes répétées sans multiplier les détails minuscules.
+
+**3. Personnalité des bâtiments.** Toits terracotta, ardoise et brun doux ; façades crème et pastel ; arêtes légèrement biseautées pour accrocher la lumière ; débords de toiture, porches, cheminées, quelques lucarnes ; plusieurs silhouettes par type. Une silhouette reconnaissable et une belle palette valent mieux que des fenêtres en plus. La cohérence de palette est gardée, mais par **attribution de rôle** (toiture, façade, végétation…) et non par simple recherche de la couleur la plus proche.
+
+**4. Abords des rues.** Sans changer la règle de jeu : angles de trottoir arrondis, contraste adouci entre chaussée, trottoir et parcelle, arbres de rue et petites plantations ponctuelles, entrées de maison, virages arrondis là où le réseau le permet. Regrouper plusieurs bâtiments dans de plus grands îlots serait une évolution plus profonde, car elle toucherait au fonctionnement des routes.
+
+**5. Lumière, après les formes.** Ombres plus douces ; léger assombrissement au pied des bâtiments et sous les arbres pour les ancrer au sol ; ambiance chaude avec des zones ombragées plus fraîches ; eau aux variations plus discrètes (les bandes claires répétées attirent trop l'œil).
+
+**Méthode** : valider le style sur une petite scène de référence (une rivière courbe, une colline douce, un bosquet, trois maisons) avant de refaire le reste. Chaque chantier mesure appels de dessin, triangles et temps par image, avant et après.
 
 ### 11.5 Critères (étape 5)
 
