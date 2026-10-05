@@ -1,7 +1,7 @@
 {
-  "id": "c74e75db85a3",
+  "id": "cd8436a578b6",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.d9c6edbb5b.js",
+  "js": "dist/game.2fc136e242.js",
   "css": "dist/game.c9d4ef38d1.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -85,7 +85,7 @@
     "src/core/actors.js": "0a18d337b01d9e07",
     "src/core/calendar.js": "d531026a520853c2",
     "src/core/ecology.js": "a26a7167af18f1fc",
-    "src/core/game.js": "0a4ce5f98ee5fee4",
+    "src/core/game.js": "18060a5b95938f36",
     "src/core/grid.js": "29df44c5235c731b",
     "src/core/rng.js": "6fbad2721b18a2ac",
     "src/core/roads.js": "524fb3d4d1689cec",
@@ -133,6 +133,14 @@
   },
   "history": [
     {
+      "id": "cd8436a578b6",
+      "files": [
+        "dist/game.2fc136e242.js",
+        "dist/game.2fc136e242.js.map",
+        "dist/game.c9d4ef38d1.css"
+      ]
+    },
+    {
       "id": "c74e75db85a3",
       "files": [
         "dist/game.d9c6edbb5b.js",
@@ -162,14 +170,6 @@
         "dist/game.17fc01dd99.js",
         "dist/game.17fc01dd99.js.map",
         "dist/game.c9d4ef38d1.css"
-      ]
-    },
-    {
-      "id": "525eaf010f3d",
-      "files": [
-        "dist/game.972db0d192.js",
-        "dist/game.972db0d192.js.map",
-        "dist/game.2d1112fd07.css"
       ]
     }
   ]

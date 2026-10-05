@@ -12,9 +12,10 @@
 // `key` (identifiant d'espèce), `present` et `layer` ; `eco-alert` porte `key` (smog | algae | flood | heat)
 // et `layer` (air | water | fauna) : l'interface centre la carte sur (x, y) et active le bon calque).
 //
-// L'écologie (src/core/ecology.js) est le seul état avancé **sur place** : `game.eco` est le même objet
-// d'un mois à l'autre (contrat docs/ARCHITECTURE.md §10.1, pour ne rien allouer par tick). Les copies
-// (annulation, sauvegarde) en font une copie profonde.
+// L'écologie (src/core/ecology.js) est le seul état avancé **sur place** : `monthTick` rend le même objet
+// `eco` d'un mois à l'autre (contrat docs/ARCHITECTURE.md §10.1 : ne rien allouer par tick). Tout le reste
+// en fait une copie — `place`, `demolish`, `setFieldMode`, l'annulation et la sauvegarde — si bien que
+// deux parties dérivées d'une même partie ne partagent jamais leur écologie.
 //
 // Repères d'économie (§6.4) : les recettes et l'entretien du catalogue sont des montants par saison,
 // encaissés par tiers chaque mois ; un quartier rapporte INCOME_PER_RESIDENT $ par habitant présent et
@@ -41,7 +42,7 @@ import {
   BASE_HAPPINESS, SHORTAGE_PENALTY, UNEMPLOYMENT_RATIO, UNEMPLOYMENT_PENALTY, OVERSTAFFED_INCOME_FACTOR,
   ADJACENCY, EVOLUTION, START_UNLOCKED, UNLOCKS,
   NATURE_NATIVE_WEIGHT, NATURE_GREEN_WEIGHT, NATURE_GREEN_TARGET, GREEN_TERRAINS, GREEN_BUILDINGS, LOG_LIMIT,
-  ECO_EXODUS_AIR, ECO_EXODUS_HEALTH, ECO_EXODUS_RATE, ECO_TOURISM,
+  ECO_EXODUS_AIR, ECO_EXODUS_HEALTH, ECO_EXODUS_RATE, ECO_TOURISM, ECO_FIELD_MODE,
 } from '../data/balance.js';
 
 export { calendar } from './calendar.js';
@@ -56,6 +57,12 @@ export const SAVE_VERSIONS = Object.freeze([1, 2]);
 const TOURISM_TYPES = Object.freeze(['shop', 'market']);
 /** Tuiles dont le rendement suit la fertilité du sol et la pollinisation (§5.4). */
 const FIELD_TYPES = Object.freeze(['field', 'orchard']);
+/** Conduites d'un champ, telles qu'on les annonce au joueur (§5.4). */
+export const FIELD_MODE_LABELS = Object.freeze({
+  intensive: 'en culture intensive',
+  organic: 'en bio',
+  fallow: 'en jachère',
+});
 
 const SEASON_END_LABELS = Object.freeze(['Le printemps s’achève', 'L’été s’achève', 'L’automne s’achève', 'L’hiver s’achève']);
 const FAMILY_LABEL = Object.freeze(Object.fromEntries(FAMILIES.map((f) => [f.id, f.label])));
@@ -638,8 +645,9 @@ export function place(game, x, y, tileId, nowSeconds = Date.now() / 1000) {
 
   const events = [event('placed', game.month, placedText(def, check.cost), { x, y, tileId, cost: check.cost })];
   if (check.road.bridge > 0) events.push(event('info', game.month, 'Un pont enjambe la rivière.', { x, y }));
-  // L'écologie suit le nouveau monde : parcelles recalculées, fertilité d'un champ neuf initialisée.
-  const eco = game.eco ? syncEcology(game.eco, world) : null;
+  // L'écologie suit le nouveau monde : copie (la pose rend une partie indépendante, comme pour le monde),
+  // parcelles recalculées, fertilité d'un champ neuf initialisée.
+  const eco = game.eco ? syncEcology(cloneEcology(game.eco), world) : null;
   const next = withStats({
     ...game,
     eco,
@@ -741,10 +749,32 @@ export function demolish(game, x, y) {
 
   const label = def ? def.label : tile.building.type;
   const events = [event('demolished', game.month, `${label} : démolition, la case redevient de l’herbe (${DEMOLISH_COST} $).`, { x, y, cost: DEMOLISH_COST })];
-  const eco = game.eco ? syncEcology(game.eco, world) : null;
+  const eco = game.eco ? syncEcology(cloneEcology(game.eco), world) : null;
   const next = withStats({ ...game, eco, world, money: game.money - DEMOLISH_COST, undo: null });
   next.log = appendLog(game.log, events);
   return { ok: true, game: next, cost: DEMOLISH_COST, events };
+}
+
+/**
+ * Change la conduite d'un champ (§5.4) : `intensive` (rend 1,5 × F/100, épuise la terre de 2 par mois),
+ * `organic` (0,9 × F/100, × 1,2 avec des abeilles, rend 1 point de fertilité par mois) ou `fallow`
+ * (jachère : aucun rendement, 4 points de fertilité par mois). Gratuit et réversible.
+ * @returns {{ ok: true, game, events } | { ok: false, reason: 'out_of_bounds' | 'not_a_field' | 'mode', game, events: [] }}
+ */
+export function setFieldMode(game, x, y, mode) {
+  const fail = (reason) => ({ ok: false, reason, game, events: [] });
+  if (!inBounds(game.world, x, y)) return fail('out_of_bounds');
+  if (!FIELD_MODE_LABELS[mode]) return fail('mode');
+  const tile = tileAt(game.world, x, y);
+  if (!tile.building || tile.building.type !== 'field') return fail('not_a_field');
+  if ((tile.building.mode || ECO_FIELD_MODE) === mode) return { ok: true, game, events: [] };
+  const world = cloneWorld(game.world);
+  world.tiles[index(world, x, y)].building.mode = mode;
+  const eco = game.eco ? syncEcology(cloneEcology(game.eco), world) : null;
+  const events = [event('info', game.month, `Le champ passe ${FIELD_MODE_LABELS[mode]}.`, { x, y, mode })];
+  const next = withStats({ ...game, world, eco });
+  next.log = appendLog(game.log, events);
+  return { ok: true, game: next, events };
 }
 
 // ---------------------------------------------------------------------------------------------

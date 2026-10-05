@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {
   createGame, advance, monthTick, computeStats, computeDemand, canPlace, place, demolish, undoLast, setSpeed, cycleSpeed,
   describeTile, serialize, deserialize, calendar, roadCostOfPath, countNativeNature, upkeepOf, incomeOf,
-  GAME_VERSION, SAVE_VERSIONS,
+  GAME_VERSION, SAVE_VERSIONS, setFieldMode, localHappiness, FIELD_MODE_LABELS,
 } from '../src/core/game.js';
-import { findPatches, fieldYieldOf, speciesSummary, tourismOf } from '../src/core/ecology.js';
+import { findPatches, fieldYieldOf, speciesSummary, tourismOf, fieldModeOf } from '../src/core/ecology.js';
 import { tileAt, edgesOfTile, edgeValue, index } from '../src/core/grid.js';
 import { centerOf } from '../src/core/worldgen.js';
 import { EDGE, countEdges, networkConnected } from '../src/core/roads.js';
@@ -674,4 +674,85 @@ test('game : serialize / deserialize (égalité profonde, y compris après trois
   // Trafic absent : recalculé.
   const noTraffic = deserialize({ ...s, world: { ...s.world, traffic: null } });
   assert.deepEqual(noTraffic.world.traffic, g.world.traffic);
+});
+
+
+test('game : conduite d’un champ (intensif, bio, jachère) et rendement qui suit', () => {
+  const g = createGame({ seed: SEED });
+  const i = g.world.tiles.findIndex((t) => t.building && t.building.type === 'field');
+  assert.ok(i >= 0, 'la ville de départ a un champ');
+  const x = i % g.world.cols;
+  const y = (i - x) / g.world.cols;
+  assert.equal(fieldModeOf(g.world.tiles[i]), 'intensive', 'la conduite par défaut');
+
+  const bio = setFieldMode(g, x, y, 'organic');
+  assert.ok(bio.ok);
+  assert.equal(fieldModeOf(bio.game.world.tiles[i]), 'organic');
+  assert.notEqual(bio.game.world, g.world, 'le monde est recopié : la partie d’avant ne bouge pas');
+  assert.equal(fieldModeOf(g.world.tiles[i]), 'intensive');
+  assert.equal(bio.events[0].type, 'info');
+  assert.match(bio.events[0].text, new RegExp(FIELD_MODE_LABELS.organic));
+  assert.ok(bio.game.stats.food.have < g.stats.food.have, 'le bio rend moins tout de suite');
+
+  // Jachère : plus rien à récolter, mais la terre remonte de 4 par mois.
+  const fallow = setFieldMode(g, x, y, 'fallow');
+  assert.ok(fallow.ok);
+  assert.equal(fieldYieldOf(fallow.game.eco, fallow.game.world, i), 0);
+  const soilBefore = fallow.game.eco.soil[i];
+  const rested = advance(fallow.game, 3 * MONTH_SECONDS).game;
+  assert.ok(rested.eco.soil[i] > soilBefore, 'la jachère régénère');
+  // L'intensif, lui, épuise.
+  const worked = advance(g, 3 * MONTH_SECONDS).game;
+  assert.ok(worked.eco.soil[i] < soilBefore, 'l’intensif épuise');
+
+  // Refus explicites.
+  assert.equal(setFieldMode(g, x, y, 'biodynamie').reason, 'mode');
+  assert.equal(setFieldMode(g, -1, 0, 'organic').reason, 'out_of_bounds');
+  const c = centerOf(g.world);
+  assert.equal(setFieldMode(g, c.x, c.y, 'organic').reason, 'not_a_field');
+  assert.equal(setFieldMode(bio.game, x, y, 'organic').game, bio.game, 'remettre la même conduite ne change rien');
+});
+
+test('game : passage à faune (catalogue, pose, contiguïté rétablie)', () => {
+  const g = createGame({ seed: SEED, money: 4000, unlocked: [...START_UNLOCKED, 'wildlife-crossing'] });
+  const def = TILE_BY_ID['wildlife-crossing'];
+  assert.equal(def.family, 'infrastructure');
+  assert.equal(def.price, 120);
+  const spot = findPlaceable(g, 'wildlife-crossing', (check, tile) => tile.terrain === 'grass');
+  assert.ok(spot, 'une case d’herbe raccordable');
+  assert.equal(spot.check.price, 120);
+  const r = place(g, spot.x, spot.y, 'wildlife-crossing', 0);
+  assert.ok(r.ok);
+  assert.equal(tileAt(r.game.world, spot.x, spot.y).building.type, 'wildlife-crossing');
+  assert.equal(r.game.money, g.money - spot.check.cost);
+
+  // Son effet d'écologie : une rue chargée ne coupe plus la contiguïté de ses deux voisines.
+  const world = r.game.world;
+  const before = findPatches(world).length;
+  assert.ok(before >= 0);
+  const described = describeTile(r.game, spot.x, spot.y);
+  assert.equal(described.building.label, 'Passage à faune');
+  assert.ok(described.eco, 'la fiche porte l’écologie');
+});
+
+test('game : l’air d’une usine pèse sur le bonheur du quartier voisin', () => {
+  const base = createGame({ seed: SEED, starterTown: false, money: 6000, unlocked: [...START_UNLOCKED, 'factory'] });
+  const c = centerOf(base.world);
+  const house = place(base, c.x + 1, c.y, 'house', 0);
+  assert.ok(house.ok);
+  const clean = advance(house.game, 24 * MONTH_SECONDS).game;
+  const dirty0 = place(house.game, c.x + 2, c.y, 'factory', 0);
+  assert.ok(dirty0.ok, dirty0.reason);
+  const dirty = advance(dirty0.game, 24 * MONTH_SECONDS).game;
+
+  const airClean = clean.eco.air[index(clean.world, c.x + 1, c.y)];
+  const airDirty = dirty.eco.air[index(dirty.world, c.x + 1, c.y)];
+  assert.ok(airDirty > airClean + 5, `l’usine enfume le quartier (${airDirty} contre ${airClean})`);
+  const sheet = describeTile(dirty, c.x + 1, c.y);
+  assert.ok(sheet.eco.air > 0);
+  // Le bonheur local tient compte de l'air : la même case, avec et sans écologie.
+  const withEco = localHappiness(dirty.world, c.x + 1, c.y, 0, dirty.eco);
+  const without = localHappiness(dirty.world, c.x + 1, c.y, 0, null);
+  assert.ok(withEco <= without, 'l’air ne peut que coûter du bonheur');
+  assert.ok(dirty.stats.nature < clean.stats.nature, 'et la jauge Nature le voit');
 });

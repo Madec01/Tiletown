@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Simulation d'équilibrage (docs/GAME_DESIGN.md §6 ; src/data/balance.js).
 //
-//   node tools/simulate.js [graine] [--months 36] [--dt 0.1] [--quiet]
+//   node tools/simulate.js [graine] [--months 48] [--dt 0.1] [--quiet]
 //
 // Joue la ville de départ à vitesse 1 (advance par pas de `dt` secondes, comme la boucle du jeu) sur
 // `months` mois, selon quatre conduites :
@@ -15,7 +15,7 @@
 // Pour chacune, un tableau par saison (argent, population, bonheur, nature, air, eau, faune, espèces,
 // recettes et entretien du mois, bâtiments) et un verdict.
 
-import { createGame, advance, canPlace, place, calendar } from '../src/core/game.js';
+import { createGame, advance, canPlace, place, calendar, setFieldMode } from '../src/core/game.js';
 import { speciesSummary } from '../src/core/ecology.js';
 import { centerOf } from '../src/core/worldgen.js';
 import { tileAt } from '../src/core/grid.js';
@@ -23,7 +23,8 @@ import { TILE_BY_ID } from '../src/data/tiles.js';
 import { MONTH_SECONDS } from '../src/data/balance.js';
 
 function parseArgs(argv) {
-  const opts = { seed: 1, months: 36, dt: 0.1, quiet: false };
+  // 48 mois : les trois ans d'une carrière, plus l'année où les conséquences écologiques se voient.
+  const opts = { seed: 1, months: 48, dt: 0.1, quiet: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--months') opts.months = Number(argv[++i]);
@@ -118,6 +119,7 @@ const STRATEGIES = {
         if (s.shortages.includes('energy')) next = tryPlace(g, 'wind-turbine', 40) || tryPlace(g, 'solar', 40);
         else if (s.shortages.includes('water')) next = tryPlace(g, 'water-tower', 40);
         else if (s.shortages.includes('food')) next = tryPlace(g, 'orchard', 40) || tryPlace(g, 'field', 40);
+        else if (conventionalField(g)) next = toOrganic(g);
         else if (s.unemployment || g.demand.activity > 0.5) next = tryPlace(g, 'office', 60) || tryPlace(g, 'shop', 60);
         else if (g.demand.services > 0.6 && !hasBuilding(g, 'school')) next = tryPlace(g, 'school', 80);
         else if (g.demand.services > 0.6 && !hasBuilding(g, 'clinic')) next = tryPlace(g, 'clinic', 80);
@@ -133,6 +135,24 @@ const STRATEGIES = {
     },
   },
 };
+
+/** Premier champ encore conduit en intensif (la conduite douce les passe tous en bio, §5.4). */
+function conventionalField(game) {
+  for (let i = 0; i < game.world.tiles.length; i++) {
+    const b = game.world.tiles[i].building;
+    if (b && b.type === 'field' && (b.mode || 'intensive') === 'intensive') {
+      return { x: i % game.world.cols, y: Math.floor(i / game.world.cols) };
+    }
+  }
+  return null;
+}
+
+function toOrganic(game) {
+  const spot = conventionalField(game);
+  if (!spot) return null;
+  const r = setFieldMode(game, spot.x, spot.y, 'organic');
+  return r.ok ? r.game : null;
+}
 
 /** Vrai si la case touche la rivière ou un lac (par un côté). */
 function touchesWater(world, x, y) {
@@ -222,7 +242,7 @@ function printTable(rows) {
   }
 }
 
-export function simulate({ seed = 1, months = 36, dt = 0.1 } = {}) {
+export function simulate({ seed = 1, months = 48, dt = 0.1 } = {}) {
   const out = {};
   for (const [key, strategy] of Object.entries(STRATEGIES)) out[key] = { label: strategy.label, ...run(seed, months, dt, strategy) };
   return out;
@@ -243,8 +263,10 @@ function verdicts(results, months) {
   const cEnd = c.game.stats;
   const cLow = Math.min(...c.rows.map((r) => r.nature));
   notes.push(`Tout bétonner : ${countBuildings(c.game)} bâtiments, ${cEnd.population} habitants, nature ${cEnd.nature} (plus bas ${cLow}), air ${c.game.eco.scores.air}, espèces ${cEnd.species}, santé ${cEnd.health}, ${c.exodus} mois d'exode.`);
-  if (cEnd.nature >= 50) notes.push(`PROBLÈME : tout bétonner laisse la nature à ${cEnd.nature} (attendu : sous 50).`);
-  else notes.push('OK : tout bétonner fait s’effondrer la nature.');
+  const cStart = c.rows[0].nature;
+  if (cEnd.nature >= 55 || cStart - cEnd.nature < 25) {
+    notes.push(`PROBLÈME : tout bétonner laisse la nature à ${cEnd.nature} (partie de ${cStart} ; attendu : sous 55, et au moins 25 points perdus).`);
+  } else notes.push(`OK : tout bétonner fait s’effondrer la nature (${cStart} → ${cEnd.nature}).`);
   if (c.exodus === 0) notes.push('PROBLÈME : tout bétonner ne provoque aucun exode.');
   else notes.push(`OK : l’exode arrive (${c.exodus} mois de départs).`);
 
@@ -263,7 +285,7 @@ const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage : node tools/simulate.js [graine] [--months 36] [--dt 0.1] [--quiet]');
+    console.log('Usage : node tools/simulate.js [graine] [--months 48] [--dt 0.1] [--quiet]');
     process.exit(0);
   }
   const results = simulate(opts);

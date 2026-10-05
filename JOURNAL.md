@@ -15,6 +15,17 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 4 livrée : la nature compte vraiment
+
+- **Écologie** (`src/core/ecology.js`, `src/data/species.js`, purs) : air avec diffusion et vent dominant, eau transportée vers l'aval avec lacs et nappe, parcelles d'habitat et corridors coupés par le trafic (rétablis par la nouvelle tuile « passage à faune »), fertilité des sols, sept espèces emblématiques avec leurs seuils, scores et alertes (smog, algues, crue, canicule). Avancée à chaque mois, avant les stats.
+- **Rétroactions** dans `game.js` : la jauge Nature devient réelle, l'air pèse sur le bonheur, la nappe sur la santé, le tourisme sur les recettes des commerces, la fertilité et la pollinisation sur les champs. Sauvegarde version 2 avec migration.
+- **Rendu** : calques air, eau, faune et sols avec légende et hachures pour le daltonisme (sans appel de dessin supplémentaire), marqueurs d'espèces en billboards dessinés en code, brume au-dessus des quartiers pollués, eau qui verdit ; la faune animée n'apparaît que si l'espèce est présente.
+- **Interface** : feuille Calques avec pastille de rappel, fiche Nature (quatre sous-scores et liste des espèces avec leur condition), carnet des espèces, alertes avec bouton « Voir » qui centre la carte et allume le bon calque, bloc écologie dans la fiche de case.
+- **Vérifications** : 204 tests, `tools/play.mjs` 20 étapes, `tools/play-eco.mjs` 17 étapes, 0 erreur console, 27 appels de dessin avec un calque actif, précache 2,87 Mo.
+- **Équilibrage** (`tools/simulate.js`, 48 mois) : sans rien faire, pas de faillite ; l'étalement naïf coule dès le mois 20 ; **tout bétonner fait chuter la nature de 81 à 51 avec 11 mois d'exode** ; la conduite équilibrée atteint 619 habitants, nature 86 et 5 espèces (abeilles au mois 27, hirondelle au mois 21).
+- Incident : le conteneur a redémarré pendant le dernier chantier ; le travail était déjà committé, seul le rapport de l'agent a été perdu.
+- Limites / à faire : le bonheur de la conduite équilibrée retombe à 34 en fin de 4e année (pénurie de nourriture à surveiller) ; les icônes d'espèces sont petites en vue d'ensemble ; le voile de brume est plat et traversé par les tours ; toujours pas de son ni de contrats.
+
 ## 2026-10-05 — Étape 4 lancée : les systèmes nature
 
 - Décision de l'utilisateur : l'écologie avant la progression et le son.
