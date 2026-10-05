@@ -10,7 +10,14 @@
 // 90 = est, 180 = nord, 270 = ouest (three.js : `rotation.y = yaw * Math.PI / 180`).
 //
 // Les tuiles de la famille `nature` ne comptent pas comme « bâties » pour les rues (§4.1) ;
-// certaines changent le terrain de la case (`terrainAfter`) avec `native: false`.
+// certaines changent le terrain de la case (`terrainAfter`) avec `native: false` : forêt plantée → forêt,
+// zone humide restaurée → zone humide, champ cultivé et verger → champ ; le parc et la haie restent des
+// bâtiments sur le terrain d'origine. Le défrichement (`clearing`) ne se paie que sur une nature native.
+//
+// Économie (§6.4, lue par src/core/game.js) : `price` à la pose, `upkeep` par saison (niveau 1 ; les
+// niveaux suivants suivent UPKEEP_BY_LEVEL de balance.js), `income` recette par saison, `produce` /
+// `consume` par tuile (pour un quartier : pour ses habitants à pleine capacité, au prorata sinon),
+// `perLevel` les valeurs qui changent avec le niveau.
 
 /** Familles, dans l'ordre de la barre d'onglets. */
 export const FAMILIES = Object.freeze([
@@ -205,7 +212,7 @@ export const TILES = Object.freeze([
   nature({
     id: 'orchard', family: 'nature', label: 'Verger',
     description: 'Un peu de nourriture, un peu d’air pur, des abeilles.',
-    price: 50, upkeep: 2, levels: 1,
+    price: 50, upkeep: 2, levels: 1, terrainAfter: 'field',
     produce: { food: 2 }, consume: {}, income: 10, airSink: 2, habitat: null,
     models: { 1: ['tree-a', 'tree-b'] },
   }),
