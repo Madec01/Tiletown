@@ -324,3 +324,70 @@ Fonctions (chacune pure, `eco` réutilisé en place par `stepEcology` qui renvoi
 ### 10.5 Critères (étape 4)
 
 `tools/play-eco.mjs` : partir d'une partie neuve, poser une usine au bord de la rivière, avancer 6 mois, vérifier que l'eau en aval se dégrade et que l'air monte sous le vent ; poser une station d'épuration, vérifier l'amélioration ; raser une forêt et vérifier que le cerf disparaît ; vérifier qu'un calque s'affiche avec sa légende et que l'alerte smog propose « Voir ». Plus : `node --test tests/` vert, `node tools/build.js --check` à jour, appels de dessin ≤ 60 avec un calque actif, et `node tools/simulate.js` qui montre une partie « tout bétonner » qui s'effondre et une partie équilibrée qui prospère.
+
+## 11. Carrière, tutoriel et beauté (étape 5)
+
+Retour de l'utilisateur (2026-10-05) : « on démarre directement avec une ville, il faut une carrière avec tuto » et « le jeu n'est pas très beau ».
+
+### 11.1 Carrière (`src/core/career.js`, `src/data/levels.js`, purs)
+
+La partie ne commence plus par une ville toute faite : **on arrive sur une vallée vierge avec une mairie**, et on apprend en jouant.
+
+```js
+career = {
+  version: 1,
+  levelId: 'vallee-1',
+  unlocked: ['vallee-1'],                    // niveaux ouverts
+  stars: { 'vallee-1': 2 },                  // 0 à 3 par niveau
+  tiles: ['house', 'shop', ...],             // catalogue débloqué, persistant d'un niveau à l'autre
+  seen: ['pose', 'roads', 'time', ...]       // leçons déjà vues (le tutoriel ne se répète pas)
+}
+```
+
+`src/data/levels.js` : une liste ordonnée de niveaux. Chacun :
+
+```js
+{ id: 'vallee-1', title: 'La première vallée', subtitle: 'Apprendre à bâtir',
+  map: 'valley', seed: 101, cols: 12, rows: 16, years: 3,
+  money: 500, unlock: ['house', 'shop', 'field', 'park'],   // ce que ce niveau ajoute au catalogue
+  tutorial: 'base',                                          // identifiant du scénario (null = aucun)
+  goals: [ { id: 'pop', label: '120 habitants', kind: 'population', target: 120 },
+           { id: 'nature', label: 'Nature ≥ 70', kind: 'nature', target: 70 } ],
+  stars: [ { label: 'Finir l’année 3', test: 'goals' },
+           { label: 'Nature ≥ 80', kind: 'nature', target: 80 },
+           { label: '200 habitants sans exode', kind: 'population', target: 200, noExodus: true } ] }
+```
+
+Cinq niveaux au moins : `vallee-1` (tutoriel, large et facile), `riviere` (pont et aval à protéger), `bocage` (champs et abeilles), `coteau` (collines, routes chères), `grande-vallee` (carte 16 × 24, tout débloqué). Fonctions : `createCareer()`, `startLevel(career, levelId)` → `game`, `evaluateGoals(game, level)` → `[ { id, label, done, value, target } ]`, `evaluateStars(game, level)` → `{ count, details }`, `finishLevel(career, levelId, stars)` → `career`, `serializeCareer` / `deserializeCareer`.
+
+Le mode **bac à sable** garde `starterTown: true`, tout débloqué, sans objectif.
+
+### 11.2 Tutoriel (`src/core/tutorial.js`, pur)
+
+Un scénario est une liste de **leçons** ; chacune attend une condition et propose une action. Le tutoriel ne bloque jamais le jeu : il guide.
+
+```js
+{ id: 'pose', title: 'Poser un quartier',
+  text: 'Touchez Habitat, puis Quartier, puis une case verte près de la mairie.',
+  highlight: { kind: 'tab', id: 'habitat' } | { kind: 'tile', x, y } | { kind: 'gauge', id: 'nature' },
+  done: (game) => countBuildings(game, 'house') >= 1,
+  reward: { money: 0, text: 'Les rues se tracent toutes seules autour de vos îlots.' } }
+```
+
+`nextLesson(scenario, game, seen)` → la leçon courante ou null ; `lessonDone(lesson, game)`. Scénario `base` (dix leçons) : poser un quartier, voir les rues, lancer le temps, regarder les jauges, poser un commerce (emplois), poser une école (évolution), découvrir le calque Air, poser un parc, voir une espèce arriver, atteindre l'objectif. Textes courts, chaleureux, jamais culpabilisants.
+
+### 11.3 Interface (`src/ui/`)
+
+- **Écran titre** (`src/ui/title.js`) : nom du jeu, trois boutons (Reprendre, Carrière, Bac à sable), et un lien Options. Affiché au premier lancement et par le bouton menu.
+- **Carte de carrière** (`src/ui/career-map.js`) : les niveaux en liste verticale (téléphone), chacun avec son titre, ses étoiles gagnées et son état (verrouillé, ouvert, terminé).
+- **Bandeau d'objectifs** en jeu : une ligne discrète sous les jauges, dépliable, qui montre les objectifs et leur avancement.
+- **Tutoriel** (`src/ui/tutorial-ui.js`) : bulle en bas de l'écran avec le texte de la leçon et un bouton « Compris » ; surbrillance de l'élément visé (onglet, case via `r.setHighlight`, jauge) ; se range dès que la leçon est faite.
+- **Fin de niveau** (`src/ui/level-end.js`) : étoiles obtenues, objectifs atteints, score, boutons Rejouer et Niveau suivant.
+
+### 11.4 Beauté du rendu (`src/render3d/`)
+
+Travail séparé, mené par variantes comparées sur captures : lumière (soleil plus chaud et rasant, hémisphérique teintée ciel et sol, ombres douces), fond en dégradé plutôt qu'aplat, sol moins uniforme (variation de teinte par case), végétation plus dense et plus variée (rotation, échelle, teintes), toits et murs variés, eau retravaillée, teintes de saison, ombre de contact sous les objets, et un léger traitement d'image (vignette, saturation) si le coût sur téléphone le permet. Chaque variante est mesurée : appels de dessin, triangles, temps par image.
+
+### 11.5 Critères (étape 5)
+
+`tools/play-career.mjs` : démarrer une carrière neuve → vallée vierge avec la seule mairie, bulle du tutoriel visible ; suivre les trois premières leçons par gestes réels ; vérifier l'avancement des objectifs ; forcer l'atteinte des objectifs et vérifier l'écran de fin avec ses étoiles ; vérifier que le niveau suivant s'ouvre et que le catalogue débloqué est conservé ; recharger et retrouver la carrière. Plus : `node --test tests/` vert, build à jour, et les captures des variantes visuelles.
