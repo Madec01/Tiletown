@@ -8,8 +8,22 @@ import {
   levelResult,
   evaluateGoals as goalsOf,
   evaluateStars as starsOf,
+  createCareer,
+  deserializeCareer,
 } from "./career.js";
 export { createCareer, finishLevel } from "./career.js";
+
+/** Réunit les deux formats de sauvegarde sans perdre étoiles, tuiles ou leçons. */
+export function reconcileCareer(stored, embedded) {
+  const clean = (value) => {
+    try { return deserializeCareer(value); } catch { return createCareer(); }
+  };
+  const a = clean(stored), b = clean(embedded);
+  const union = (key) => [...new Set([...a[key], ...b[key]])];
+  const stars = { ...a.stars };
+  for (const [id, count] of Object.entries(b.stars)) stars[id] = Math.max(stars[id] || 0, count);
+  return { ...a, levelId: embedded ? b.levelId : a.levelId, stars, unlocked: union('unlocked'), tiles: union('tiles'), seen: union('seen') };
+}
 
 export function startLevel(career, id, options = {}) {
   const started = beginLevel(career, id);

@@ -2,7 +2,9 @@
 // serialize / deserialize du cœur, « ?new=1 », stockage cassé ou plein, sauvegarde illisible.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStorage, wantsNewGame, SAVE_KEY } from '../src/storage.js';
+import { createStorage, createCareerStorage, wantsNewGame, normalizeMode, SAVE_KEY, CAREER_KEY } from '../src/storage.js';
+import { createCareer, finishLevel, serializeCareer } from '../src/core/career.js';
+import { LEVELS } from '../src/data/levels.js';
 import { createGame, place, serialize, deserialize } from '../src/core/game.js';
 
 /** localStorage factice : Map + mêmes méthodes ; `failWrite` simule un stockage plein ou interdit. */
@@ -100,4 +102,58 @@ test('stockage indisponible, plein ou cassé : jamais d’exception, false / nul
   assert.equal(createStorage({ storage: ls, serialize: () => { throw new Error('x'); } }).saveGame({}), false);
   assert.equal(createStorage({ storage: ls }).saveGame(null), false);
   assert.equal(typeof deserialize, 'function');
+});
+
+
+test('mode et niveau dans l’enveloppe : une partie de carrière se retrouve telle quelle', () => {
+  const ls = fakeStorage();
+  const st = createStorage({ storage: ls, now: () => 1700000000000 });
+  const game = createGame({ level: LEVELS[0] });
+  assert.equal(st.saveGame(game, { mode: 'career', levelId: LEVELS[0].id }), true);
+  const raw = JSON.parse(ls.map.get(SAVE_KEY));
+  assert.equal(raw.mode, 'career');
+  assert.equal(raw.levelId, LEVELS[0].id);
+  assert.deepEqual(st.meta(), { savedAt: 1700000000000, seed: game.seed, month: 0, money: game.money, version: game.version, mode: 'career', levelId: LEVELS[0].id });
+  // Bac à sable : pas de niveau dans l’enveloppe.
+  st.saveGame(game, { mode: 'sandbox', levelId: 'ignoré' });
+  assert.equal(st.meta().mode, 'sandbox');
+  assert.equal(st.meta().levelId, undefined);
+  // Sans mode (sauvegarde d’avant la carrière) : l’enveloppe reste celle d’avant.
+  st.saveGame(game);
+  assert.equal(st.meta().mode, undefined);
+  assert.equal(normalizeMode('career'), 'career');
+  assert.equal(normalizeMode('title'), null);
+  assert.equal(normalizeMode(undefined), null);
+});
+
+test('carrière sauvegardée à part (tiletown.career) : perdre la partie ne perd pas les étoiles', () => {
+  const ls = fakeStorage();
+  const games = createStorage({ storage: ls });
+  const careers = createCareerStorage({ storage: ls });
+  assert.equal(careers.key, CAREER_KEY);
+  assert.equal(careers.has(), false);
+  assert.equal(careers.load(), null);
+  const career = finishLevel(createCareer(), LEVELS[0].id, 2);
+  assert.equal(careers.save(career), true);
+  assert.equal(careers.has(), true);
+  const back = careers.load();
+  assert.equal(back.stars[LEVELS[0].id], 2);
+  assert.ok(back.unlocked.includes(LEVELS[1].id), 'le niveau suivant est ouvert');
+  assert.deepEqual(back.tiles, serializeCareer(career).tiles);
+  // La partie en cours s’efface sans toucher à la carrière.
+  games.clearGame();
+  assert.equal(careers.has(), true, 'la carrière survit à la partie');
+  careers.clear();
+  assert.equal(careers.load(), null);
+  // Stockage cassé ou illisible : jamais d’exception.
+  assert.equal(createCareerStorage({ storage: () => null }).save(career), false);
+  assert.equal(createCareerStorage({ storage: () => null }).load(), null);
+  ls.map.set(CAREER_KEY, '{ pas du json');
+  assert.equal(createCareerStorage({ storage: ls }).load(), null);
+  ls.map.set(CAREER_KEY, JSON.stringify({ schema: 1, state: { levelId: 'inexistant' } }));
+  assert.equal(createCareerStorage({ storage: ls }).load(), null, 'carrière d’une version inconnue → null (on repart d’une carrière neuve)');
+  ls.map.set(CAREER_KEY, JSON.stringify({ schema: 1, state: { version: 1, levelId: 'inexistant', unlocked: [], stars: {}, tiles: [], seen: [] } }));
+  const repaired = createCareerStorage({ storage: ls }).load();
+  assert.equal(repaired.levelId, LEVELS[0].id, 'un niveau inconnu ramène au premier');
+  assert.equal(createCareerStorage({ storage: ls }).save(null), false);
 });

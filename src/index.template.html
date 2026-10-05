@@ -40,6 +40,9 @@
     <!-- Barre du haut : Population · Bonheur · Nature · Argent, date, pause / vitesse (src/ui/hud.js) -->
     <header id="hud" aria-label="État de la ville"></header>
 
+    <!-- Bandeau d'objectifs du niveau (carrière) : une ligne sous les jauges, dépliable (src/ui/goals.js) -->
+    <div id="goals" hidden></div>
+
     <!-- Mesures du prototype (?stats=1 ou développement) : appels de dessin, triangles, ms/image, i/s -->
     <div id="stats" aria-hidden="true"></div>
 
@@ -58,8 +61,14 @@
     <!-- Barre d'action au-dessus des onglets : tuile « en main », résumé du fantôme, ✓ et ✕ (src/ui/placement.js) -->
     <div id="action" aria-hidden="true"></div>
 
+    <!-- Bulle du tutoriel : titre, texte de la leçon et bouton « Compris » (src/ui/tutorial-ui.js) -->
+    <div id="tutorial" hidden></div>
+
     <!-- Barre d'onglets du catalogue : Habitat · Activité · Services · Infrastructures · Nature · Démolir · Calques -->
     <nav id="tabbar" aria-label="Catalogue"></nav>
+
+    <!-- Écrans pleins : titre, carte de carrière, fin de niveau (src/ui/title.js, career-map.js, level-end.js) -->
+    <div id="screens"></div>
 
     <!-- Téléphone tenu à l'horizontale -->
     <div id="rotate" aria-hidden="true">

@@ -108,7 +108,11 @@ Familles : `habitat`, `activity`, `services`, `infrastructure`, `nature`. Les id
 }
 ```
 
-Chaque GLB normalisé : échelle appliquée, matériaux remplacés par des couleurs de la palette (sans texture), compressé meshopt, centré sur l'origine, posé sur y = 0.
+Chaque GLB normalisé : échelle appliquée, compressé meshopt, centré sur l'origine, posé sur y = 0, **sans aucune texture** — toutes les couleurs sont cuites dans l'attribut `COLOR_0` (un seul matériau blanc par modèle).
+
+Les couleurs sont attribuées **par rôle**, pas par rapprochement de teinte (`tools/import-models.js`) : chaque aplat de la texture-palette du kit est classé (toiture, toiture-terrasse, façade, soubassement, menuiserie, vitrage, végétation, tronc, roche, métal, sol, accent) d'après sa couleur d'origine, sa hauteur dans la boîte englobante, l'orientation moyenne de ses faces et le profil du kit (`KIT_ROLE_PROFILES`, `tools/model-map.js`, surchargeable par modèle avec `profile`), puis reçoit une teinte de la sous-palette de ce rôle (`src/data/palette.js`), tirée avec l'identifiant du modèle comme graine : deux variantes d'un même type ont des toits et des façades différents. Le manifeste garde la légende dans `models.<id>.roles` (`{ rôle: teinte }`), et `palette` liste les 41 teintes des modèles (24 du jeu + 17 réservées aux modèles).
+
+Un modèle peut aussi porter des **détails de caractère** (`details` dans `tools/model-map.js`) : débord de toiture, corniche, cheminée, porche, lucarne, édicule de toit, en primitives biseautées posées APRÈS la mise à l'échelle, repérées par `atRel` (fraction de la boîte englobante) et `slice` (tranche de hauteur dont on mesure l'emprise).
 
 ## 6. API du rendu (`src/render3d/renderer.js`)
 
@@ -415,8 +419,9 @@ Diagnostic : **l'aspect cubique vient du terrain et de l'organisation du décor*
 
 ### Livraison de la refonte du 2026-10-05
 
-- Le sol de terre utilise désormais un mesh subdivisé unique, avec interpolation des hauteurs et couleurs (`terrain-mesh.js`). `surfaceHeight` garde l'altitude au centre d'une case ; `heightAt` fournit la surface continue des collines. Les calques écrivent les couleurs et hachures sur des plages de sommets ; revenir au calque neutre restaure la palette continue. L'eau reste instanciée. Une grille de cinq cases autour du fantôme est visible uniquement pendant la construction.
-- Les arbres feuillus ont des couronnes arrondies (`soft-trees.js`) intégrées au batching existant. Les modèles de bâtiments libres sont conservés, avec toitures recolorées et un décor groupé (`scenery.js`). Les aperçus du catalogue utilisent exactement ce pipeline de modèles.
-- `career.js` gère cinq niveaux définis dans `data/levels.js`, la mairie seule au départ, les étoiles, les niveaux ouverts et les bâtiments persistants. `career-session.js` raccorde le moteur à la sauvegarde de la partie et au bilan. `journey.js` gère huit missions avec primes ; les dix leçons de `tutorial.js` sont disponibles dans « Premiers pas », avec validation, saut et mémorisation. Les objectifs de niveau et le résultat à trois ans sont visibles dans l'interface.
-- `experience.js` orchestre accueil, raccourcis, carnet, carte de carrière, bilan et réglages. `audio.js` déverrouille musique et effets après un geste et mémorise les préférences. Les MP3 sont chargés et cachés à la demande, sans alourdir le précache initial.
-- Contrôles reproductibles : `npm test`, `npm run check`, `npm run review:mobile`. Le parcours navigateur couvre aussi le passage à la vallée suivante et la reprise des étoiles après rechargement.
+- `ground.js` utilise un maillage continu pour la terre et pour l’eau : relief interpolé, berges inclinées, rivière sinueuse et grille locale pendant la pose. Les calques écologiques restent actifs.
+- Les variantes de bâtiments, les feuillus, conifères et arbustes sont chargés depuis les GLB enrichis de `main`. `buildings.js` et `roads.js` gèrent leurs abords. Les 22 aperçus du catalogue sont régénérés depuis ces modèles. La lumière du soir et le rendu ACES restent disponibles.
+- `career.js` gère les cinq niveaux, les étoiles et les déblocages. `career-session.js` prépare les parties et réunit les anciennes carrières embarquées dans la partie avec la clé séparée `tiletown.career`, en conservant le meilleur progrès. `journey.js` conserve les huit missions avec primes uniques.
+- Les écrans titre, carte et résultat ainsi que les objectifs et le tutoriel utilisent les composants de `main`. Le résultat arrive quand les objectifs sont atteints ou après trois ans ; il permet aussi de continuer la même vallée en mode libre. La fin est sauvegardée et restaurée après rechargement.
+- `experience.js` apporte l’habillage mobile, les raccourcis de construction, le carnet et les réglages. `audio.js` déverrouille musique et effets après un geste, et mémorise les préférences. Les trois MP3 sont chargés et cachés à la demande.
+- Contrôles reproductibles : `npm test`, `npm run check`, `npm run review:mobile`, `node tools/play-career.mjs`. Les parcours couvrent la pose tactile, les primes, les trois premières leçons, le passage à la vallée suivante et la reprise des étoiles après rechargement.

@@ -14,7 +14,14 @@ import { isLayerKind, layerChoice, layerInfoOf, gradientCss, boundsText, pillTex
 import { sinceLabel, speciesRows, speciesCountText, speciesCellOf, speciesLabel, speciesArt, SPECIES_FALLBACK } from '../src/ui/species-book.js';
 import { scoreRows, scoreWord, natureText, SCORE_ROWS } from '../src/ui/nature-sheet.js';
 import { ecoRows, ecoWord, ecoSpeciesText, ECO_FIELDS } from '../src/ui/sheet-tile.js';
-import { seedFromSearch, hasSeedParam, describeTile, unlockHintFor, monthlyDelta, gaugesOf, eventPresentation, ecoAlertTitle, seeTargetOf, ECO_ALERT_TITLES } from '../src/main.js';
+import { seedFromSearch, hasSeedParam, describeTile, unlockHintFor, monthlyDelta, gaugesOf, eventPresentation, ecoAlertTitle, seeTargetOf, ECO_ALERT_TITLES, modeFromSearch, resumeInfo, allTileIds, levelYearText, goalsAllDone, levelIsOver, levelScoreOf } from '../src/main.js';
+import { titleButtons, resumeText, GAME_NAME, GAME_TAGLINE } from '../src/ui/title.js';
+import { levelState, levelRows, lockTextOf as levelLockText, starGlyphs, playLabel, progressText, MAX_STARS } from '../src/ui/career-map.js';
+import { goalRows, goalSummary, goalValueText, goalPercent } from '../src/ui/goals.js';
+import { lessonText, highlightOf, rewardOf } from '../src/ui/tutorial-ui.js';
+import { endTitle, endText, scoreText, nextLabel, starDetails } from '../src/ui/level-end.js';
+import { normalizeMode, MODES, SAVE_KEY, CAREER_KEY } from '../src/storage.js';
+import { LEVELS } from '../src/data/levels.js';
 import { layerInfo as rendererLayerInfo } from '../src/render3d/layers.js';
 import { SPECIES } from '../src/data/species.js';
 import { generateWorld } from '../src/core/worldgen.js';
@@ -303,4 +310,146 @@ test('main : alertes d’écologie en bandeau avec « Voir », arrivée et dépa
   assert.equal(seeTargetOf(null), null);
   assert.deepEqual(seeTargetOf({ layer: 'water' }), { x: null, y: null, layer: 'water' });
   assert.deepEqual(seeTargetOf({ x: 1.7, y: 2.2 }, 'fauna'), { x: 1, y: 2, layer: 'fauna' });
+});
+
+// ── Carrière, tutoriel et écrans (docs/ARCHITECTURE.md §11.3) ──────────────────────────────────
+
+test('écran titre : nom du jeu, sous-titre d’une ligne, « Reprendre » seulement s’il y a une partie', () => {
+  assert.equal(GAME_NAME, 'Tiletown');
+  assert.ok(GAME_TAGLINE.length > 10 && GAME_TAGLINE.length < 80 && !GAME_TAGLINE.includes('\n'), 'sous-titre d’une ligne');
+  const neuf = titleButtons({ hasSave: false });
+  assert.deepEqual(neuf.map((b) => b.id), ['career', 'sandbox'], 'premier lancement : pas de « Reprendre »');
+  assert.equal(neuf[0].kind, 'primary', 'Carrière est le bouton principal quand rien n’est sauvé');
+  const repris = titleButtons({ hasSave: true, resumeText: 'La première vallée · mai, an 2' });
+  assert.deepEqual(repris.map((b) => b.id), ['resume', 'career', 'sandbox']);
+  assert.equal(repris[0].kind, 'primary');
+  assert.equal(repris[0].sub, 'La première vallée · mai, an 2');
+  assert.ok(repris.every((b) => b.label && b.label.length <= 14), 'libellés courts (bouton de 56 px)');
+  assert.equal(resumeText({ mode: 'career', levelTitle: 'La première vallée', monthLabel: 'mai', year: 2 }), 'La première vallée · mai, an 2');
+  assert.equal(resumeText({ mode: 'sandbox', monthLabel: 'mars', year: 1 }), 'Bac à sable · mars, an 1');
+  assert.equal(resumeText({ mode: 'sandbox', year: 3 }), 'Bac à sable · an 3');
+});
+
+test('carte de carrière : état de chaque niveau, étoiles, condition de déverrouillage, avancement', () => {
+  const levels = [
+    { id: 'a', title: 'Vallée A', subtitle: 'un', years: 3, goals: [{ label: '100 habitants' }] },
+    { id: 'b', title: 'Vallée B', subtitle: 'deux', years: 3, goals: [] },
+    { id: 'c', title: 'Vallée C', subtitle: 'trois', years: 4, goals: [] },
+  ];
+  const career = { unlocked: ['a', 'b'], stars: { a: 2 } };
+  assert.equal(levelState(levels[0], career), 'done');
+  assert.equal(levelState(levels[1], career), 'open');
+  assert.equal(levelState(levels[2], career), 'locked');
+  assert.equal(levelState(levels[0], null), 'locked', 'sans carrière, rien n’est ouvert');
+  const rows = levelRows(levels, career);
+  assert.deepEqual(rows.map((r) => r.state), ['done', 'open', 'locked']);
+  assert.deepEqual(rows.map((r) => r.stars), [2, 0, 0]);
+  assert.equal(rows[0].goals.join(' '), '100 habitants');
+  assert.match(rows[2].lockText, /Vallée B/, 'la condition nomme le niveau à finir');
+  assert.equal(levelLockText(levels[0], levels, career), 'Se débloque en avançant dans la carrière', 'le premier niveau n’a pas de prédécesseur');
+  assert.equal(MAX_STARS, 3);
+  assert.equal(starGlyphs(2), '★★☆');
+  assert.equal(starGlyphs(0), '☆☆☆');
+  assert.equal(starGlyphs(9), '★★★', 'jamais plus de trois');
+  assert.equal(playLabel('open'), 'Jouer');
+  assert.equal(playLabel('done'), 'Rejouer');
+  assert.equal(playLabel('locked'), 'Verrouillé');
+  assert.equal(progressText(rows), '2 étoiles sur 9 · 1 vallée réussie');
+  assert.equal(progressText(levelRows(levels, { unlocked: ['a'], stars: {} })), '0 étoile sur 9 · 0 vallée réussie');
+  // Les vrais niveaux : le premier est ouvert dans une carrière neuve, les autres non.
+  const fresh = levelRows(LEVELS, { unlocked: [LEVELS[0].id], stars: {} });
+  assert.equal(fresh[0].state, 'open');
+  assert.ok(fresh.slice(1).every((r) => r.state === 'locked'), 'les niveaux suivants restent fermés');
+  assert.ok(fresh.every((r) => r.title && r.subtitle), 'chaque niveau a un titre et un sous-titre');
+});
+
+test('bandeau d’objectifs : résumé « Objectifs 1/2 », valeur sur cible, avancement en pourcent', () => {
+  const goals = [
+    { id: 'pop', label: '100 habitants', value: 40, target: 100, done: false },
+    { id: 'nature', label: 'Nature ≥ 70', value: 86, target: 70, done: true },
+  ];
+  assert.equal(goalSummary(goals).text, 'Objectifs 1/2');
+  assert.equal(goalSummary(goals).done, 1);
+  assert.equal(goalSummary([]).text, 'Aucun objectif');
+  assert.equal(goalSummary(goals.map((g) => ({ ...g, done: true }))).text, 'Objectifs atteints');
+  assert.equal(goalSummary(goals.map((g) => ({ ...g, done: true }))).all, true);
+  assert.equal(goalValueText(goals[0]), '40 / 100');
+  assert.equal(goalValueText({ ...goals[0], text: '3 espèces sur 5' }), '3 espèces sur 5', 'le texte du cœur prime');
+  assert.equal(goalPercent(goals[0]), 40);
+  assert.equal(goalPercent(goals[1]), 100, 'un objectif atteint remplit la barre');
+  assert.equal(goalPercent({ value: 5, target: 0, done: false }), 0);
+  const rows = goalRows([null, { label: 'x' }]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].id, 'goal-0', 'un objectif sans identifiant en reçoit un');
+  assert.equal(rows[0].label, 'Objectif');
+  assert.deepEqual(goalRows(null), []);
+});
+
+test('tutoriel : texte de la leçon, cible de la surbrillance (onglet, jauge, vitesse, case), récompense', () => {
+  const lesson = { id: 'pose', title: 'Poser un quartier', text: 'Touchez Habitat…', highlight: { kind: 'tab', id: 'habitat' }, reward: { money: 0, text: 'Bravo' } };
+  assert.deepEqual(lessonText(lesson), { id: 'pose', title: 'Poser un quartier', text: 'Touchez Habitat…' });
+  assert.equal(lessonText(null), null);
+  assert.equal(lessonText({}).title, 'Petite leçon', 'jamais de titre vide');
+  assert.deepEqual(highlightOf(lesson), { kind: 'tab', id: 'habitat' });
+  assert.deepEqual(highlightOf({ highlight: { kind: 'gauge', id: 'nature' } }), { kind: 'gauge', id: 'nature' });
+  assert.deepEqual(highlightOf({ kind: 'speed' }), { kind: 'gauge', id: 'speed' }, 'le bouton de vitesse est un halo de la barre du haut');
+  assert.deepEqual(highlightOf({ kind: 'tile', x: 3.7, y: 2 }), { kind: 'tile', x: 3, y: 2 });
+  assert.equal(highlightOf({ highlight: { kind: 'tile' } }), null, 'une case sans coordonnées ne surbrille rien');
+  assert.equal(highlightOf({ highlight: { kind: 'licorne', id: 'x' } }), null);
+  assert.equal(highlightOf(null), null);
+  assert.deepEqual(rewardOf(lesson), { money: 0, text: 'Bravo' });
+  assert.equal(rewardOf({ reward: {} }), null, 'une récompense vide ne dit rien');
+  assert.equal(rewardOf({}), null);
+});
+
+test('fin de niveau : titre selon les étoiles, trois lignes d’étoiles, score, bouton de droite', () => {
+  assert.equal(endTitle(3), 'Vallée magnifique !');
+  assert.equal(endTitle(2), 'Belle vallée !');
+  assert.equal(endTitle(1), 'Vallée réussie');
+  assert.equal(endTitle(0), 'L’année s’achève');
+  for (const n of [0, 1, 2, 3]) assert.ok(!/raté|perdu|échec|dommage|hélas/i.test(endText(n, { levelTitle: 'A' })), `jamais culpabilisant (${n} étoiles)`);
+  assert.match(endText(3, { levelTitle: 'La première vallée' }), /La première vallée/);
+  assert.match(scoreText(1240), /^Score\s:\s1\s240$/, 'milliers séparés par une espace insécable');
+  assert.equal(scoreText(-5), 'Score : 0');
+  assert.equal(nextLabel({ id: 'riviere', title: 'Au fil de la rivière' }), 'Niveau suivant');
+  assert.equal(nextLabel(null), 'Carte de carrière');
+  const details = starDetails({ count: 1, details: [{ id: 'goals', label: 'Objectifs', done: true }] });
+  assert.equal(details.length, 3, 'toujours trois étoiles affichées');
+  assert.deepEqual(details.map((d) => d.done), [true, false, false]);
+  assert.equal(details[1].label, 'Étoile 2');
+  assert.equal(starDetails(null).length, 3);
+});
+
+test('main : mode dans l’adresse, phrase de reprise, catalogue du bac à sable, fin de niveau', () => {
+  assert.equal(modeFromSearch('?mode=sandbox'), 'sandbox');
+  assert.equal(modeFromSearch('?mode=career'), 'career');
+  assert.equal(modeFromSearch('?mode=title'), 'title');
+  assert.equal(modeFromSearch('?mode=licorne'), null);
+  assert.equal(modeFromSearch(''), null, 'sans « ?mode= », l’écran titre décide');
+  assert.deepEqual([...MODES], ['title', 'career', 'sandbox']);
+  assert.equal(normalizeMode('career'), 'career');
+  assert.equal(normalizeMode('title'), null, 'l’écran titre n’est pas un mode de sauvegarde');
+  assert.notEqual(SAVE_KEY, CAREER_KEY, 'la carrière est rangée à part de la partie');
+  assert.equal(resumeInfo(null), null);
+  const carriere = resumeInfo({ mode: 'career', levelId: LEVELS[0].id, month: 14 }, LEVELS);
+  assert.equal(carriere.mode, 'career');
+  assert.equal(carriere.levelId, LEVELS[0].id);
+  assert.match(carriere.text, new RegExp(LEVELS[0].title));
+  assert.match(carriere.text, /an 2/);
+  assert.equal(resumeInfo({ month: 0 }, LEVELS).mode, 'sandbox', 'une vieille sauvegarde est un bac à sable');
+  const all = allTileIds();
+  assert.ok(all.includes('house') && all.includes('factory'), 'le bac à sable ouvre tout le catalogue');
+  assert.ok(!all.includes('townhall'), 'la mairie ne s’achète pas');
+  assert.equal(levelYearText({ month: 13 }, LEVELS[0]), `${LEVELS[0].title} · an 2 sur ${LEVELS[0].years}`);
+  assert.equal(levelYearText({ month: 999 }, LEVELS[0]), `${LEVELS[0].title} · an ${LEVELS[0].years} sur ${LEVELS[0].years}`, 'jamais au-delà de la dernière année');
+  assert.equal(levelYearText({ month: 0 }, null), '');
+  assert.equal(goalsAllDone([{ done: true }, { done: true }]), true);
+  assert.equal(goalsAllDone([{ done: true }, { done: false }]), false);
+  assert.equal(goalsAllDone([]), false, 'sans objectif, rien n’est « atteint »');
+  assert.equal(levelIsOver({ month: 36 }, { years: 3 }), true);
+  assert.equal(levelIsOver({ month: 35 }, { years: 3 }), false);
+  assert.equal(levelIsOver({ month: 99 }, null), false);
+  assert.equal(levelScoreOf({ stats: { population: 100, nature: 80 }, money: 500 }), 100 + 400 + 50);
+  assert.equal(levelScoreOf({}, null, () => 1234), 1234, 'le score du cœur est préféré');
+  assert.equal(levelScoreOf({ stats: { population: 10 } }, null, () => { throw new Error('x'); }), 10, 'un cœur qui échoue ne casse pas l’écran');
 });

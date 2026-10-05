@@ -4,20 +4,32 @@ Toute ressource du dépôt est sous licence libre compatible avec une publicatio
 
 ## Modèles 3D (`assets/models/*.glb`, `assets/models/manifest.json`)
 
-Tous les modèles dérivent des kits ci-dessous, créés et distribués par **Kenney** (www.kenney.nl) sous **Creative Commons Zero (CC0 1.0)** : usage personnel, éducatif et commercial libre, sans obligation de crédit (crédit volontaire). Texte de licence : `assets/models/LICENSE-kenney.txt`. Les modèles ont été normalisés par `tools/import-models.js` (échelle, orientation, couleurs quantifiées vers la palette commune de 24 teintes, assemblages, compression meshopt) ; les primitives ajoutées par Tiletown (rues étroites sur les arêtes, dalles, bassins, tas de compost, mâts) sont elles aussi CC0.
+La plupart des modèles dérivent des kits ci-dessous, créés et distribués par **Kenney** (www.kenney.nl) sous **Creative Commons Zero (CC0 1.0)** : usage personnel, éducatif et commercial libre, sans obligation de crédit (crédit volontaire). Texte de licence : `assets/models/LICENSE-kenney.txt`. Ils sont normalisés par `tools/import-models.js` (échelle, orientation, assemblages, compression meshopt) et **recolorés par rôle** : l'import devine le rôle de chaque aplat (toiture, façade, soubassement, menuiserie, vitrage, végétation, tronc, roche, métal, sol, accent) d'après sa couleur d'origine, sa hauteur dans la boîte englobante et l'orientation de ses faces, puis tire une teinte dans la sous-palette de ce rôle (`src/data/palette.js`). Les couleurs sont cuites en couleurs de sommets : les GLB publiés ne contiennent plus aucune texture.
+
+Toutes les pièces géométriques **créées par Tiletown** (rues étroites sur les arêtes, dalles, bassins, tas de compost, mâts, **famille d'arbres arrondis**, **détails de caractère des bâtiments**) sont des créations du projet, sous **CC0**.
 
 | Ressource | Auteur | Adresse | Licence | Utilisée pour |
 |---|---|---|---|---|
 | City Kit Roads 2.1 | Kenney | https://kenney.nl/assets/city-kit-roads | CC0 1.0 | `road-straight`, `road-corner`, `road-t`, `road-cross`, `road-crosswalk`, `bridge` |
-| City Kit Suburban 2.0 | Kenney | https://kenney.nl/assets/city-kit-suburban | CC0 1.0 | `house-a`, `house-b`, `house-c` |
-| City Kit Commercial 2.1 | Kenney | https://kenney.nl/assets/city-kit-commercial | CC0 1.0 | `building-small-a/b`, `building-tall-a/b`, `shop-a/b`, `office-a` |
-| City Kit Industrial 2.0 | Kenney | https://kenney.nl/assets/city-kit-industrial | CC0 1.0 | `factory-a/b`, `wind-turbine`, `solar`, `power-plant`, `compost`, `water-tower`, `wastewater` |
-| Nature Kit | Kenney | https://kenney.nl/assets/nature-kit | CC0 1.0 | `tree-a/b/c`, `pine-a/b`, `bush`, `flowers`, `rock-a/b`, `crop-wheat`, `crop-corn`, arbres et fleurs du `park` |
+| City Kit Suburban 2.0 | Kenney | https://kenney.nl/assets/city-kit-suburban | CC0 1.0 | `house-a` à `house-f` (six silhouettes : maison en L, maison à étage, toit plat, pignon frontal, cube, maison longue) |
+| City Kit Commercial 2.1 | Kenney | https://kenney.nl/assets/city-kit-commercial | CC0 1.0 | `building-small-a/b/c`, `building-tall-a/b/c`, `shop-a/b/c`, `office-a/b` |
+| City Kit Industrial 2.0 | Kenney | https://kenney.nl/assets/city-kit-industrial | CC0 1.0 | `factory-a/b/c`, `wind-turbine`, `solar`, `power-plant`, `compost`, `water-tower`, `wastewater` |
+| Nature Kit | Kenney | https://kenney.nl/assets/nature-kit | CC0 1.0 | `flowers`, `rock-a/b`, `crop-wheat`, `crop-corn`, fleurs du `park` (les arbres, arbustes et touffes d'herbe sont désormais des modèles Tiletown, ci-dessous) |
 | Train Kit | Kenney | https://kenney.nl/assets/train-kit | CC0 1.0 | `tram`, rails du `tram-stop` |
 | Car Kit 3.1 | Kenney | https://kenney.nl/assets/car-kit | CC0 1.0 | `car-a`, `car-b`, `truck`, `bus` (camionnette, provisoire) |
 | Fantasy Town Kit 2.0 | Kenney | https://kenney.nl/assets/fantasy-town-kit | CC0 1.0 | `market` (étals, charrette, banc, lanterne), fontaine et banc du `park`, banc et lanterne du `tram-stop` |
 | Modular Buildings | Kenney | https://kenney.nl/assets/modular-buildings | CC0 1.0 | `school`, `clinic`, `townhall` (assemblages) |
 | Mini Characters | Kenney | https://kenney.nl/assets/mini-characters | CC0 1.0 | téléchargé en réserve pour les habitants ; les habitants du jeu sont finalement des pantins Tiletown (`citizen-a/b/c`, ci-dessous) ; aucun GLB produit |
+
+### Modèles créés par Tiletown (`tools/model-map.js` + `tools/import-models.js`)
+
+Ces modèles ne viennent d'aucun kit : ils sont construits en primitives (boîtes biseautées, cylindres à normales lisses, ellipsoïdes irréguliers) aux couleurs de la palette, puis exportés en GLB. Création du projet, **CC0**.
+
+| Ressource | Auteur | Adresse | Licence | Détail |
+|---|---|---|---|---|
+| Famille d'arbres arrondis : `tree-round-s/m/l`, `tree-tall-s/m/l`, `pine-s/m/l`, `shrub-a/b`, `grass-tuft-a/b`, `sapling`, plus les identifiants historiques `tree-a/b/c`, `pine-a/b`, `bush` | création du projet | ce dépôt | CC0 | houppiers en deux à quatre ellipsoïdes lisses et légèrement déformés, troncs fuselés et un peu penchés, verts voisins tirés dans `FOLIAGE_COLORS` ; 28 à 306 triangles par modèle |
+| Détails de caractère des bâtiments : débords de toiture, corniches, cheminées, porches, lucarnes, édicules de toit | création du projet | ce dépôt | CC0 | boîtes **biseautées** posées après mise à l'échelle, repérées sur une tranche de hauteur du modèle |
+| Rues étroites sur les arêtes : `road-edge-straight`, `road-edge-node-2/3/4` | création du projet | ce dépôt | CC0 | chaussée, trottoirs et pointillés en primitives |
 
 ### Modèles animés (étape 2 : vallée animée) — `tools/import-animated.js`, `tools/build-fauna.js`
 
@@ -36,7 +48,7 @@ Non retenus : Quaternius « LowPoly Animated Animals » (mouton, FBX/OBJ/Blend s
 
 ## Palette
 
-Palette commune de 24 teintes (`src/data/palette.js`) : création Tiletown, CC0.
+Palette commune de 24 teintes (`PALETTE`, `src/data/palette.js`) : création Tiletown, CC0. Elle est prolongée, **pour les modèles 3D seulement**, par 17 teintes complémentaires (`MODEL_TINTS` : terracotta, ardoise foncée, brun doux, tuile claire, pastels bleu/vert/rose/ocre, pierre et enduit chauds, trois verts de feuillage, deux écorces, deux vitrages) et par des **sous-palettes par rôle** (`ROOF_COLORS`, `ROOF_FLAT_COLORS`, `WALL_COLORS`, `BASE_COLORS`, `FOLIAGE_COLORS`, `TRUNK_COLORS`, `TRIM_COLORS`, `GLASS_COLORS`, `ROCK_COLORS`, `METAL_COLORS`, `GROUND_COLORS`, `ACCENT_COLORS`). Création Tiletown, CC0.
 
 ## Interface, icônes, polices, audio
 
@@ -62,4 +74,4 @@ Palette commune de 24 teintes (`src/data/palette.js`) : création Tiletown, CC0.
 - Musiques complètes adaptées en MP3 128 kbit/s, 44,1 kHz, normalisation −18 LUFS / −2 dBTP. Sources et transformations dans `assets/audio/SOURCES.md`. Aucun extrait de Seve.
 - Pictogrammes d’interface adaptés des tracés **Lucide** — [projet](https://lucide.dev), [source](https://github.com/lucide-icons/lucide) — **ISC**. Licence dans `assets/icons/LICENSE-lucide.txt`. Tracés embarqués dans `src/ui/icons.js`.
 - Les **22 aperçus WebP** de `assets/previews/` sont des rendus des modèles GLB libres déjà crédités ci-dessus, réalisés par `tools/render-previews.mjs`. Aucune illustration de bâtiment provenant d’un autre jeu.
-- Jardinières, clôtures, lampadaires et détails de berges : géométrie construite par le moteur (`src/render3d/scenery.js`). Couronnes arrondies des arbres : modélisation procédurale interne (`src/render3d/soft-trees.js`) remplaçant les trois silhouettes de feuillus au chargement. Terrain continu : `src/render3d/terrain-mesh.js`. Retours sonores de validation : synthèse Web Audio (`src/audio.js`).
+- Les abords et les sols continus sont produits par `src/render3d/buildings.js`, `roads.js` et `ground.js`. Les arbres proviennent des modèles libres enrichis crédités ci-dessus. Retours sonores de validation : synthèse Web Audio (`src/audio.js`).

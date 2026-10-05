@@ -25,7 +25,6 @@
 // Toutes les géométries portent position, normal, color (Float32), sont centrées en X/Z, posées sur y = 0.
 
 import * as THREE from 'three';
-import { softTree } from './soft-trees.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -587,19 +586,7 @@ export async function loadModels(manifestUrl, options = {}) {
       try {
         const url = resolveUrl(manifestUrl, entry.file || `${id}.glb`);
         const gltf = await loader.loadAsync(url);
-        let { geometry, kind, texture, parts: rawParts } = bakeScene(gltf.scene, textureCache, excludedNodeNames(entry));
-        const tree = softTree(id);
-        if (tree) { geometry.dispose(); geometry=tree; }
-        // Les toitures des maisons deviennent terre cuite, les jardins gardent leur vert.
-        if (/^(house-|shop-|school$)/.test(id) && geometry.attributes.color) {
-          const colors = geometry.attributes.color, pos = geometry.attributes.position;
-          const top = geometry.boundingBox.max.y;
-          const roof = new THREE.Color(id === 'house-b' ? '#e8ac78' : id.startsWith('shop') ? '#72969a' : '#c77958');
-          for (let v=0;v<colors.count;v++) {
-            const r=colors.getX(v),g=colors.getY(v),b=colors.getZ(v);
-            if (pos.getY(v)>top*.48 && g>r*1.09 && g>b*1.12) colors.setXYZ(v,roof.r,roof.g,roof.b);
-          }
-        }
+        const { geometry, kind, texture, parts: rawParts } = bakeScene(gltf.scene, textureCache, excludedNodeNames(entry));
         let material = vertexMaterial;
         if (kind === 'textured' && texture) {
           if (!texturedMaterials.has(texture.uuid)) {

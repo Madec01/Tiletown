@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tiletown — scène de référence du paysage</title>
+<!--
+  PETITE SCÈNE DE RÉFÉRENCE pour le travail sur l'aspect du terrain (docs/ARCHITECTURE.md §11.4) :
+  une rivière courbe, une colline douce, un bosquet et trois maisons. Toujours la même graine, le
+  même cadrage : deux rendus se comparent pixel à pixel.
+
+  Paramètres :
+    ?view=general | colline | berge | large   cadrage (défaut : general)
+    ?layer=air|water|fauna                    calque écologique par-dessus le sol
+    ?pattern=1                                hachures (mode daltonien)
+    ?hint=1                                   liseré de grille autour d'une case (aide à la pose)
+    ?grid=1                                   monde quadrillé de contrôle
+    ?shadows=0  ?nomodels=1  ?stats=1         comme la fixture de mesure
+    ?t=2.5                                    horloge de l'eau figée (captures déterministes)
+-->
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/examples/jsm/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe6; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; }
+  #stats { position: fixed; left: 8px; top: 8px; font: 11px/1.4 monospace; color: #333; background: rgba(255,255,255,.78); padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="stats"></div>
+<script type="module">
+import { createRenderer } from '../src/render3d/renderer.js';
+
+const params = new URLSearchParams(location.search);
+const COLS = 14, ROWS = 18, SEED = 70701;
+
+/** Monde de référence : rivière courbe, colline douce, bosquet, trois maisons. */
+function referenceWorld() {
+  const idx = (x, y) => y * COLS + x;
+  const tiles = new Array(COLS * ROWS);
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    tiles[idx(x, y)] = { terrain: 'grass', flow: null, native: true, building: null, variant: (x * 3 + y * 5) % 4 };
+  }
+  const set = (x, y, terrain, flow = null) => {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    const t = tiles[idx(x, y)];
+    t.terrain = terrain; t.flow = flow;
+  };
+
+  if (params.get('grid') === '1') {
+    // Monde de contrôle : damier prairie / forêt, pour juger les transitions de couleur.
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) set(x, y, (x + y) % 2 ? 'meadow' : 'forest');
+    return { seed: SEED, cols: COLS, rows: ROWS, tiles, edges: emptyEdges(), traffic: emptyTraffic() };
+  }
+
+  // --- Rivière courbe, du nord au sud, qui décrit un S -----------------------------------------
+  // x = f(y) lissé : une vraie courbe, pas un escalier aléatoire.
+  const riverX = [];
+  for (let y = 0; y < ROWS; y++) {
+    const u = y / (ROWS - 1);
+    const x = 3.1 + 3.3 * Math.sin(u * Math.PI * 1.15 + 0.35);
+    riverX.push(Math.max(1, Math.min(COLS - 3, Math.round(x))));
+  }
+  for (let y = 0; y < ROWS; y++) {
+    set(riverX[y], y, 'river', 'S');
+    if (y > 0 && riverX[y] !== riverX[y - 1]) {
+      // Coude : on remplit la case de liaison pour que l'eau reste continue.
+      const a = Math.min(riverX[y], riverX[y - 1]), b = Math.max(riverX[y], riverX[y - 1]);
+      for (let x = a; x <= b; x++) set(x, y - 1, 'river', riverX[y] > riverX[y - 1] ? 'E' : 'W');
+      set(riverX[y], y, 'river', 'S');
+    }
+  }
+  // Zones humides sur la rive intérieure du premier coude : une nappe de plusieurs cases, assez
+  // large pour juger son contour (gros plan `humide`).
+  for (const [x, y] of [[7, 3], [8, 3], [7, 4], [8, 4], [9, 4], [7, 5], [8, 5], [9, 3]]) {
+    if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'wetland');
+  }
+
+  // --- Colline douce à l'est (groupe de cases : doit donner UNE colline) ------------------------
+  const hill = [[10, 9], [11, 9], [12, 9], [10, 10], [11, 10], [12, 10], [13, 10], [11, 11], [12, 11], [10, 8], [11, 8], [12, 12], [13, 9]];
+  for (const [x, y] of hill) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'hill');
+
+  // --- Bosquet au sud-ouest (doit donner UNE forêt, pas des pavés d'arbres) ---------------------
+  const grove = [[1, 12], [2, 12], [3, 12], [1, 13], [2, 13], [3, 13], [4, 13], [2, 14], [3, 14], [1, 14], [4, 12], [2, 11], [3, 11]];
+  for (const [x, y] of grove) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'forest');
+  // Prairie fleurie entre la forêt et la rivière, champ au nord-ouest.
+  for (const [x, y] of [[5, 11], [5, 12], [6, 12], [4, 10], [5, 10], [6, 13], [1, 10], [2, 10]]) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'meadow');
+  for (const [x, y] of [[1, 1], [2, 1], [1, 2], [2, 2], [3, 1]]) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'field');
+
+  // --- Trois maisons et la mairie, sur la rive ouest, au milieu ---------------------------------
+  const houses = [[2, 6, 'house', 2], [3, 6, 'house', 1], [2, 7, 'house', 1], [3, 7, 'townhall', 1]];
+  for (const [x, y, type, level] of houses) {
+    const t = tiles[idx(x, y)];
+    if (t.terrain === 'river' || t.terrain === 'lake') continue;
+    t.terrain = 'grass';
+    t.building = { type, level, variant: (x + y) % 3, yaw: [0, 90, 180, 270][(x * 2 + y) % 4] };
+    t.native = false;
+  }
+
+  // --- Arêtes : rues entre les îlots bâtis, chemins vers la nature ------------------------------
+  const urban = new Set(['house', 'townhall']);
+  const built = (t) => t && t.building && urban.has(t.building.type);
+  const water = (t) => t && (t.terrain === 'river' || t.terrain === 'lake');
+  const h = new Uint8Array((ROWS + 1) * COLS), v = new Uint8Array(ROWS * (COLS + 1));
+  const value = (a, b) => (built(a) && built(b) ? 2 : (built(a) || built(b)) && !water(a) && !water(b) ? 1 : 0);
+  for (let y = 1; y < ROWS; y++) for (let x = 0; x < COLS; x++) h[y * COLS + x] = value(tiles[idx(x, y - 1)], tiles[idx(x, y)]);
+  for (let y = 0; y < ROWS; y++) for (let x = 1; x < COLS; x++) v[y * (COLS + 1) + x] = value(tiles[idx(x - 1, y)], tiles[idx(x, y)]);
+  return { seed: SEED, cols: COLS, rows: ROWS, tiles, edges: { h, v }, traffic: { h: new Float32Array(h.length), v: new Float32Array(v.length) } };
+}
+
+const emptyEdges = () => ({ h: new Uint8Array((ROWS + 1) * COLS), v: new Uint8Array(ROWS * (COLS + 1)) });
+const emptyTraffic = () => ({ h: new Float32Array((ROWS + 1) * COLS), v: new Float32Array(ROWS * (COLS + 1)) });
+
+/** Cadrages comparables : { x, y, zoom } en coordonnées de case. */
+const VIEWS = {
+  general: { x: 6.2, y: 8.6, zoom: 12 },        // la vallée d'un coup d'œil
+  large: null,                                  // toute la carte
+  colline: { x: 11.6, y: 9.9, zoom: 6.2 },      // gros plan sur la colline
+  berge: { x: 5.6, y: 4.6, zoom: 6.2 },         // gros plan sur un coude de la rivière
+  foret: { x: 2.8, y: 12.6, zoom: 6.2 },        // gros plan sur le bosquet
+  riviere: { x: 4.6, y: 9.0, zoom: 9 },         // le S de la rivière en entier : la ligne d'eau se juge ici
+  coude: { x: 3.4, y: 12.8, zoom: 4.4 },        // gros plan serré sur un double coude (angles droits ?)
+  humide: { x: 7.8, y: 4.2, zoom: 5.0 },        // gros plan sur la nappe des zones humides
+};
+
+const canvas = document.getElementById('map');
+const statsEl = document.getElementById('stats');
+const showStats = params.get('stats') === '1';
+if (showStats) statsEl.style.display = 'block';
+
+const world = referenceWorld();
+const tiletown = {
+  ready: false,
+  world,
+  renderer: null,
+  stats: () => (tiletown.renderer ? tiletown.renderer.stats() : null),
+  /** Force n images et renvoie la médiane du temps CPU de rendu (ms). */
+  renderFrames(n = 10) {
+    const r = tiletown.renderer; if (!r) return null;
+    const times = [];
+    for (let i = 0; i < n; i++) { r.invalidate(); r.render(0); times.push(r.stats().frameMs); }
+    times.sort((a, b) => a - b);
+    return times[Math.floor(times.length / 2)];
+  },
+  /** Change de cadrage sans recharger la page (captures en série). */
+  setView(name) { applyView(name); },
+};
+window.__tiletown = tiletown;
+
+const renderer = await createRenderer(canvas, {
+  manifestUrl: params.get('nomodels') === '1' ? null : '../assets/models/manifest.json',
+  pixelRatioMax: 2,
+  shadows: params.get('shadows') !== '0',
+});
+tiletown.renderer = renderer;
+renderer.setWorld(world);
+
+function applyView(name) {
+  const v = VIEWS[name] || VIEWS.general;
+  // `lookAt` vise le centre de la case (x + 0,5) : on retranche 0,5 pour viser le point voulu.
+  if (!v) renderer.camera.fitAll(); else renderer.camera.lookAt(v.x - 0.5, v.y - 0.5, v.zoom);
+  renderer.invalidate();
+}
+
+if (params.get('layer')) {
+  const values = new Float32Array(COLS * ROWS);
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    values[y * COLS + x] = Math.max(0, Math.min(100, 50 + 46 * Math.sin(x * 0.55) * Math.cos(y * 0.42)));
+  }
+  renderer.setLayer(params.get('layer'), values);
+}
+if (params.get('pattern') === '1') renderer.setLayerPattern(true);
+if (params.get('hint') === '1') renderer.setGhost({ x: 5, y: 8, tileId: 'house', ok: true, yaw: 0 });
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  renderer.resize(w, h, window.devicePixelRatio || 1);
+  applyView(params.get('view') || 'general');
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Horloge de l'eau figée : deux captures du même paramétrage sont identiques.
+const frozen = params.has('t') ? Number(params.get('t')) : 2.4;
+if (Number.isFinite(frozen)) renderer.debug.ground.setTime(frozen);
+
+// Gestes minimaux pour l'essai manuel.
+const pointers = new Map();
+let lastPinch = null;
+canvas.addEventListener('pointerdown', (e) => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  if (pointers.size === 1) renderer.camera.pan(e.clientX - p.x, e.clientY - p.y);
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (lastPinch) renderer.camera.zoomAt(d / lastPinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    lastPinch = d;
+  }
+});
+const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = null; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); renderer.camera.zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
+
+let ready = false;
+function loop() {
+  // Scène figée : on ne fait pas avancer l'eau ni les acteurs (dt = 0) pour des captures stables.
+  const drew = renderer.render(0);
+  if (drew && !ready) { ready = true; tiletown.ready = true; }
+  if (showStats) {
+    const s = renderer.stats();
+    statsEl.textContent = `appels ${s.calls}  triangles ${s.triangles}  image ${s.frameMs.toFixed(1)} ms\n`
+      + `sol ${JSON.stringify(s.ground)}\n`
+      + `îlots ${s.buildings.placements}  zoom ${renderer.camera.state.zoom.toFixed(2)}`;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

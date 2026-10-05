@@ -13,7 +13,7 @@ import {
   HAZE_THRESHOLD, HAZE_HEIGHT, HAZE_SIZE, HAZE_MAX, HAZE_MIN_DENSITY,
 } from '../src/render3d/effects.js';
 import {
-  flowVector, bankMask, bankVector, BANK_N, BANK_E, BANK_S, BANK_W, createGround,
+  flowVector, createGround, shoreDistance, isWaterAt,
   WATER_LEVEL, WETLAND_FILM_LEVEL, WATER_STYLES, createWaterMaterial, createLandMaterial,
 } from '../src/render3d/ground.js';
 import { BUILDING_SCALE } from '../src/render3d/buildings.js';
@@ -78,21 +78,22 @@ test('flowVector : N = −Z, E = +X, S = +Z, W = −X, lac = 0', () => {
   assert.deepEqual(flowVector('N'), [0, -1], 'renvoie une copie');
 });
 
-test('bankMask : côtés bordés de terre, pas d’écume au bord du monde ni vers une autre eau', () => {
-  const world = riverColumn(makeWorld(3, 3), 1);
-  assert.equal(bankMask(world, 1, 1), BANK_E | BANK_W, 'rivière : herbe à l’est et à l’ouest');
-  assert.equal(bankMask(world, 1, 0), BANK_E | BANK_W, 'bord nord de la carte : l’eau continue');
-  setTerrain(world, 0, 1, 'lake');
-  assert.equal(bankMask(world, 1, 1), BANK_E, 'un lac à l’ouest n’est pas une berge');
-  assert.equal(bankMask(world, 0, 1), BANK_N | BANK_S, 'le lac : herbe au nord et au sud, rivière à l’est, bord à l’ouest');
-  setTerrain(world, 2, 1, 'wetland');
-  assert.equal(bankMask(world, 1, 1), BANK_E, 'la zone humide compte comme une berge');
-  const lake = setTerrain(makeWorld(3, 3), 1, 1, 'lake');
-  assert.equal(bankMask(lake, 1, 1), 15, 'lac d’une case : quatre berges');
-  assert.deepEqual(bankVector(BANK_E | BANK_W), [0, 1, 0, 1]);
-  assert.deepEqual(bankVector(15), [1, 1, 1, 1]);
-  assert.deepEqual(bankVector(0), [0, 0, 0, 0]);
-  assert.deepEqual([BANK_N, BANK_E, BANK_S, BANK_W], [1, 2, 4, 8]);
+test('shoreDistance / isWaterAt : la ligne d’eau est le niveau 0,5 du champ, pas le bord des cases', () => {
+  const world = riverColumn(makeWorld(5, 5), 2);
+  // Au centre d’une case d’eau, l’eau est profonde ; au centre d’une case de terre, on est au sec —
+  // exactement, quelle que soit la graine : c’est ce qui garantit une rivière continue et sans flaque.
+  assert.ok(isWaterAt(world, 2.5, 2.5) && shoreDistance(world, 2.5, 2.5) > 0.25, 'cœur de la rivière');
+  assert.ok(!isWaterAt(world, 0.5, 2.5) && shoreDistance(world, 0.5, 2.5) < -0.25, 'pleine terre');
+  assert.ok(!isWaterAt(world, 4.5, 4.5), 'loin de la rivière');
+  // La distance au rivage décroît continûment quand on traverse la berge.
+  let prev = shoreDistance(world, 1.0, 2.5);
+  for (let x = 1.025; x <= 4; x += 0.025) {
+    const d = shoreDistance(world, x, 2.5);
+    assert.ok(Math.abs(d - prev) < 0.08, `distance au rivage continue en x = ${x.toFixed(3)}`);
+    prev = d;
+  }
+  // La rivière reste continue d’un bout à l’autre : le champ vaut 1 tout le long des centres d’eau.
+  for (let z = 0; z <= 5; z += 0.05) assert.ok(isWaterAt(world, 2.5, z), `rivière interrompue en z = ${z.toFixed(2)}`);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -130,7 +131,7 @@ test('collectSmokeEmitters : 1 à 2 cheminées par usine et centrale, au-dessus 
   for (const e of emitters) {
     const tx = e.tile % 5, ty = Math.floor(e.tile / 5);
     assert.ok(e.x > tx && e.x < tx + 1 && e.z > ty && e.z < ty + 1, `dans sa case (${e.x}, ${e.z})`);
-    assert.ok(e.y > 0.45, `au-dessus du sol : ${e.y}`);
+    assert.ok(e.y > BUILDING_SCALE * 0.6, `au-dessus du sol : ${e.y}`);
     assert.ok(e.seed >= 0 && e.seed < 1);
     assert.equal(typeof e.model, 'string');
   }
@@ -334,7 +335,7 @@ test('createEffects : plafond de 160 bouffées, réparti entre les émetteurs', 
 // ---------------------------------------------------------------------------------------------
 // Eau animée (ground.js)
 
-test('createGround : eau profonde et pellicule des zones humides, attributs aFlow / aBanks / aStyle, horloge', () => {
+test('createGround : nappes d’eau SOUDÉES et sinueuses, attributs par sommet, horloge', () => {
   const world = riverColumn(makeWorld(4, 4), 1);
   setTerrain(world, 2, 1, 'lake');
   setTerrain(world, 3, 1, 'wetland');
@@ -344,47 +345,106 @@ test('createGround : eau profonde et pellicule des zones humides, attributs aFlo
   assert.deepEqual({ tiles: ground.stats.tiles, water: ground.stats.water, wetland: ground.stats.wetland, land: ground.stats.land }, { tiles: 16, water: 5, wetland: 2, land: 11 });
   const water = ground.group.getObjectByName('water');
   const film = ground.group.getObjectByName('wetland-film');
-  assert.ok(water.isInstancedMesh && film.isInstancedMesh);
-  assert.equal(water.material, film.material, 'un seul matériau d’eau (un programme)');
-  assert.equal(water.count, 5); assert.equal(film.count, 2);
+  // UN SEUL MAILLAGE par nappe, plus un plan par case : c’est lui qui porte le contour sinueux.
+  assert.ok(water.isMesh && !water.isInstancedMesh, 'la rivière est un maillage unique');
+  assert.ok(film.isMesh && !film.isInstancedMesh, 'les zones humides aussi');
+  assert.equal(water.material.customProgramCacheKey(), film.material.customProgramCacheKey(), 'un seul programme d’eau');
+  assert.equal(water.material.transparent, false, 'l’eau profonde est opaque');
+  assert.equal(film.material.transparent, true, 'la pellicule des zones humides se fond dans la terre');
   assert.equal(water.castShadow, false); assert.equal(water.receiveShadow, true);
   const a = water.geometry.attributes;
-  assert.ok(a.aFlow.isInstancedBufferAttribute && a.aBanks.isInstancedBufferAttribute && a.aStyle.isInstancedBufferAttribute);
-  // Instances d'eau dans l'ordre de lecture : (1,0), (1,1), (2,1), (1,2), (1,3)
-  const m = new THREE.Matrix4(); const pos = new THREE.Vector3();
-  water.getMatrixAt(0, m); pos.setFromMatrixPosition(m);
-  assert.ok(near(pos.x, 1.5) && near(pos.y, WATER_LEVEL) && near(pos.z, 0.5), `plan d’eau en (1,0) à y = ${WATER_LEVEL} : ${pos.toArray()}`);
-  assert.deepEqual(Array.from(a.aFlow.array.slice(0, 2)), [0, 1], 'rivière vers le sud : +Z');
-  assert.ok(near(a.aStyle.array[0], WATER_STYLES.river[0]) && a.aStyle.array[1] === WATER_STYLES.river[1], 'style rivière');
-  assert.deepEqual(Array.from(a.aBanks.array.slice(0, 4)), [0, 1, 0, 1], '(1,0) : herbe à l’est et à l’ouest, bord au nord, rivière au sud');
-  assert.deepEqual(Array.from(a.aBanks.array.slice(4, 8)), [0, 0, 0, 1], '(1,1) : lac à l’est, herbe à l’ouest');
-  assert.deepEqual(Array.from(a.aFlow.array.slice(2, 4)), [0, 1]);
-  assert.deepEqual(Array.from(a.aFlow.array.slice(4, 6)), [0, 0], 'lac : pas de courant');
-  assert.ok(near(a.aStyle.array[4], WATER_STYLES.lake[0]) && a.aStyle.array[5] === WATER_STYLES.lake[1], 'style lac');
-  assert.deepEqual(Array.from(a.aBanks.array.slice(8, 12)), [1, 1, 1, 0], 'lac (2,1) : zone humide à l’est = berge, rivière à l’ouest');
-  // Pellicule : posée sur la terre, sans courant ni écume, ondulation très faible.
-  film.getMatrixAt(0, m); pos.setFromMatrixPosition(m);
-  assert.ok(near(pos.x, 3.5) && near(pos.y, WETLAND_FILM_LEVEL) && near(pos.z, 1.5), `pellicule en (3,1) à y = ${WETLAND_FILM_LEVEL} : ${pos.toArray()}`);
+  for (const name of ['position', 'normal', 'color', 'aFlow', 'aStyle', 'aShore', 'aLayer', 'aQuality']) {
+    assert.ok(a[name] && !a[name].isInstancedBufferAttribute, `attribut par sommet ${name}`);
+  }
+  assert.ok(a.position.count > 50, `nappe subdivisée : ${a.position.count} sommets`);
+  assert.ok(ground.stats.waterTriangles > 0 && ground.stats.drawables === 3, 'terre + rivière + zones humides');
+
+  // Sommets SOUDÉS : jamais deux fois la même position (aucune fente possible dans la nappe).
+  const seen = new Set();
+  for (let v = 0; v < a.position.count; v++) {
+    const key = `${a.position.getX(v).toFixed(5)},${a.position.getZ(v).toFixed(5)}`;
+    assert.ok(!seen.has(key), `sommet en double en ${key}`);
+    seen.add(key);
+  }
+  // La nappe est à la ligne d’eau, et son bord se glisse SOUS la berge (distance au rivage < 0).
+  let minShore = Infinity, maxShore = -Infinity, offGrid = 0;
+  for (let v = 0; v < a.position.count; v++) {
+    assert.ok(near(a.position.getY(v), WATER_LEVEL), 'la nappe est au niveau de l’eau');
+    minShore = Math.min(minShore, a.aShore.getX(v));
+    maxShore = Math.max(maxShore, a.aShore.getX(v));
+    const x = a.position.getX(v), z = a.position.getZ(v);
+    // Un sommet de contour ne tombe sur aucune des deux lignes de la grille : le bord ne suit plus les cases.
+    if (Math.abs(x - Math.round(x)) > 1e-4 && Math.abs(z - Math.round(z)) > 1e-4) offGrid++;
+  }
+  assert.ok(minShore < 0, 'le bord de la nappe passe sous la berge');
+  assert.ok(maxShore > 0.45, 'et le cœur de l’eau est à une demi-case du rivage');
+  assert.ok(offGrid > 0, 'des sommets hors des lignes de la grille : le contour ne suit plus les cases');
+  // Courant : vers le sud (+Z) au cœur de la rivière, nul au cœur du lac dormant.
+  const attrAt = (mesh, name, x, z) => {
+    const p = mesh.geometry.attributes.position, at = mesh.geometry.attributes[name];
+    let best = -1, bestD = Infinity;
+    for (let v = 0; v < p.count; v++) {
+      const d = Math.hypot(p.getX(v) - x, p.getZ(v) - z);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    return at.itemSize === 1 ? at.getX(best) : [at.getX(best), at.getY(best)];
+  };
+  const flowMid = attrAt(water, 'aFlow', 1.5, 3.5);
+  assert.ok(flowMid[1] > 0.8 && Math.abs(flowMid[0]) < 0.3, `rivière vers le sud : ${flowMid}`);
+  const styleRiver = attrAt(water, 'aStyle', 1.5, 3.5);
+  assert.ok(near(styleRiver[0], WATER_STYLES.river[0], 1e-3) && styleRiver[1] > 0.9, 'style rivière');
+  const styleLake = attrAt(water, 'aStyle', 2.5, 1.5);
+  assert.ok(styleLake[1] < 0.3, 'lac : pas de bandes de courant');
+  // Pellicule : posée JUSTE au-dessus du sol creusé, donc en creux dans la prairie, sans courant.
+  const fp = film.geometry.attributes.position;
+  let lowest = Infinity, highest = -Infinity;
+  for (let v = 0; v < fp.count; v++) { lowest = Math.min(lowest, fp.getY(v)); highest = Math.max(highest, fp.getY(v)); }
+  assert.ok(highest < WETLAND_FILM_LEVEL + 1e-6, 'jamais au-dessus de la plaine');
+  assert.ok(lowest < 0, 'la nappe humide est légèrement ENFONCÉE dans le sol');
   assert.ok(WETLAND_FILM_LEVEL > 0 && WETLAND_FILM_LEVEL < 0.012, 'au-dessus de la terre, sous les trottoirs');
-  const f = film.geometry.attributes;
-  assert.deepEqual(Array.from(f.aFlow.array.slice(0, 2)), [0, 0]);
-  assert.deepEqual(Array.from(f.aBanks.array.slice(0, 4)), [0, 0, 0, 0]);
-  assert.ok(near(f.aStyle.array[0], WATER_STYLES.wetland[0]) && f.aStyle.array[1] === WATER_STYLES.wetland[1], 'style zone humide');
+  assert.ok(near(attrAt(film, 'aStyle', 3.5, 1.5)[0], WATER_STYLES.wetland[0], 1e-4), 'style zone humide');
   assert.ok(WATER_STYLES.wetland[0] < WETLAND_FILM_LEVEL, 'l’ondulation ne traverse pas la terre');
-  // Couleurs : la pellicule prend la couleur de la case tirée vers l'eau courante ; les calques la suivent.
-  const c = new THREE.Color();
-  film.getColorAt(0, c);
-  const wet = new THREE.Color('#91b397'), river = new THREE.Color('#6fbcc1');
-  assert.ok(near(c.r, (wet.r + river.r) / 2, 1e-3) && near(c.b, (wet.b + river.b) / 2, 1e-3));
+
+  // Couleurs : par sommet ; la pellicule prend la couleur de la case tirée vers l’eau courante.
+  const river = new THREE.Color('#5fb3d9'), wet = new THREE.Color('#7fb89a');
+  const filmColor = attrAt(film, 'color', 3.5, 1.5);
+  const filmR = film.geometry.attributes.color.getX(0);
+  assert.ok(filmR >= 0 && filmR <= 1, 'couleurs de sommet présentes');
+  const heart = (() => {
+    const p = film.geometry.attributes.position, c = film.geometry.attributes.color;
+    let best = 0, bestD = Infinity;
+    for (let v = 0; v < p.count; v++) {
+      const d = Math.hypot(p.getX(v) - 3.5, p.getZ(v) - 1.5);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    return new THREE.Color(c.getX(best), c.getY(best), c.getZ(best));
+  })();
+  assert.ok(near(heart.r, (wet.r + river.r) / 2, 0.05) && near(heart.b, (wet.b + river.b) / 2, 0.05), `pellicule teintée : ${heart.getHexString()}`);
+  const waterHeart = (() => {
+    const p = water.geometry.attributes.position, c = water.geometry.attributes.color;
+    let best = 0, bestD = Infinity;
+    for (let v = 0; v < p.count; v++) {
+      const d = Math.hypot(p.getX(v) - 1.5, p.getZ(v) - 3.5);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    return new THREE.Color(c.getX(best), c.getY(best), c.getZ(best));
+  })();
+  assert.ok(near(waterHeart.r, river.r, 0.02) && near(waterHeart.b, river.b, 0.02), 'la rivière garde sa teinte jusqu’au cœur');
+  assert.ok(Number.isFinite(filmColor[0]));
+  // Calque : la couleur du calque atteint l’eau (elle n’est pas noyée par la terre voisine).
   const rgb = new Float32Array(16 * 3).fill(0.5);
   ground.setTileColors(rgb);
-  film.getColorAt(0, c);
-  assert.ok(near(c.r, (0.5 + river.r) / 2, 1e-3), 'calque appliqué à la pellicule');
-  water.getColorAt(0, c);
-  assert.ok(near(c.r, 0.5, 1e-6));
+  const painted = (() => {
+    const p = water.geometry.attributes.position, c = water.geometry.attributes.color;
+    let best = 0, bestD = Infinity;
+    for (let v = 0; v < p.count; v++) {
+      const d = Math.hypot(p.getX(v) - 1.5, p.getZ(v) - 3.5);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    return c.getX(best);
+  })();
+  assert.ok(near(painted, 0.5, 1e-3), 'calque appliqué à la nappe');
   ground.setTileColors(null);
-  water.getColorAt(0, c);
-  assert.ok(near(c.r, river.r, 1e-3), 'retour aux couleurs de terrain');
   assert.equal(ground.baseColors().length, 48);
   // Horloge du shader.
   assert.equal(ground.time, 0);
@@ -392,7 +452,7 @@ test('createGround : eau profonde et pellicule des zones humides, attributs aFlo
   assert.ok(near(ground.time, 0.5));
   ground.setTime(2);
   assert.equal(ground.time, 2);
-  // Nouveau monde : les géométries d'instances sont remplacées sans erreur.
+  // Nouveau monde : les géométries sont remplacées sans erreur.
   ground.setWorld(makeWorld(2, 2));
   assert.equal(ground.stats.water, 0);
   assert.equal(ground.group.getObjectByName('water').visible, false, 'rien à dessiner sans eau');
@@ -412,13 +472,14 @@ test('createWaterMaterial : Lambert modifié, uniform uTime partagé, bandes dan
   material.onBeforeCompile(shader, null);
   assert.equal(shader.uniforms.uTime, uniforms.uTime, 'le même objet : avancer l’horloge suffit');
   assert.match(shader.vertexShader, /attribute vec2 aFlow;/);
-  assert.match(shader.vertexShader, /attribute vec4 aBanks;/);
+  assert.match(shader.vertexShader, /attribute float aShore;/);
   assert.match(shader.vertexShader, /attribute vec2 aStyle;/);
   assert.match(shader.vertexShader, /transformed\.y \+= aStyle\.x/);
   assert.ok(!shader.vertexShader.includes('#include <begin_vertex>'), 'begin_vertex remplacé');
   assert.match(shader.fragmentShader, /#include <color_fragment>/, 'la couleur d’instance est appliquée avant');
   assert.match(shader.fragmentShader, /along - uTime \* 0\.250/, 'les bandes avancent de 0,25 u/s le long du courant');
-  assert.match(shader.fragmentShader, /vBanks\.[xyzw]/);
+  assert.match(shader.fragmentShader, /vShore/, 'écume et haut-fond lisent la distance au rivage');
+  assert.ok(!shader.fragmentShader.includes('vBanks'), 'plus de masque de berges par côté de case');
   uniforms.uTime.value = 3;
   assert.equal(shader.uniforms.uTime.value, 3);
 });
@@ -511,7 +572,7 @@ test('effects : fx.setAir — une InstancedMesh de brume, un appel de dessin, sa
   assert.equal(fx.group.children.length, 0);
 });
 
-test('ground : setLayerValues, setLayerPattern et setWaterQuality écrivent les attributs d’instance', () => {
+test('ground : setLayerValues, setLayerPattern et setWaterQuality peignent la terre ET les nappes d’eau', () => {
   const world = makeWorld(4, 4);
   riverColumn(world, 1);
   setTerrain(world, 3, 3, 'wetland');
@@ -520,6 +581,16 @@ test('ground : setLayerValues, setLayerPattern et setWaterQuality écrivent les 
   const land = ground.group.getObjectByName('land');
   const water = ground.group.getObjectByName('water');
   const film = ground.group.getObjectByName('wetland-film');
+  /** Valeur d’un attribut au sommet le plus proche de (x, z). */
+  const at = (mesh, name, x, z) => {
+    const p = mesh.geometry.attributes.position, a = mesh.geometry.attributes[name];
+    let best = 0, bestD = Infinity;
+    for (let v = 0; v < p.count; v++) {
+      const d = Math.hypot(p.getX(v) - x, p.getZ(v) - z);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    return a.getX(best);
+  };
   // Sans calque : l'attribut vaut −1 partout (aucune hachure).
   assert.ok(Array.from(land.geometry.attributes.aLayer.array).every((v) => v === -1));
   assert.ok(Array.from(water.geometry.attributes.aLayer.array).every((v) => v === -1));
@@ -530,10 +601,11 @@ test('ground : setLayerValues, setLayerPattern et setWaterQuality écrivent les 
   field[15] = 0;             // (3, 3) : zone humide
   ground.setLayerValues(field);
   assert.equal(land.geometry.attributes.aLayer.getX(0), 1, 'première case de terre');
-  assert.equal(water.geometry.attributes.aLayer.getX(0), 0.25, 'première case de rivière');
-  assert.equal(film.geometry.attributes.aLayer.getX(0), 0, 'pellicule de la zone humide');
+  assert.ok(near(at(water, 'aLayer', 1.5, 0.5), 0.25, 1e-5), 'cœur de la première case de rivière');
+  assert.ok(near(at(film, 'aLayer', 3.5, 3.5), 0, 1e-5), 'cœur de la zone humide');
   ground.setLayerValues(null);
   assert.ok(Array.from(land.geometry.attributes.aLayer.array).every((v) => v === -1));
+  assert.ok(Array.from(water.geometry.attributes.aLayer.array).every((v) => v === -1));
 
   // Mode daltonien : un seul interrupteur, partagé par la terre et l'eau.
   assert.equal(ground.layerPattern, false);
@@ -548,10 +620,10 @@ test('ground : setLayerValues, setLayerPattern et setWaterQuality écrivent les 
   quality[1] = 100;          // rivière en haut : polluée
   quality[15] = 40;          // zone humide
   ground.setWaterQuality(quality);
-  assert.equal(water.geometry.attributes.aQuality.getX(0), 1);
-  assert.ok(Math.abs(film.geometry.attributes.aQuality.getX(0) - 0.4) < 1e-6);
+  assert.ok(near(at(water, 'aQuality', 1.5, 0.5), 1, 1e-5));
+  assert.ok(near(at(film, 'aQuality', 3.5, 3.5), 0.4, 1e-5));
   ground.setWaterQuality(null);
-  assert.equal(water.geometry.attributes.aQuality.getX(0), 0);
+  assert.ok(near(at(water, 'aQuality', 1.5, 0.5), 0, 1e-6));
 
   // Les champs survivent à la reconstruction du monde (le calque reste allumé).
   ground.setLayerValues(field);
@@ -560,7 +632,7 @@ test('ground : setLayerValues, setLayerPattern et setWaterQuality écrivent les 
   const land2 = ground.group.getObjectByName('land');
   const water2 = ground.group.getObjectByName('water');
   assert.equal(land2.geometry.attributes.aLayer.getX(0), 1);
-  assert.equal(water2.geometry.attributes.aQuality.getX(0), 1);
+  assert.ok(near(at(water2, 'aQuality', 1.5, 0.5), 1, 1e-5));
   ground.dispose();
 });
 

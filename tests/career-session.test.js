@@ -6,10 +6,11 @@ import {
   evaluateStars,
   finishLevel,
   finishCareer,
+  reconcileCareer,
 } from "../src/core/career-session.js";
 import { serialize, deserialize } from "../src/core/game.js";
 import { finishJourney } from "../src/core/journey.js";
-import { heightAt, hillHeight } from "../src/render3d/ground.js";
+import { heightAt, hillHeight, DIP } from "../src/render3d/ground.js";
 import { makeWorld, setTerrain } from "./world-helpers.js";
 
 test("carrière : mairie seule, niveaux verrouillés et déblocages persistants", () => {
@@ -43,16 +44,31 @@ test("carrière : mairie seule, niveaux verrouillés et déblocages persistants"
     "une étoile antérieure ne se perd pas",
   );
 });
-test("terrain continu : altitude exacte au centre et continuité des bords de colline", () => {
+test("terrain continu : micro-relief borné et continuité des bords de colline", () => {
   const w = makeWorld(4, 4);
   setTerrain(w, 1, 1, "hill");
   setTerrain(w, 2, 1, "hill");
-  assert.equal(heightAt(w, 1.5, 1.5), hillHeight(w, 1, 1));
+  const dip = hillHeight(w, 1, 1) - heightAt(w, 1.5, 1.5);
+  assert.ok(dip >= 0 && dip <= DIP, "micro-relief dans sa profondeur autorisée");
   assert.ok(
     Math.abs(heightAt(w, 2 - 1e-6, 1.5) - heightAt(w, 2 + 1e-6, 1.5)) < 1e-5,
   );
   assert.ok(
     Math.abs(heightAt(w, 1 + 1e-6, 1.5) - heightAt(w, 1 - 1e-6, 1.5)) < 1e-5,
   );
-  assert.equal(heightAt(w, 0.5, 0.5), 0);
+  assert.ok(heightAt(w, 0.5, 0.5) >= -DIP && heightAt(w, 0.5, 0.5) <= 0);
+});
+
+test("sauvegardes main et PR : conserve le meilleur progrès des deux formats", () => {
+  const base = createCareer();
+  const stored = { ...base, stars: { 'vallee-1': 1 }, unlocked: [...base.unlocked, 'riviere'], seen: ['time'] };
+  const embedded = { ...base, stars: { 'vallee-1': 3 }, seen: ['pose'], tiles: [...base.tiles, 'office'] };
+  const merged = reconcileCareer(stored, embedded);
+  assert.equal(merged.stars['vallee-1'], 3);
+  assert.ok(merged.unlocked.includes('riviere'));
+  assert.ok(merged.tiles.includes('office'));
+  assert.deepEqual(merged.seen, ['time', 'pose']);
+  assert.deepEqual(reconcileCareer(null, embedded).stars, embedded.stars);
+  assert.deepEqual(reconcileCareer(stored, null), stored);
+  assert.deepEqual(reconcileCareer(null, null), base);
 });

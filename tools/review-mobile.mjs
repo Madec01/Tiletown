@@ -29,9 +29,9 @@ try {
     timeout: 60000,
   });
   await page.screenshot({ path: `${outDir}/welcome.png` });
-  await page
-    .getByRole("button", { name: "Bienvenue chez vous", exact: true })
-    .click();
+  await page.locator('.title-btn[data-action="career"]').click();
+  await page.locator('.level-play[data-level="vallee-1"]').click();
+  // Le parcours guidé est couvert par play-career ; ici, on contrôle les raccourcis et les primes.
   await page.evaluate(() => window.__tiletown.setSpeed(0));
   const initial = await page.evaluate(() => ({
     money: window.__tiletown.game.money,
@@ -89,6 +89,7 @@ try {
   await page.touchscreen.tap(target.px, target.py);
   await page.locator(".action-ok").click();
   await page.getByRole("button", { name: "Lâcher", exact: true }).click();
+  await page.evaluate(() => window.__tiletown.tutorial.stop());
   await page.locator(".mission").click();
   await page
     .getByRole("button", { name: "Recevoir 100 $", exact: true })
@@ -98,17 +99,8 @@ try {
     placedMoney + 100,
     "prime unique",
   );
-  await page.getByRole("button", { name: /Premiers pas ·/ }).click();
-  await page
-    .getByRole("button", { name: "Leçon suivante", exact: true })
-    .click();
-  assert.ok(
-    await page.evaluate(() =>
-      window.__tiletown.game.career.seen.includes("pose"),
-    ),
-    "leçon comprise mémorisée",
-  );
-  await page.locator("#sheet-close").click();
+  assert.ok(await page.evaluate(() => window.__tiletown.career().seen.includes('pose')), 'la pose valide la leçon et la mémorise');
+  await page.locator('#sheet-close').click();
   const saved = await page.evaluate(() => {
     window.__tiletown.save();
     return {
@@ -141,32 +133,28 @@ try {
     await page.evaluate(() => window.__tiletown.audio.settings.music),
     false,
   );
+  await page.locator('.title-btn[data-action="resume"]').click();
+  await page.evaluate(() => window.__tiletown.tutorial.stop());
   await page.screenshot({ path: `${outDir}/mobile-412.png` });
   await page.click(".tab--nature");
   await page.waitForTimeout(350);
   await page.screenshot({ path: `${outDir}/catalog.png` });
   await page.locator("#sheet-close").click();
-  // État de fin construit par la logique métier : vérifie ensuite le vrai parcours d'interface.
-  await page.evaluate(async () => {
-    const { createCareer, startLevel, finishCareer } =
-      await import("/src/core/career-session.js");
-    const { finishJourney } = await import("/src/core/journey.js");
-    const game = startLevel(createCareer(), "vallee-1");
-    game.month = 36;
-    game.stats = { ...game.stats, population: 220, nature: 85, happiness: 80 };
-    window.__tiletown.newGame(game.seed, finishCareer(finishJourney(game)));
+  // La fin de niveau utilise la même API que le parcours de carrière de main.
+  await page.evaluate(() => {
+    const t = window.__tiletown;
+    t.grant({ stats: { population: 220, nature: 85, happiness: 80 } });
+    t.finishLevel();
   });
-  await page
-    .getByRole("button", { name: "Découvrir la vallée suivante", exact: true })
-    .click();
-  assert.equal(
-    await page
-      .getByRole("button", { name: /Le bocage/ })
-      .getAttribute("aria-disabled"),
-    "true",
-  );
+  await page.reload();
+  await page.waitForFunction(() => window.__tiletown?.ready);
+  await page.locator('.title-btn[data-action="resume"]').click();
+  assert.equal(await page.locator('.end-stars').getAttribute('data-stars'), '3', 'bilan sauvegardé intact après rechargement');
+  await page.locator('.end-btn[data-action="next"]').click();
+  await page.evaluate(() => { window.__tiletown.experience.careerMap(); });
+  assert.equal(await page.locator('.level-card[data-level="bocage"]').getAttribute('data-state'), 'locked');
   await page.screenshot({ path: `${outDir}/career.png` });
-  await page.getByRole("button", { name: /Au fil de la rivière/ }).click();
+  await page.locator('.level-play[data-level="riviere"]').click();
   assert.equal(
     await page.evaluate(() => window.__tiletown.game.career.levelId),
     "riviere",
@@ -191,9 +179,16 @@ try {
     await page.evaluate(() => window.__tiletown.game.career.levelId),
     "riviere",
   );
+  await page.locator('.title-btn[data-action="resume"]').click();
   report.push(
     "Carrière : bilan, trois étoiles, verrouillage, passage à la deuxième vallée, mairie seule et reprise après rechargement OK",
   );
+  await page.evaluate(() => window.__tiletown.finishLevel());
+  await page.locator('.end-btn[data-action="continue"]').click();
+  assert.equal(await page.evaluate(() => window.__tiletown.mode), 'sandbox');
+  await page.evaluate(() => window.__tiletown.showTitle());
+  await page.locator('.title-btn[data-action="resume"]').click();
+  assert.equal(await page.locator('.screen--end').count(), 0, 'continuer puis reprendre ne rouvre pas le bilan');
   await page.getByRole("button", { name: "Réglages", exact: true }).click();
   await page
     .getByRole("button", { name: "Nouvelle vallée", exact: true })
@@ -204,6 +199,7 @@ try {
     "sandbox",
   );
   assert.equal(await page.evaluate(() => window.__tiletown.game.money), 100000);
+  assert.equal(await page.evaluate(() => window.__tiletown.career().stars['vallee-1']), 3, 'passer en mode libre conserve les étoiles');
   await page.evaluate(() => window.__tiletown.setSpeed(0));
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${outDir}/sandbox-412.png` });
@@ -220,6 +216,10 @@ try {
     const metrics = await page.evaluate(() => ({
       width: document.documentElement.scrollWidth,
       screen: innerWidth,
+      toolsVisible: [...document.querySelectorAll('.tab--tool')].every(n => {
+        const r = n.getBoundingClientRect();
+        return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+      }),
       small: [...document.querySelectorAll("button")]
         .filter((n) => {
           const r = n.getBoundingClientRect(),
@@ -239,6 +239,7 @@ try {
     }));
     assert.equal(metrics.width, width, "pas de débordement horizontal");
     assert.deepEqual(metrics.small, [], "cibles de 48px");
+    assert.ok(metrics.toolsVisible, 'outils de démolition et calques dans l’écran');
     await page.screenshot({ path: `${outDir}/mobile-${width}.png` });
     report.push(`${width} × ${height} : sans débordement, boutons ≥ 48 px`);
   }

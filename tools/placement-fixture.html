@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tiletown — scène de référence du décor</title>
+<!-- Scène de référence pour tools/placement-shot.mjs : une rivière courbe, une colline douce, deux
+     bosquets qui se rejoignent, une prairie, une zone humide, trois maisons alignées et un pâté de
+     ville. Le monde est FIXE (aucun aléatoire local) : deux versions du code se comparent
+     exactement sur la même scène.
+     Paramètres : ?stats=1, ?view=all|foret|lisiere|rue|maisons, ?strategy=, ?shadows=0, ?nomodels=1 -->
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/examples/jsm/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe6; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; }
+  #stats { position: fixed; left: 8px; top: 8px; font: 12px/1.4 monospace; color: #333; background: rgba(255,255,255,.75); padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="stats"></div>
+<script type="module">
+import { createRenderer } from '../src/render3d/renderer.js';
+
+const params = new URLSearchParams(location.search);
+const COLS = 14, ROWS = 18, SEED = 20251005;
+
+/** Monde de référence, entièrement écrit à la main : mêmes cases d'une version à l'autre. */
+function referenceWorld() {
+  const idx = (x, y) => y * COLS + x;
+  const tiles = new Array(COLS * ROWS);
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) tiles[idx(x, y)] = { terrain: 'grass', flow: null, native: true, building: null, variant: (x * 3 + y * 5) % 4 };
+  }
+  const set = (x, y, terrain, flow = null) => {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    tiles[idx(x, y)].terrain = terrain; tiles[idx(x, y)].flow = flow;
+  };
+
+  // --- Rivière courbe, du nord au sud, qui serpente d'ouest en est -----------------------------
+  const riverX = [];
+  for (let y = 0; y < ROWS; y++) {
+    const x = Math.round(2.6 + 2.2 * Math.sin(y * 0.42) + y * 0.08);
+    riverX.push(x);
+    set(x, y, 'river', 'S');
+    if (y > 0 && riverX[y - 1] !== x) set(riverX[y - 1], y, 'river', riverX[y - 1] < x ? 'E' : 'W');
+  }
+  // Zone humide sur la berge est de la rivière, au milieu
+  for (let y = 7; y <= 10; y++) {
+    const x = riverX[y] + 1;
+    if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'wetland');
+  }
+
+  // --- Colline douce au sud-ouest --------------------------------------------------------------
+  for (let y = 13; y <= 16; y++) {
+    for (let x = 0; x <= 3; x++) {
+      if (Math.hypot(x - 1.4, y - 14.6) <= 2.3 && tiles[idx(x, y)].terrain === 'grass') set(x, y, 'hill');
+    }
+  }
+
+  // --- Deux bosquets qui se rejoignent au nord-est (ils doivent lire comme UNE forêt) -----------
+  for (let y = 0; y <= 3; y++) for (let x = 8; x <= 12; x++) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'forest');
+  for (let y = 3; y <= 5; y++) for (let x = 10; x <= 13; x++) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'forest');
+  set(12, 1, 'grass'); set(11, 2, 'grass');            // deux clairières dans le massif
+
+  // --- Prairie fleurie au sud-est ---------------------------------------------------------------
+  for (let y = 12; y <= 15; y++) for (let x = 9; x <= 13; x++) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'meadow');
+  // --- Champs à l'ouest -------------------------------------------------------------------------
+  for (let y = 4; y <= 5; y++) for (let x = 0; x <= 1; x++) if (tiles[idx(x, y)].terrain === 'grass') set(x, y, 'field');
+
+  // --- Trois maisons alignées, à l'ouest du pâté de ville ---------------------------------------
+  const place = (x, y, type, level = 1, variant = 0, yaw = 0) => {
+    const t = tiles[idx(x, y)];
+    t.building = { type, level, variant, yaw };
+    t.native = false;
+    if (type === 'field' || type === 'orchard') t.terrain = 'field';
+  };
+  place(5, 15, 'house', 1, 0, 180);
+  place(6, 15, 'house', 1, 1, 180);
+  place(7, 15, 'house', 1, 2, 180);
+
+  // --- Pâté de ville au centre ------------------------------------------------------------------
+  const town = [
+    [6, 8, 'townhall', 1, 0, 0], [7, 8, 'shop', 1, 0, 270], [8, 8, 'house', 2, 0, 270],
+    [6, 9, 'house', 1, 1, 0], [7, 9, 'house', 3, 0, 0], [8, 9, 'office', 1, 0, 270],
+    [6, 10, 'school', 1, 0, 0], [7, 10, 'house', 2, 1, 0], [8, 10, 'market', 1, 0, 90],
+    [9, 9, 'park', 1, 0, 0], [5, 9, 'house', 1, 2, 90],
+  ];
+  for (const [x, y, type, level, variant, yaw] of town) place(x, y, type, level, variant, yaw);
+
+  // --- Arêtes : rue entre deux îlots bâtis, chemin entre bâti et nature -------------------------
+  const URBAN = new Set(['house', 'shop', 'office', 'factory', 'school', 'clinic', 'market', 'townhall']);
+  const built = (t) => t && t.building && URBAN.has(t.building.type);
+  const water = (t) => t && (t.terrain === 'river' || t.terrain === 'lake');
+  const h = new Uint8Array((ROWS + 1) * COLS), v = new Uint8Array(ROWS * (COLS + 1));
+  const value = (a, b) => (built(a) || built(b) ? (water(a) || water(b) ? 0 : 2) : 0);
+  for (let y = 0; y <= ROWS; y++) {
+    for (let x = 0; x < COLS; x++) h[y * COLS + x] = value(y > 0 ? tiles[idx(x, y - 1)] : null, y < ROWS ? tiles[idx(x, y)] : null);
+  }
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x <= COLS; x++) v[y * (COLS + 1) + x] = value(x > 0 ? tiles[idx(x - 1, y)] : null, x < COLS ? tiles[idx(x, y)] : null);
+  }
+  // Une rue droite qui descend du pâté vers les trois maisons (virages et carrefours variés)
+  for (let y = 11; y <= 15; y++) v[y * (COLS + 1) + 5] = 2;
+  for (let x = 5; x <= 7; x++) h[16 * COLS + x] = 2;
+
+  const traffic = { h: new Float32Array(h.length), v: new Float32Array(v.length) };
+  traffic.h[9 * COLS + 6] = 5; traffic.h[9 * COLS + 7] = 7;
+  return { seed: SEED, cols: COLS, rows: ROWS, tiles, edges: { h, v }, traffic };
+}
+
+/** Cadrages de référence : tout, la forêt, la lisière, la rue, les maisons. */
+const VIEWS = {
+  all: null,
+  foret: { x: 10.5, y: 2.5, zoom: 6 },
+  lisiere: { x: 8.5, y: 5.5, zoom: 7 },
+  rue: { x: 7, y: 9, zoom: 5 },
+  maisons: { x: 6, y: 15, zoom: 5 },
+  carrefour: { x: 7, y: 9, zoom: 2.6 },
+  jardin: { x: 6, y: 15, zoom: 2.4 },
+};
+
+const canvas = document.getElementById('map');
+const statsEl = document.getElementById('stats');
+const showStats = params.get('stats') === '1';
+if (showStats) statsEl.style.display = 'block';
+
+const world = referenceWorld();
+let ready = false;
+const tiletown = {
+  ready: false,
+  world,
+  renderer: null,
+  views: Object.keys(VIEWS),
+  stats: () => (tiletown.renderer ? tiletown.renderer.stats() : null),
+  /** Cadre la scène sur une vue nommée. */
+  look(name) {
+    const r = tiletown.renderer; if (!r) return false;
+    const v = VIEWS[name];
+    if (v === undefined) return false;
+    if (v === null) r.camera.fitAll(); else r.camera.lookAt(v.x, v.y, v.zoom);
+    r.invalidate();
+    return true;
+  },
+  /** Force n images et renvoie la médiane du temps CPU de rendu (ms). */
+  renderFrames(n = 10) {
+    const r = tiletown.renderer; if (!r) return null;
+    const times = [];
+    for (let i = 0; i < n; i++) { r.invalidate(); r.render(1 / 60); times.push(r.stats().frameMs); }
+    times.sort((a, b) => a - b);
+    return times[Math.floor(times.length / 2)];
+  },
+};
+window.__tiletown = tiletown;
+
+const renderer = await createRenderer(canvas, {
+  manifestUrl: params.get('nomodels') === '1' ? null : '../assets/models/manifest.json',
+  pixelRatioMax: 2,
+  strategy: params.get('strategy') || 'auto',
+  shadows: params.get('shadows') !== '0',
+});
+tiletown.renderer = renderer;
+renderer.setWorld(world);
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  renderer.resize(w, h, window.devicePixelRatio || 1);
+}
+resize();
+window.addEventListener('resize', () => { resize(); tiletown.look(params.get('view') || 'all'); });
+tiletown.look(params.get('view') || 'all');
+
+// Gestes minimaux pour l'essai manuel : glisser = défiler, molette = zoom, double clic = tout voir.
+let dragging = null;
+canvas.addEventListener('pointerdown', (e) => { dragging = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  renderer.camera.pan(e.clientX - dragging.x, e.clientY - dragging.y);
+  dragging = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('pointerup', () => { dragging = null; });
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); renderer.camera.zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
+canvas.addEventListener('dblclick', () => renderer.camera.fitAll());
+
+let lastT = performance.now();
+function loop(t) {
+  const dt = (t - lastT) / 1000; lastT = t;
+  const drew = renderer.render(dt);
+  if (drew && !ready) { ready = true; tiletown.ready = true; }
+  if (drew && showStats) {
+    const s = renderer.stats();
+    statsEl.textContent = `appels ${s.calls}  triangles ${s.triangles}  image ${s.frameMs.toFixed(1)} ms\n`
+      + `décors ${s.buildings.placements} (${s.buildings.uniqueModels} modèles`
+      + `${s.buildings.trees !== undefined ? `, ${s.buildings.trees} arbres, ${s.buildings.cover} couvre-sol` : ''})\n`
+      + `rues ${s.roads.streets}  nœuds ${s.roads.streetNodes}`
+      + `${s.roads.lots !== undefined ? `  parcelles ${s.roads.lots}  allées ${s.roads.driveways}` : ''}\n`
+      + `${COLS}×${ROWS}  stratégie ${s.strategy}`;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

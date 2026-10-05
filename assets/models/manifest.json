@@ -23,7 +23,24 @@
     "#7d8591",
     "#b8bcc4",
     "#e85d75",
-    "#f7d84a"
+    "#f7d84a",
+    "#c25a3f",
+    "#5d7193",
+    "#9a6a4e",
+    "#e0a070",
+    "#dde8f2",
+    "#dfe9d6",
+    "#f5dedf",
+    "#efdcad",
+    "#b9b0a2",
+    "#d3bd9c",
+    "#7cae52",
+    "#a3d474",
+    "#3e7c47",
+    "#6d4630",
+    "#a37a55",
+    "#a8cbe8",
+    "#6b90b6"
   ],
   "unit": "1 case = 1 unité, origine au centre de la case, y vers le haut, face +Z (sud)",
   "models": {
@@ -43,21 +60,31 @@
         "min": [
           -0.425,
           0,
-          -0.336
+          -0.374
         ],
         "max": [
           0.425,
-          0.545,
-          0.336
+          0.616,
+          0.374
         ],
         "size": [
           0.85,
-          0.545,
-          0.672
+          0.616,
+          0.747
         ]
       },
-      "triangles": 1174,
-      "bytes": 17888
+      "triangles": 1394,
+      "bytes": 16832,
+      "roles": {
+        "base": "baseWarm",
+        "wall": "wallGreen",
+        "roof": "roofSlate",
+        "glass": "glass",
+        "trim": "wood",
+        "soil": "soil",
+        "grassLight": "grassLight"
+      },
+      "note": "maison en L avec garage ; cheminée et porche"
     },
     "house-b": {
       "file": "house-b.glb",
@@ -79,17 +106,27 @@
         ],
         "max": [
           0.425,
-          0.944,
+          0.96,
           0.422
         ],
         "size": [
           0.85,
-          0.944,
+          0.96,
           0.843
         ]
       },
-      "triangles": 1030,
-      "bytes": 16632
+      "triangles": 1218,
+      "bytes": 15312,
+      "roles": {
+        "wall": "wallPink",
+        "base": "baseStone",
+        "roof": "roofSlateDark",
+        "glass": "glassDeep",
+        "trim": "marking",
+        "soil": "soil",
+        "grassLight": "grassLight"
+      },
+      "note": "maison à étage et balcon ; cheminée et lucarne"
     },
     "house-c": {
       "file": "house-c.glb",
@@ -105,24 +142,157 @@
       "url": "https://kenney.nl/assets/city-kit-suburban",
       "bbox": {
         "min": [
-          -0.425,
+          -0.451,
           0,
           -0.299
         ],
         "max": [
-          0.425,
-          0.482,
+          0.451,
+          0.564,
           0.299
         ],
         "size": [
-          0.85,
-          0.482,
+          0.902,
+          0.564,
           0.599
         ]
       },
-      "triangles": 770,
-      "bytes": 13652,
-      "note": "toit plat à panneaux solaires"
+      "triangles": 902,
+      "bytes": 11748,
+      "roles": {
+        "base": "sidewalk",
+        "trim": "roofSlateDark",
+        "wall": "wallOchre",
+        "roof": "roofBrown",
+        "glass": "lakeDeep"
+      },
+      "note": "toit plat à panneaux solaires ; débord de toiture et édicule"
+    },
+    "house-d": {
+      "file": "house-d.glb",
+      "kit": "kenney-city-kit-suburban",
+      "source": "building-type-s.glb",
+      "scale": 0.605,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.354
+        ],
+        "max": [
+          0.425,
+          0.717,
+          0.354
+        ],
+        "size": [
+          0.85,
+          0.717,
+          0.709
+        ]
+      },
+      "triangles": 1432,
+      "bytes": 18024,
+      "roles": {
+        "base": "sidewalk",
+        "wall": "wallCream",
+        "roof": "roofRed",
+        "grassLight": "grassLight",
+        "soil": "soil",
+        "trim": "trunkDark",
+        "glass": "glass"
+      },
+      "note": "maison compacte à pignon frontal ; cheminée et porche"
+    },
+    "house-e": {
+      "file": "house-e.glb",
+      "kit": "kenney-city-kit-suburban",
+      "source": "building-type-k.glb",
+      "scale": 0.833,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "bbox": {
+        "min": [
+          -0.401,
+          0,
+          -0.44
+        ],
+        "max": [
+          0.401,
+          1.03,
+          0.44
+        ],
+        "size": [
+          0.801,
+          1.03,
+          0.88
+        ]
+      },
+      "triangles": 1156,
+      "bytes": 14192,
+      "roles": {
+        "base": "rockLight",
+        "roof": "roofBrown",
+        "wall": "wallOchre",
+        "trim": "wood",
+        "glass": "lakeDeep",
+        "soil": "soil",
+        "grassLight": "grassLight"
+      },
+      "note": "maison cubique à deux niveaux ; débord de toiture et lucarne de toit"
+    },
+    "house-f": {
+      "file": "house-f.glb",
+      "kit": "kenney-city-kit-suburban",
+      "source": "building-type-d.glb",
+      "scale": 0.484,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-suburban",
+      "bbox": {
+        "min": [
+          -0.425,
+          0,
+          -0.249
+        ],
+        "max": [
+          0.425,
+          0.615,
+          0.249
+        ],
+        "size": [
+          0.85,
+          0.615,
+          0.498
+        ]
+      },
+      "triangles": 2045,
+      "bytes": 23924,
+      "roles": {
+        "wall": "wallBlue",
+        "base": "baseStone",
+        "roof": "roofTile",
+        "grassLight": "grassLight",
+        "glass": "lakeDeep",
+        "soil": "soil",
+        "trim": "marking"
+      },
+      "note": "maison longue et basse ; deux lucarnes et une cheminée"
     },
     "building-small-a": {
       "file": "building-small-a.glb",
@@ -138,23 +308,32 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.399,
+          -0.416,
           0,
-          -0.425
+          -0.445
         ],
         "max": [
-          0.399,
-          1.169,
-          0.425
+          0.416,
+          1.271,
+          0.445
         ],
         "size": [
-          0.799,
-          1.169,
-          0.85
+          0.832,
+          1.271,
+          0.89
         ]
       },
-      "triangles": 1252,
-      "bytes": 18832
+      "triangles": 1384,
+      "bytes": 17512,
+      "roles": {
+        "roofFlat": "roofSlate",
+        "base": "wallTan",
+        "trim": "wood",
+        "wall": "wallGreen",
+        "glass": "glass",
+        "accent": "sun"
+      },
+      "note": "immeuble bas à toit-terrasse ; corniche et édicule"
     },
     "building-small-b": {
       "file": "building-small-b.glb",
@@ -170,23 +349,72 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.397,
+          -0.408,
           0,
           -0.425
         ],
         "max": [
-          0.397,
+          0.408,
           1.221,
           0.425
         ],
         "size": [
-          0.793,
+          0.815,
           1.221,
           0.85
         ]
       },
-      "triangles": 1100,
-      "bytes": 16808
+      "triangles": 1144,
+      "bytes": 13660,
+      "roles": {
+        "trim": "marking",
+        "wall": "wallCream",
+        "base": "rockLight",
+        "glass": "glass",
+        "accent": "sun",
+        "roof": "roofRed"
+      },
+      "note": "immeuble bas à tourelle ; corniche"
+    },
+    "building-small-c": {
+      "file": "building-small-c.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-b.glb",
+      "scale": 0.876,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.437,
+          0,
+          -0.436
+        ],
+        "max": [
+          0.437,
+          1.225,
+          0.436
+        ],
+        "size": [
+          0.874,
+          1.225,
+          0.872
+        ]
+      },
+      "triangles": 1408,
+      "bytes": 17468,
+      "roles": {
+        "trim": "roofSlateDark",
+        "base": "baseWarm",
+        "roofFlat": "rock",
+        "wall": "wallOchre",
+        "glass": "lakeDeep"
+      },
+      "note": "immeuble bas à étages décalés ; corniche et édicule"
     },
     "building-tall-a": {
       "file": "building-tall-a.glb",
@@ -202,23 +430,32 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.347,
+          -0.369,
           0,
           -0.425
         ],
         "max": [
-          0.347,
-          1.397,
+          0.369,
+          1.489,
           0.425
         ],
         "size": [
-          0.693,
-          1.397,
+          0.737,
+          1.489,
           0.85
         ]
       },
-      "triangles": 1794,
-      "bytes": 24432
+      "triangles": 1970,
+      "bytes": 22200,
+      "roles": {
+        "wall": "wallOchre",
+        "trim": "wood",
+        "soil": "soil",
+        "grassLight": "grassLight",
+        "base": "sidewalk",
+        "glass": "lakeDeep"
+      },
+      "note": "immeuble haut et étroit ; corniche, bandeau et édicule"
     },
     "building-tall-b": {
       "file": "building-tall-b.glb",
@@ -234,23 +471,73 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.415,
+          -0.426,
           0,
-          -0.425
+          -0.43
         ],
         "max": [
-          0.415,
-          1.376,
-          0.425
+          0.426,
+          1.478,
+          0.43
         ],
         "size": [
-          0.831,
-          1.376,
-          0.85
+          0.853,
+          1.478,
+          0.86
         ]
       },
-      "triangles": 3512,
-      "bytes": 43692
+      "triangles": 3644,
+      "bytes": 36868,
+      "roles": {
+        "trim": "marking",
+        "base": "baseWarm",
+        "wall": "wallBlue",
+        "grassLight": "grassLight",
+        "glass": "lakeDeep"
+      },
+      "note": "immeuble haut compact ; corniche et édicule"
+    },
+    "building-tall-c": {
+      "file": "building-tall-c.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-skyscraper-c.glb",
+      "scale": 0.612,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.398,
+          0,
+          -0.428
+        ],
+        "max": [
+          0.398,
+          2.571,
+          0.428
+        ],
+        "size": [
+          0.795,
+          2.571,
+          0.856
+        ]
+      },
+      "triangles": 1836,
+      "bytes": 22256,
+      "roles": {
+        "trim": "roofSlateDark",
+        "roofFlat": "roofSlateDark",
+        "wall": "wallBeige",
+        "base": "baseStone",
+        "glass": "glassDeep",
+        "accent": "sun",
+        "grassLight": "grassLight"
+      },
+      "note": "tour élancée ; corniche et machinerie de toit"
     },
     "shop-a": {
       "file": "shop-a.glb",
@@ -266,24 +553,31 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.425,
+          -0.436,
           0,
           -0.404
         ],
         "max": [
-          0.425,
-          1.484,
+          0.436,
+          1.566,
           0.404
         ],
         "size": [
-          0.85,
-          1.484,
+          0.872,
+          1.566,
           0.808
         ]
       },
-      "triangles": 2006,
-      "bytes": 27692,
-      "note": "auvent orange en rez-de-chaussée"
+      "triangles": 2138,
+      "bytes": 24280,
+      "roles": {
+        "trim": "roofSlateDark",
+        "wall": "wallGreen",
+        "base": "sidewalk",
+        "glass": "glass",
+        "accent": "sun"
+      },
+      "note": "auvent orange en rez-de-chaussée ; corniche et édicule"
     },
     "shop-b": {
       "file": "shop-b.glb",
@@ -299,24 +593,72 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.425,
+          -0.44,
           0,
-          -0.192
+          -0.196
         ],
         "max": [
-          0.425,
+          0.44,
           0.6,
-          0.192
+          0.196
         ],
         "size": [
-          0.85,
+          0.88,
           0.6,
-          0.384
+          0.392
         ]
       },
-      "triangles": 2960,
-      "bytes": 37820,
-      "note": "commerce large à auvents, bas"
+      "triangles": 3004,
+      "bytes": 31424,
+      "roles": {
+        "base": "rockLight",
+        "trim": "trunkDark",
+        "wall": "wallBlue",
+        "accent": "roofOrange",
+        "glass": "lakeDeep"
+      },
+      "note": "commerce large à auvents, bas ; corniche"
+    },
+    "shop-c": {
+      "file": "shop-c.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-c.glb",
+      "scale": 0.78,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.366,
+          0,
+          -0.437
+        ],
+        "max": [
+          0.366,
+          0.778,
+          0.437
+        ],
+        "size": [
+          0.731,
+          0.778,
+          0.874
+        ]
+      },
+      "triangles": 1327,
+      "bytes": 16080,
+      "roles": {
+        "wall": "wallBeige",
+        "base": "baseWarm",
+        "trim": "wood",
+        "soil": "soil",
+        "grassLight": "grassLight",
+        "glass": "glassDeep"
+      },
+      "note": "commerce de quartier à auvent vert ; corniche et édicule"
     },
     "office-a": {
       "file": "office-a.glb",
@@ -332,23 +674,72 @@
       "url": "https://kenney.nl/assets/city-kit-commercial",
       "bbox": {
         "min": [
-          -0.405,
+          -0.427,
+          0,
+          -0.44
+        ],
+        "max": [
+          0.427,
+          1.189,
+          0.44
+        ],
+        "size": [
+          0.854,
+          1.189,
+          0.88
+        ]
+      },
+      "triangles": 2676,
+      "bytes": 31320,
+      "roles": {
+        "base": "sidewalk",
+        "roofFlat": "baseStone",
+        "trim": "roofSlateDark",
+        "wall": "wallOchre",
+        "glass": "lakeDeep",
+        "accent": "sun"
+      },
+      "note": "bureaux ; corniche, bandeau et machinerie de toit"
+    },
+    "office-b": {
+      "file": "office-b.glb",
+      "kit": "kenney-city-kit-commercial",
+      "source": "building-m.glb",
+      "scale": 0.684,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-commercial",
+      "bbox": {
+        "min": [
+          -0.424,
           0,
           -0.425
         ],
         "max": [
-          0.405,
-          1.097,
+          0.424,
+          2.238,
           0.425
         ],
         "size": [
-          0.81,
-          1.097,
+          0.849,
+          2.238,
           0.85
         ]
       },
-      "triangles": 2544,
-      "bytes": 34608
+      "triangles": 3872,
+      "bytes": 37528,
+      "roles": {
+        "trim": "trunkDark",
+        "base": "rockLight",
+        "wall": "wallPink",
+        "roof": "roofSlateDark",
+        "glass": "glassDeep"
+      },
+      "note": "bureaux à terrasse plantée ; corniche et édicule"
     },
     "factory-a": {
       "file": "factory-a.glb",
@@ -366,22 +757,29 @@
         "min": [
           -0.45,
           0,
-          -0.404
+          -0.407
         ],
         "max": [
           0.45,
           0.831,
-          0.404
+          0.407
         ],
         "size": [
           0.9,
           0.831,
-          0.808
+          0.813
         ]
       },
-      "triangles": 1896,
-      "bytes": 27856,
-      "note": "deux cheminées"
+      "triangles": 1984,
+      "bytes": 23460,
+      "roles": {
+        "wall": "wallOchre",
+        "metal": "sidewalk",
+        "trim": "roofSlateDark",
+        "accent": "roofOrange",
+        "glass": "lakeDeep"
+      },
+      "note": "deux cheminées ; édicule de toit"
     },
     "factory-b": {
       "file": "factory-b.glb",
@@ -412,9 +810,58 @@
           0.69
         ]
       },
-      "triangles": 1484,
-      "bytes": 22684,
-      "note": "deux cheminées sur le toit"
+      "triangles": 1572,
+      "bytes": 19260,
+      "roles": {
+        "metal": "metal",
+        "wall": "wallPink",
+        "trim": "trunkDark",
+        "roofFlat": "roofSlateDark",
+        "glass": "glassDeep"
+      },
+      "note": "deux cheminées sur le toit ; conduit supplémentaire"
+    },
+    "factory-c": {
+      "file": "factory-c.glb",
+      "kit": "kenney-city-kit-industrial",
+      "source": "building-j.glb",
+      "scale": 0.692,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/city-kit-industrial",
+      "bbox": {
+        "min": [
+          -0.355,
+          0,
+          -0.45
+        ],
+        "max": [
+          0.355,
+          0.596,
+          0.45
+        ],
+        "size": [
+          0.711,
+          0.596,
+          0.9
+        ]
+      },
+      "triangles": 974,
+      "bytes": 13424,
+      "roles": {
+        "wall": "wallGreen",
+        "metal": "metalLight",
+        "roofFlat": "roofSlate",
+        "trim": "wood",
+        "soil": "soil",
+        "grassLight": "grassLight",
+        "glass": "glass"
+      },
+      "note": "hangar à toit cintré (silhouette très différente) ; conduit et édicule"
     },
     "school": {
       "file": "school.glb",
@@ -446,7 +893,7 @@
         ]
       },
       "triangles": 738,
-      "bytes": 17248,
+      "bytes": 10596,
       "assembled": true,
       "parts": [
         {
@@ -478,6 +925,13 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "wall": "wallGreen",
+        "glass": "glass",
+        "soil": "soil",
+        "accent": "roofOrange",
+        "roof": "roofSlate"
+      },
       "note": "assemblage : 3 × 2 blocs, 2 étages, perron, toit à parapet, drapeau"
     },
     "clinic": {
@@ -510,7 +964,7 @@
         ]
       },
       "triangles": 424,
-      "bytes": 12788,
+      "bytes": 7284,
       "assembled": true,
       "parts": [
         {
@@ -530,6 +984,11 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "wall": "wallOchre",
+        "glass": "lakeDeep",
+        "accent": "roofOrange"
+      },
       "note": "assemblage : 2 × 2 blocs, 2 étages, croix sur la façade et le toit"
     },
     "townhall": {
@@ -562,7 +1021,7 @@
         ]
       },
       "triangles": 746,
-      "bytes": 17084,
+      "bytes": 10376,
       "assembled": true,
       "parts": [
         {
@@ -598,6 +1057,11 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "wall": "wallPink",
+        "glass": "glassDeep",
+        "accent": "roofOrange"
+      },
       "note": "assemblage : 3 × 2 blocs, 2 étages à grandes fenêtres, tour centrale, drapeau"
     },
     "market": {
@@ -630,7 +1094,7 @@
         ]
       },
       "triangles": 1550,
-      "bytes": 24036,
+      "bytes": 18096,
       "assembled": true,
       "parts": [
         {
@@ -658,6 +1122,14 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "accent": "blossom",
+        "foliage": "forestDark",
+        "trunk": "trunkLight",
+        "soil": "soil",
+        "wall": "wallGreen",
+        "base": "rockLight"
+      },
       "note": "assemblage : deux étals (rouge, vert), charrette, banc et lanterne sur une dalle"
     },
     "tram-stop": {
@@ -690,7 +1162,7 @@
         ]
       },
       "triangles": 658,
-      "bytes": 19548,
+      "bytes": 9312,
       "assembled": true,
       "parts": [
         {
@@ -710,6 +1182,11 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "marking": "marking",
+        "metal": "sidewalk",
+        "accent": "roofOrange"
+      },
       "orientation": "voie le long de Z (nord–sud) à x = -0,15 ; quai à l’est (x > 0,2)",
       "note": "assemblage : rails du Train Kit, quai, abri (poteaux + toit), banc et lanterne du Fantasy Town"
     },
@@ -743,7 +1220,7 @@
         ]
       },
       "triangles": 1440,
-      "bytes": 24956,
+      "bytes": 17404,
       "assembled": true,
       "parts": [
         {
@@ -759,6 +1236,14 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "metal": "metal",
+        "wall": "wallPink",
+        "roofFlat": "roofSlate",
+        "accent": "roofOrange",
+        "trim": "marking",
+        "glass": "glassDeep"
+      },
       "note": "assemblage : deux bassins ronds, cuve et petit bâtiment technique"
     },
     "wind-turbine": {
@@ -791,11 +1276,16 @@
         ]
       },
       "triangles": 456,
-      "bytes": 12056,
+      "bytes": 9452,
+      "roles": {
+        "marking": "marking",
+        "metalLight": "metalLight",
+        "accent": "sun"
+      },
       "nodes": [
         "blades"
       ],
-      "note": "le nœud « blades » reste séparé (pivot au moyeu) pour l’animation"
+      "note": "mât et pales blancs (profil imposé) ; le nœud « blades » reste séparé (pivot au moyeu) pour l’animation"
     },
     "solar": {
       "file": "solar.glb",
@@ -827,7 +1317,7 @@
         ]
       },
       "triangles": 1952,
-      "bytes": 28336,
+      "bytes": 23996,
       "assembled": true,
       "parts": [
         {
@@ -835,6 +1325,12 @@
           "source": "solar-panel-landscape-group.glb"
         }
       ],
+      "roles": {
+        "metal": "metalLight",
+        "trim": "trunkDark",
+        "wall": "wallCream",
+        "glass": "glass"
+      },
       "note": "assemblage : deux rangées de panneaux"
     },
     "power-plant": {
@@ -867,7 +1363,7 @@
         ]
       },
       "triangles": 1246,
-      "bytes": 18700,
+      "bytes": 14916,
       "assembled": true,
       "parts": [
         {
@@ -883,6 +1379,14 @@
           "source": "chimney-medium.glb"
         }
       ],
+      "roles": {
+        "trim": "trunkDark",
+        "metal": "metalLight",
+        "wall": "wallCream",
+        "glass": "glass",
+        "roofFlat": "roofSlate",
+        "accent": "sun"
+      },
       "note": "assemblage : bâtiment, tour de refroidissement et cheminée"
     },
     "compost": {
@@ -915,7 +1419,7 @@
         ]
       },
       "triangles": 1266,
-      "bytes": 24040,
+      "bytes": 17684,
       "assembled": true,
       "parts": [
         {
@@ -935,6 +1439,15 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "accent": "blossom",
+        "metal": "metalLight",
+        "wall": "wallCream",
+        "roofFlat": "roofSlateDark",
+        "glass": "glass",
+        "grassLight": "grassLight",
+        "roof": "roofRed"
+      },
       "note": "assemblage : trois conteneurs et deux tas de compost sur une dalle"
     },
     "water-tower": {
@@ -967,7 +1480,15 @@
         ]
       },
       "triangles": 968,
-      "bytes": 13216
+      "bytes": 10408,
+      "roles": {
+        "trim": "marking",
+        "marking": "marking",
+        "metalLight": "metalLight",
+        "roofFlat": "asphalt",
+        "accent": "roofOrange"
+      },
+      "note": "cuve et charpente claires (profil imposé)"
     },
     "park": {
       "file": "park.glb",
@@ -983,36 +1504,28 @@
       "url": "https://kenney.nl/assets/fantasy-town-kit",
       "bbox": {
         "min": [
-          -0.48,
+          -0.493,
           0,
           -0.48
         ],
         "max": [
-          0.48,
-          0.736,
+          0.493,
+          0.655,
           0.48
         ],
         "size": [
-          0.96,
-          0.736,
+          0.986,
+          0.655,
           0.96
         ]
       },
-      "triangles": 1734,
-      "bytes": 29780,
+      "triangles": 1833,
+      "bytes": 17904,
       "assembled": true,
       "parts": [
         {
           "kit": "kenney-fantasy-town-kit",
           "source": "fountain-round.glb"
-        },
-        {
-          "kit": "kenney-nature-kit",
-          "source": "tree_default.glb"
-        },
-        {
-          "kit": "kenney-nature-kit",
-          "source": "tree_oak.glb"
         },
         {
           "kit": "kenney-fantasy-town-kit",
@@ -1031,199 +1544,812 @@
           "source": "primitives"
         }
       ],
+      "roles": {
+        "wall": "wallBeige",
+        "base": "rockLight",
+        "accent": "roofOrange"
+      },
       "note": "assemblage : pelouse, fontaine, deux arbres, banc, fleurs"
     },
-    "tree-a": {
-      "file": "tree-a.glb",
-      "kit": "kenney-nature-kit",
-      "source": "tree_default.glb",
-      "scale": 0.5,
+    "tree-round-s": {
+      "file": "tree-round-s.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/nature-kit",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.189,
+          -0.172,
           0,
-          -0.163
+          -0.167
         ],
         "max": [
-          0.189,
-          0.854,
-          0.163
+          0.172,
+          0.569,
+          0.167
         ],
         "size": [
-          0.378,
-          0.854,
-          0.327
+          0.343,
+          0.569,
+          0.334
         ]
       },
-      "triangles": 114,
-      "bytes": 4760
+      "triangles": 169,
+      "bytes": 3536,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu rond, jeune"
     },
-    "tree-b": {
-      "file": "tree-b.glb",
-      "kit": "kenney-nature-kit",
-      "source": "tree_oak.glb",
-      "scale": 0.6,
+    "tree-round-m": {
+      "file": "tree-round-m.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/nature-kit",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.192,
+          -0.228,
           0,
-          -0.222
+          -0.232
         ],
         "max": [
-          0.192,
-          0.736,
-          0.222
+          0.228,
+          0.795,
+          0.232
         ],
         "size": [
-          0.384,
-          0.736,
-          0.444
+          0.455,
+          0.795,
+          0.463
         ]
       },
-      "triangles": 196,
-      "bytes": 5888
+      "triangles": 240,
+      "bytes": 4044,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu rond, moyen"
     },
-    "tree-c": {
-      "file": "tree-c.glb",
-      "kit": "kenney-nature-kit",
-      "source": "tree_fat.glb",
-      "scale": 0.6,
+    "tree-round-l": {
+      "file": "tree-round-l.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/nature-kit",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.227,
+          -0.24,
           0,
-          -0.196
+          -0.262
         ],
         "max": [
-          0.227,
-          0.69,
-          0.196
+          0.24,
+          0.909,
+          0.262
         ],
         "size": [
-          0.453,
-          0.69,
-          0.392
+          0.48,
+          0.909,
+          0.524
         ]
       },
-      "triangles": 50,
-      "bytes": 3912
+      "triangles": 306,
+      "bytes": 4456,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu rond, grand"
     },
-    "pine-a": {
-      "file": "pine-a.glb",
-      "kit": "kenney-nature-kit",
-      "source": "tree_pineDefaultA.glb",
-      "scale": 0.55,
+    "tree-tall-s": {
+      "file": "tree-tall-s.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/nature-kit",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.146,
-          0,
-          -0.146
-        ],
-        "max": [
-          0.146,
-          0.85,
-          0.146
-        ],
-        "size": [
-          0.293,
-          0.85,
-          0.293
-        ]
-      },
-      "triangles": 230,
-      "bytes": 7032
-    },
-    "pine-b": {
-      "file": "pine-b.glb",
-      "kit": "kenney-nature-kit",
-      "source": "tree_pineTallA.glb",
-      "scale": 0.6,
-      "yaw": 0,
-      "footprint": [
-        1,
-        1
-      ],
-      "license": "CC0",
-      "url": "https://kenney.nl/assets/nature-kit",
-      "bbox": {
-        "min": [
-          -0.116,
+          -0.118,
           0,
           -0.118
         ],
         "max": [
-          0.116,
-          0.918,
+          0.118,
+          0.624,
           0.118
         ],
         "size": [
-          0.232,
-          0.918,
-          0.235
+          0.237,
+          0.624,
+          0.237
         ]
       },
-      "triangles": 78,
-      "bytes": 4260
+      "triangles": 169,
+      "bytes": 3512,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu en fuseau, jeune"
     },
-    "bush": {
-      "file": "bush.glb",
-      "kit": "kenney-nature-kit",
-      "source": "plant_bushDetailed.glb",
-      "scale": 0.8,
+    "tree-tall-m": {
+      "file": "tree-tall-m.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
       "yaw": 0,
       "footprint": [
         1,
         1
       ],
       "license": "CC0",
-      "url": "https://kenney.nl/assets/nature-kit",
+      "url": "https://github.com/Madec01/Tiletown",
       "bbox": {
         "min": [
-          -0.241,
+          -0.15,
           0,
-          -0.241
+          -0.149
         ],
         "max": [
-          0.241,
-          0.288,
-          0.241
+          0.15,
+          0.799,
+          0.149
         ],
         "size": [
-          0.482,
-          0.288,
-          0.482
+          0.301,
+          0.799,
+          0.297
         ]
       },
-      "triangles": 104,
-      "bytes": 4024
+      "triangles": 213,
+      "bytes": 3768,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu en fuseau, moyen"
+    },
+    "tree-tall-l": {
+      "file": "tree-tall-l.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.171,
+          0,
+          -0.163
+        ],
+        "max": [
+          0.171,
+          0.959,
+          0.163
+        ],
+        "size": [
+          0.343,
+          0.959,
+          0.325
+        ]
+      },
+      "triangles": 242,
+      "bytes": 4036,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu en fuseau, grand"
+    },
+    "pine-s": {
+      "file": "pine-s.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.168,
+          0,
+          -0.166
+        ],
+        "max": [
+          0.168,
+          0.63,
+          0.166
+        ],
+        "size": [
+          0.337,
+          0.63,
+          0.332
+        ]
+      },
+      "triangles": 198,
+      "bytes": 3708,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "conifère jeune"
+    },
+    "pine-m": {
+      "file": "pine-m.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.203,
+          0,
+          -0.206
+        ],
+        "max": [
+          0.203,
+          0.883,
+          0.206
+        ],
+        "size": [
+          0.406,
+          0.883,
+          0.411
+        ]
+      },
+      "triangles": 246,
+      "bytes": 4020,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "conifère moyen"
+    },
+    "pine-l": {
+      "file": "pine-l.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.211,
+          0,
+          -0.224
+        ],
+        "max": [
+          0.211,
+          1.13,
+          0.224
+        ],
+        "size": [
+          0.422,
+          1.13,
+          0.447
+        ]
+      },
+      "triangles": 279,
+      "bytes": 4404,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "conifère grand"
+    },
+    "shrub-a": {
+      "file": "shrub-a.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.187,
+          0,
+          -0.206
+        ],
+        "max": [
+          0.187,
+          0.291,
+          0.206
+        ],
+        "size": [
+          0.374,
+          0.291,
+          0.412
+        ]
+      },
+      "triangles": 132,
+      "bytes": 3180,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "arbuste rond"
+    },
+    "shrub-b": {
+      "file": "shrub-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.162,
+          0,
+          -0.181
+        ],
+        "max": [
+          0.162,
+          0.189,
+          0.181
+        ],
+        "size": [
+          0.324,
+          0.189,
+          0.361
+        ]
+      },
+      "triangles": 174,
+      "bytes": 3452,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "arbuste bas et large"
+    },
+    "grass-tuft-a": {
+      "file": "grass-tuft-a.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.117,
+          0,
+          -0.112
+        ],
+        "max": [
+          0.117,
+          0.2,
+          0.112
+        ],
+        "size": [
+          0.234,
+          0.2,
+          0.223
+        ]
+      },
+      "triangles": 45,
+      "bytes": 3528,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "touffe d’herbe haute"
+    },
+    "grass-tuft-b": {
+      "file": "grass-tuft-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.087,
+          0,
+          -0.081
+        ],
+        "max": [
+          0.087,
+          0.13,
+          0.081
+        ],
+        "size": [
+          0.174,
+          0.13,
+          0.162
+        ]
+      },
+      "triangles": 35,
+      "bytes": 3240,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "touffe d’herbe rase"
+    },
+    "sapling": {
+      "file": "sapling.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.082,
+          0,
+          -0.077
+        ],
+        "max": [
+          0.082,
+          0.315,
+          0.077
+        ],
+        "size": [
+          0.164,
+          0.315,
+          0.154
+        ]
+      },
+      "triangles": 84,
+      "bytes": 2916,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "jeune plant"
+    },
+    "tree-a": {
+      "file": "tree-a.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.228,
+          0,
+          -0.217
+        ],
+        "max": [
+          0.228,
+          0.775,
+          0.217
+        ],
+        "size": [
+          0.455,
+          0.775,
+          0.434
+        ]
+      },
+      "triangles": 240,
+      "bytes": 4004,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu rond moyen (= tree-round-m, autre graine)"
+    },
+    "tree-b": {
+      "file": "tree-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.145,
+          0,
+          -0.154
+        ],
+        "max": [
+          0.145,
+          0.795,
+          0.154
+        ],
+        "size": [
+          0.29,
+          0.795,
+          0.307
+        ]
+      },
+      "triangles": 213,
+      "bytes": 3768,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu en fuseau moyen (= tree-tall-m, autre graine)"
+    },
+    "tree-c": {
+      "file": "tree-c.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.266,
+          0,
+          -0.242
+        ],
+        "max": [
+          0.266,
+          0.907,
+          0.242
+        ],
+        "size": [
+          0.532,
+          0.907,
+          0.483
+        ]
+      },
+      "triangles": 306,
+      "bytes": 4428,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "feuillu rond grand (= tree-round-l, autre graine)"
+    },
+    "pine-a": {
+      "file": "pine-a.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.2,
+          0,
+          -0.2
+        ],
+        "max": [
+          0.2,
+          0.884,
+          0.2
+        ],
+        "size": [
+          0.399,
+          0.884,
+          0.4
+        ]
+      },
+      "triangles": 246,
+      "bytes": 4020,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "conifère moyen (= pine-m, autre graine)"
+    },
+    "pine-b": {
+      "file": "pine-b.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.227,
+          0,
+          -0.238
+        ],
+        "max": [
+          0.227,
+          1.129,
+          0.238
+        ],
+        "size": [
+          0.454,
+          1.129,
+          0.477
+        ]
+      },
+      "triangles": 279,
+      "bytes": 4408,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "conifère grand (= pine-l, autre graine)"
+    },
+    "bush": {
+      "file": "bush.glb",
+      "kit": "tiletown-primitives",
+      "source": "primitives",
+      "scale": 1,
+      "yaw": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "license": "CC0",
+      "url": "https://github.com/Madec01/Tiletown",
+      "bbox": {
+        "min": [
+          -0.192,
+          0,
+          -0.228
+        ],
+        "max": [
+          0.192,
+          0.3,
+          0.228
+        ],
+        "size": [
+          0.384,
+          0.3,
+          0.456
+        ]
+      },
+      "triangles": 132,
+      "bytes": 3172,
+      "assembled": true,
+      "parts": [
+        {
+          "kit": "tiletown-primitives",
+          "source": "primitives"
+        }
+      ],
+      "note": "arbuste rond (= shrub-a, autre graine)"
     },
     "flowers": {
       "file": "flowers.glb",
@@ -1255,7 +2381,7 @@
         ]
       },
       "triangles": 380,
-      "bytes": 11936,
+      "bytes": 8140,
       "assembled": true,
       "parts": [
         {
@@ -1307,7 +2433,10 @@
         ]
       },
       "triangles": 80,
-      "bytes": 4432
+      "bytes": 3604,
+      "roles": {
+        "rock": "baseStone"
+      }
     },
     "rock-b": {
       "file": "rock-b.glb",
@@ -1339,7 +2468,7 @@
         ]
       },
       "triangles": 85,
-      "bytes": 5488
+      "bytes": 3608
     },
     "crop-wheat": {
       "file": "crop-wheat.glb",
@@ -1371,7 +2500,7 @@
         ]
       },
       "triangles": 1440,
-      "bytes": 27432,
+      "bytes": 26600,
       "assembled": true,
       "parts": [
         {
@@ -1411,7 +2540,7 @@
         ]
       },
       "triangles": 744,
-      "bytes": 15444,
+      "bytes": 14656,
       "assembled": true,
       "parts": [
         {
@@ -1455,7 +2584,12 @@
         ]
       },
       "triangles": 44,
-      "bytes": 4612,
+      "bytes": 2656,
+      "roles": {
+        "marking": "marking",
+        "sidewalk": "sidewalk",
+        "asphalt": "asphalt"
+      },
       "orientation": "axe Z (nord–sud) ; bras N et S"
     },
     "road-corner": {
@@ -1488,7 +2622,12 @@
         ]
       },
       "triangles": 260,
-      "bytes": 6232,
+      "bytes": 4360,
+      "roles": {
+        "marking": "marking",
+        "sidewalk": "sidewalk",
+        "asphalt": "asphalt"
+      },
       "orientation": "bras N et E"
     },
     "road-t": {
@@ -1521,7 +2660,12 @@
         ]
       },
       "triangles": 84,
-      "bytes": 5064,
+      "bytes": 3104,
+      "roles": {
+        "sidewalk": "sidewalk",
+        "marking": "marking",
+        "asphalt": "asphalt"
+      },
       "orientation": "bras N, E et S (fermé à l’ouest)"
     },
     "road-cross": {
@@ -1554,7 +2698,12 @@
         ]
       },
       "triangles": 116,
-      "bytes": 5348,
+      "bytes": 3376,
+      "roles": {
+        "sidewalk": "sidewalk",
+        "marking": "marking",
+        "asphalt": "asphalt"
+      },
       "orientation": "bras N, E, S, W"
     },
     "road-crosswalk": {
@@ -1587,7 +2736,12 @@
         ]
       },
       "triangles": 104,
-      "bytes": 4972,
+      "bytes": 2872,
+      "roles": {
+        "marking": "marking",
+        "sidewalk": "sidewalk",
+        "asphalt": "asphalt"
+      },
       "orientation": "axe Z (nord–sud) ; passage piéton au centre"
     },
     "bridge": {
@@ -1620,7 +2774,12 @@
         ]
       },
       "triangles": 240,
-      "bytes": 8016,
+      "bytes": 5676,
+      "roles": {
+        "sidewalk": "sidewalk",
+        "marking": "marking",
+        "asphalt": "asphalt"
+      },
       "orientation": "axe Z (nord–sud) ; tablier à 0,5 u"
     },
     "road-edge-straight": {
@@ -1653,7 +2812,7 @@
         ]
       },
       "triangles": 84,
-      "bytes": 5356,
+      "bytes": 3264,
       "assembled": true,
       "parts": [
         {
@@ -1694,7 +2853,7 @@
         ]
       },
       "triangles": 48,
-      "bytes": 3760,
+      "bytes": 2772,
       "assembled": true,
       "parts": [
         {
@@ -1734,7 +2893,7 @@
         ]
       },
       "triangles": 48,
-      "bytes": 3808,
+      "bytes": 2812,
       "assembled": true,
       "parts": [
         {
@@ -1774,7 +2933,7 @@
         ]
       },
       "triangles": 60,
-      "bytes": 3956,
+      "bytes": 3000,
       "assembled": true,
       "parts": [
         {
@@ -1814,7 +2973,15 @@
         ]
       },
       "triangles": 1648,
-      "bytes": 26016,
+      "bytes": 21240,
+      "roles": {
+        "wall": "wallGreen",
+        "metal": "metalLight",
+        "base": "sidewalk",
+        "glass": "glass",
+        "accent": "roofOrange",
+        "trim": "wood"
+      },
       "orientation": "avant vers +Z"
     },
     "car-a": {
@@ -1847,7 +3014,13 @@
         ]
       },
       "triangles": 2032,
-      "bytes": 23436,
+      "bytes": 19424,
+      "roles": {
+        "asphalt": "asphalt",
+        "marking": "marking",
+        "metal": "metal",
+        "accent": "blossom"
+      },
       "orientation": "avant vers +Z"
     },
     "car-b": {
@@ -1880,7 +3053,13 @@
         ]
       },
       "triangles": 2088,
-      "bytes": 24160,
+      "bytes": 20076,
+      "roles": {
+        "asphalt": "asphalt",
+        "marking": "marking",
+        "metal": "metalLight",
+        "accent": "blossom"
+      },
       "orientation": "avant vers +Z"
     },
     "bus": {
@@ -1913,7 +3092,13 @@
         ]
       },
       "triangles": 2476,
-      "bytes": 28656,
+      "bytes": 23800,
+      "roles": {
+        "metal": "metalLight",
+        "marking": "marking",
+        "asphalt": "asphalt",
+        "accent": "sun"
+      },
       "orientation": "avant vers +Z",
       "provisional": true,
       "note": "le Car Kit n’a pas de bus : camionnette longue (delivery) en attendant"
@@ -1948,7 +3133,13 @@
         ]
       },
       "triangles": 2082,
-      "bytes": 23992,
+      "bytes": 19756,
+      "roles": {
+        "metal": "metal",
+        "asphalt": "asphalt",
+        "accent": "blossom",
+        "marking": "marking"
+      },
       "orientation": "avant vers +Z"
     },
     "deer": {
@@ -3021,5 +4212,5 @@
       "note": "pantin en primitives ; pivots : WheelF←Frame, WheelB←Frame, Body←Frame, Head←Body, LegL←Body, LegR←Body ; x+ = côté gauche"
     }
   },
-  "generated": "2026-10-04"
+  "generated": "2026-10-05"
 }

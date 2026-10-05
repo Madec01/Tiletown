@@ -4,7 +4,10 @@
 // déborde pas en largeur. Trois états sont mesurés : la feuille du catalogue ouverte (cartes ≥ 64 px, barres de
 // demande), une tuile en main (pastille + ✕), un fantôme affiché (bandeau + ✓ 56 px + ✕ 48 px) ; plus la fiche
 // d'une case, la feuille des **calques** (quatre grands boutons + Sols + légende + hachures), la **fiche
-// Nature** (quatre sous-scores touchables) et le **carnet des espèces**. Mesuré dans Chromium (Playwright, SwiftShader) sur dev.html servi par un petit serveur local ; si
+// Nature** (quatre sous-scores touchables) et le **carnet des espèces** ; puis les écrans de la carrière
+// (§11.3) : **écran titre** (trois boutons ≥ 56 px), **carte de carrière** (bouton Jouer, bouton Menu),
+// **bandeau d'objectifs** déplié, **bulle du tutoriel** (bouton « Compris ») et **fin de niveau**
+// (Rejouer / Niveau suivant ≥ 56 px). Mesuré dans Chromium (Playwright, SwiftShader) sur dev.html servi par un petit serveur local ; si
 // Playwright ou son navigateur manquent, le test est sauté (les vérifications statiques sont dans
 // tests/style.test.js). Les erreurs de console sont aussi relevées : une erreur de page ou d'interface fait
 // échouer le test ; celles du pipeline des modèles 3D (« THREE.… », ressources de assets/models/ absentes)
@@ -100,8 +103,23 @@ function measureInPage(label) {
     hudH: hud ? hud.getBoundingClientRect().height : 0,
     tabs: tabbar ? tabbar.querySelectorAll('.tab').length : 0,
     gaugeValues: fs('.gauge-value'),
-    secondary: fs('.gauge-label, .gauge-delta, .tab-label, .hud-date, .card-price, .demand-value, .layer-legend-min, .layer-legend-mid, .layer-legend-max, .tile-eco-label, .tile-eco-word'),
-    body: fs('.toast-text, .sheet-hint, .card-title, .rotate-text, .action-title, .action-sub, .demand-label, .alert-text, .tile-sheet p, .cond-text, .layer-btn-label, .layer-pattern-label, .layer-legend-title, .layer-legend-hint, .nature-total, .eco-label, .book-count, .species-name, .species-note, .tile-eco-species, .layer-pill-text'),
+    secondary: fs('.gauge-label, .gauge-delta, .tab-label, .hud-date, .card-price, .demand-value, .layer-legend-min, .layer-legend-mid, .layer-legend-max, .tile-eco-label, .tile-eco-word, .goals-note, .goal-value, .level-badge, .level-years, .end-goal-value'),
+    body: fs('.toast-text, .sheet-hint, .card-title, .rotate-text, .action-title, .action-sub, .demand-label, .alert-text, .tile-sheet p, .cond-text, .layer-btn-label, .layer-pattern-label, .layer-legend-title, .layer-legend-hint, .nature-total, .eco-label, .book-count, .species-name, .species-note, .tile-eco-species, .layer-pill-text, .title-sub, .title-btn-label, .title-btn-sub, .goals-summary, .goal-label, .level-sub, .level-goals, .level-lock, .career-progress, .career-back, .level-play, .tuto-title, .tuto-text, .tuto-ok, .end-text, .end-star-label, .end-goal-label, .end-btn'),
+    // Carrière, tutoriel, écrans (étape 5)
+    titleBtns: box('.title-btn'),
+    titleActions: [...document.querySelectorAll('.title-btn')].map((n) => n.dataset.action),
+    titleName: (document.querySelector('.title-name') || {}).textContent || '',
+    levelPlays: box('.level-play'),
+    careerBack: box('.career-back'),
+    levelCards: [...document.querySelectorAll('.level-card')].map((n) => n.dataset.state),
+    goalsHead: box('.goals-head'),
+    goalRows: [...document.querySelectorAll('.goal:not(.goal--empty)')].map((n) => n.dataset.goal),
+    goalsExpanded: !!document.querySelector('.goals-box.is-expanded'),
+    tutoOk: box('.tuto-ok'),
+    tutoOpen: !!document.querySelector('#tutorial.is-open'),
+    endBtns: box('.end-btn'),
+    endStars: [...document.querySelectorAll('.end-star')].length,
+    menuBtn: size('#menu'),
     speed: size('#speed'),
     ok: size('#action .action-ok'),
     x: size('#action .action-x'),
@@ -115,7 +133,7 @@ function measureInPage(label) {
     failed: document.documentElement.classList.contains('boot-failed'),
     errorText: (document.querySelector('.loading-error') || {}).textContent || '',
     // Troncature (« … ») au sous-pixel : largeur réelle du texte (Range) contre celle de sa boîte.
-    truncated: [...document.querySelectorAll('.gauge-label, .tab-label, .card-title, .action-title, .sheet-title')].filter(vis).filter((n) => {
+    truncated: [...document.querySelectorAll('.gauge-label, .tab-label, .card-title, .action-title, .sheet-title, .title-btn-label, .goals-summary, .end-btn, .level-play, .career-back')].filter(vis).filter((n) => {
       const range = document.createRange();
       range.selectNodeContents(n);
       return range.getBoundingClientRect().width > n.getBoundingClientRect().width + 0.01;
@@ -160,7 +178,7 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
       const errors = [];
       page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-      await page.goto(`http://127.0.0.1:${port}/dev.html?stats=1&seed=7&nosw&new=1`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`http://127.0.0.1:${port}/dev.html?stats=1&seed=7&nosw&new=1&mode=sandbox`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => (window.__tiletown && window.__tiletown.ready) || document.documentElement.classList.contains('boot-failed'), null, { timeout: 60000 }).catch(() => {});
       if (await page.locator('#welcome-play').count()) await page.click('#welcome-play');
       const states = [];
@@ -189,7 +207,8 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
         await page.waitForTimeout(300);
         // 5. Feuille des calques : quatre grands boutons + Sols, légende, bascule hachures.
         await page.click('#tabbar .tab--layers').catch(() => {});
-        await page.waitForTimeout(400);
+        await page.waitForSelector('.sheet.is-visible .layer-btn--air', { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(300);
         await page.click('.layer-btn--air').catch(() => {});
         await page.waitForTimeout(350);
         states.push(await page.evaluate(measureInPage, 'calques'));
@@ -198,13 +217,41 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
         states.push(await page.evaluate(measureInPage, 'pastille'));
         // 6. Fiche Nature (jauge Nature) : quatre sous-scores touchables, puis le carnet.
         await page.click('.gauge--nature').catch(() => {});
+        await page.waitForSelector('.sheet.is-visible .eco-row', { timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(400);
         states.push(await page.evaluate(measureInPage, 'nature'));
         await page.click('.nature-book').catch(() => {});
+        await page.waitForSelector('.sheet.is-visible .species', { timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(400);
         states.push(await page.evaluate(measureInPage, 'carnet'));
         await page.evaluate(() => { window.__tiletown.sheets.close(); window.__tiletown.setLayer('none'); });
         await page.waitForTimeout(250);
+        // 7. Écran titre (trois boutons ≥ 56 px) puis carte de carrière (Jouer, Menu).
+        await page.evaluate(() => window.__tiletown.showTitle());
+        await page.waitForSelector('.screen--title', { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(400);
+        states.push(await page.evaluate(measureInPage, 'titre'));
+        await page.click('.title-btn[data-action="career"]').catch(() => {});
+        await page.waitForSelector('.screen--career', { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(400);
+        states.push(await page.evaluate(measureInPage, 'carrière'));
+        // 8. Un niveau : bandeau d'objectifs déplié, bulle du tutoriel.
+        await page.click('.level-play[data-level]').catch(() => {});
+        await page.waitForTimeout(1200);
+        await page.click('.goals-head').catch(() => {});
+        await page.waitForTimeout(400);
+        states.push(await page.evaluate(measureInPage, 'niveau'));
+        // 9. Fin de niveau : trois étoiles, Rejouer et Niveau suivant.
+        await page.evaluate(() => {
+          const t = window.__tiletown;
+          const stats = {};
+          for (const g of t.goals()) if (g.kind === 'population') stats.population = Math.max(g.target, 200);
+          t.grant({ money: 2000, stats });
+          t.finishLevel();
+        });
+        await page.waitForSelector('.screen--end.is-visible', { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(500);
+        states.push(await page.evaluate(measureInPage, 'fin de niveau'));
       }
       await context.close();
 
@@ -223,7 +270,10 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
         assert.ok(st.secondary.every((v) => v >= 12), `${s.name} (${st.label}) : mentions ≥ 12 px (${st.secondary})`);
         assert.ok(st.body.every((v) => v >= 14), `${s.name} (${st.label}) : corps ≥ 14 px (${st.body})`);
         assert.ok(st.scrollW <= st.innerW, `${s.name} (${st.label}) : la page déborde en largeur (${st.scrollW} > ${st.innerW})`);
-        assert.ok(st.speed && st.speed[0] >= 48 && st.speed[1] >= 48, `${s.name} (${st.label}) : bouton vitesse ${st.speed} < 48 px`);
+        // Derrière un écran plein (titre, carte de carrière), la barre du haut s'efface : rien à mesurer.
+        const fullScreen = st.label === 'titre' || st.label === 'carrière';
+        if (fullScreen) assert.equal(st.speed, null, `${s.name} (${st.label}) : la barre du haut s'efface derrière un écran plein`);
+        else assert.ok(st.speed && st.speed[0] >= 48 && st.speed[1] >= 48, `${s.name} (${st.label}) : bouton vitesse ${st.speed} < 48 px`);
       }
       assert.ok(m.sheetOpen, `${s.name} : la feuille du catalogue s'ouvre`);
       assert.ok(m.targets >= 12, `${s.name} : ${m.targets} cibles mesurées (jauges, vitesse, onglets, cartes)`);
@@ -271,6 +321,27 @@ test('cibles tactiles ≥ 48 px, onglets ≥ 56 px, ✓ 56 px, textes lisibles (
         const book = states.find((st) => st.label === 'carnet');
         assert.ok(book && book.sheetOpen && book.speciesCount >= 1, `${s.name} : le carnet s'ouvre (${book && book.speciesCount} ligne(s))`);
         assert.ok(book.speciesSee.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : boutons « Voir » du carnet ≥ 48 px (${JSON.stringify(book.speciesSee)})`);
+        // Écran titre : le nom du jeu en grand et trois (ou deux) boutons d'au moins 56 px.
+        const titre = states.find((st) => st.label === 'titre');
+        assert.ok(titre && titre.titleBtns.length >= 2, `${s.name} : l'écran titre s'ouvre (${titre && titre.titleBtns.length} boutons)`);
+        assert.ok(titre.titleActions.includes('career') && titre.titleActions.includes('sandbox'), `${s.name} : boutons Carrière et Bac à sable (${titre.titleActions})`);
+        assert.ok(titre.titleBtns.every(([w, h]) => w >= 48 && h >= 56), `${s.name} : boutons du titre ≥ 56 px (${JSON.stringify(titre.titleBtns)})`);
+        assert.match(titre.titleName, /Tiletown/, `${s.name} : le nom du jeu`);
+        // Carte de carrière : un bouton Jouer sur le niveau ouvert, un bouton Menu, des cartes par niveau.
+        const carte = states.find((st) => st.label === 'carrière');
+        assert.ok(carte && carte.levelCards.length >= 5, `${s.name} : ${carte && carte.levelCards.length} niveaux listés`);
+        assert.ok(carte.levelPlays.length >= 1 && carte.levelPlays.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : bouton Jouer ≥ 48 px (${JSON.stringify(carte.levelPlays)})`);
+        assert.ok(carte.careerBack.length === 1 && carte.careerBack.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : bouton Menu de la carte ≥ 48 px (${JSON.stringify(carte.careerBack)})`);
+        // En jeu : bandeau d'objectifs déplié, bulle du tutoriel, bouton Menu de la barre du haut.
+        const niveau = states.find((st) => st.label === 'niveau');
+        assert.ok(niveau && niveau.goalsHead.length === 1 && niveau.goalsHead[0][1] >= 48, `${s.name} : ligne des objectifs ≥ 48 px (${JSON.stringify(niveau && niveau.goalsHead)})`);
+        assert.ok(niveau.goalsExpanded && niveau.goalRows.length >= 2, `${s.name} : objectifs dépliés (${niveau.goalRows})`);
+        assert.ok(niveau.tutoOpen && niveau.tutoOk.length === 1 && niveau.tutoOk.every(([w, h]) => w >= 48 && h >= 48), `${s.name} : bulle du tutoriel et bouton « Compris » ≥ 48 px (${JSON.stringify(niveau.tutoOk)})`);
+        assert.ok(niveau.menuBtn && niveau.menuBtn[0] >= 48 && niveau.menuBtn[1] >= 48, `${s.name} : bouton Menu ${niveau.menuBtn} < 48 px`);
+        // Fin de niveau : trois étoiles affichées, deux boutons d'au moins 56 px.
+        const fin = states.find((st) => st.label === 'fin de niveau');
+        assert.equal(fin.endStars, 3, `${s.name} : trois étoiles (gagnées ou non)`);
+        assert.ok(fin.endBtns.length === 3 && fin.endBtns.every(([w, h]) => w >= 48 && h >= 56), `${s.name} : Rejouer, Suite et Continuer ≥ 56 px (${JSON.stringify(fin.endBtns)})`);
       }
     }
   } finally {

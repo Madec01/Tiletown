@@ -1,11 +1,10 @@
 // Habillage de la vallée, parcours, réglages et accueil. La simulation reste dans core/.
-import { el, fmt, setText } from "./dom.js";
+import { el, setText } from "./dom.js";
 import { icon } from "./icons.js";
-import { currentGoal, GOALS, journeyScore } from "../core/journey.js";
-import { LEVELS, LEVEL_BY_ID } from "../data/levels.js";
+import { currentGoal, GOALS } from "../core/journey.js";
+import { LEVEL_BY_ID } from "../data/levels.js";
 import { evaluateGoals } from "../core/career-session.js";
-import { rememberLesson } from "../core/career.js";
-import { tutorialState, tutorialProgress } from "../core/tutorial.js";
+import { tutorialProgress } from "../core/tutorial.js";
 import { assetUrl } from "../version.js";
 export function tileImage(id, cls = "") {
   return el("img", {
@@ -24,17 +23,15 @@ export function createExperience({
   audio,
   claim,
   startGame,
-  openLevel,
-  restored,
+  getCareer,
+  onCareerMap,
+  onTutorial,
   homeView,
   fitView,
   zoom,
-  pause,
   onResize,
 }) {
-  let welcomed = false,
-    shownResult = false,
-    lastGoal = "";
+  let lastGoal = "";
   const button = (name, label, fn, cls = "") =>
     el(
       `button.round-button${cls ? "." + cls : ""}`,
@@ -63,6 +60,7 @@ export function createExperience({
     el("div.masthead-actions", soundBtn, settingsBtn),
   );
   app.hud.element.prepend(masthead);
+  masthead.querySelector('.masthead-actions').append(app.hud.element.querySelector('#menu'));
   const goalText = el("strong", "Un village prend vie"),
     goalSub = el("span", "Votre prochaine étape"),
     goalFill = el("span.mission-fill");
@@ -211,7 +209,7 @@ export function createExperience({
           "Les cinq vallées",
         ),
       );
-      const progress = tutorialProgress("base", game.career.seen);
+      const progress = tutorialProgress("base", getCareer().seen);
       body.append(
         el(
           "button.btn.btn--ghost",
@@ -380,146 +378,8 @@ export function createExperience({
       content: body,
     });
   }
-  function openTutorial() {
-    const game = getGame();
-    const state = tutorialState("base", game, game.career?.seen || [], {
-      layer: app.layers.kind,
-    });
-    const body = el("div.help-body");
-    if (!state) {
-      body.append(
-        el("h3", "Vous connaissez les chemins de la vallée"),
-        el(
-          "p",
-          "Les dix leçons sont terminées. Votre carnet garde les objectifs et les primes à venir.",
-        ),
-      );
-    } else {
-      body.append(
-        el("span.eyebrow", `LEÇON ${state.index + 1} / ${state.total}`),
-        el("h3", state.title),
-        el("p", state.text),
-      );
-      if (state.done && state.reward?.text)
-        body.append(el("p.sheet-hint", state.reward.text));
-      const remember = () => {
-        const current = getGame();
-        if (current.career)
-          applyGame(
-            {
-              ...current,
-              career: rememberLesson(current.career, state.lesson.id),
-            },
-            { kind: "tutorial" },
-          );
-        openTutorial();
-      };
-      body.append(
-        el(
-          "button.btn",
-          {
-            type: "button",
-            onclick: () => {
-              if (state.done) {
-                remember();
-                return;
-              }
-              if (state.tile) take(state.tile);
-              else {
-                app.sheets.close();
-                const h = state.highlight;
-                if (h?.kind === "tile")
-                  app.renderer.setHighlight([{ x: h.x, y: h.y }]);
-                if (h?.kind === "tab" && h.id === "layers")
-                  app.layers.set("air");
-                const selector =
-                  h?.kind === "tab"
-                    ? `.tab--${h.id}`
-                    : h?.kind === "gauge"
-                      ? `.gauge--${h.id}`
-                      : h?.kind === "speed"
-                        ? "#speed"
-                        : null;
-                if (selector) {
-                  const node = document.querySelector(selector);
-                  node?.classList.add("tutorial-focus");
-                  setTimeout(
-                    () => node?.classList.remove("tutorial-focus"),
-                    5000,
-                  );
-                }
-              }
-            },
-          },
-          state.done ? "Leçon suivante" : "Me montrer",
-          icon("arrow"),
-        ),
-      );
-      if (!state.done)
-        body.append(
-          el(
-            "button.btn.btn--ghost",
-            { type: "button", onclick: remember },
-            "Passer cette leçon",
-          ),
-        );
-    }
-    app.sheets.open({ id: "tutorial", title: "Premiers pas", content: body });
-  }
-  function careerMap() {
-    const game = getGame(),
-      career = game.career;
-    const body = el(
-      "div.settings-body",
-      el(
-        "p.sheet-hint",
-        "Cinq vallées à découvrir. Choisir une vallée remplace la partie en cours ; vos étoiles, vos leçons et vos déblocages sont conservés.",
-      ),
-    );
-    for (const level of LEVELS) {
-      const unlocked =
-        career?.unlocked?.includes(level.id) ||
-        (!career && level.id === "vallee-1");
-      body.append(
-        el(
-          "button.mode-card",
-          {
-            type: "button",
-            "aria-disabled": String(!unlocked),
-            onclick: () => {
-              if (!unlocked) {
-                app.toasts.show({
-                  text: "Terminez la vallée précédente pour ouvrir celle-ci.",
-                });
-                return;
-              }
-              shownResult = false;
-              openLevel(level.id);
-              refresh();
-            },
-          },
-          icon(unlocked ? "flag" : "leaf"),
-          el(
-            "span",
-            el("strong", level.title),
-            el("small", level.subtitle),
-            el(
-              "small",
-              unlocked
-                ? "★".repeat(career?.stars?.[level.id] || 0) +
-                    "☆".repeat(3 - (career?.stars?.[level.id] || 0))
-                : "À découvrir",
-            ),
-          ),
-        ),
-      );
-    }
-    app.sheets.open({
-      id: "career",
-      title: "Les chemins de la vallée",
-      content: body,
-    });
-  }
+  function openTutorial() { onTutorial(); }
+  function careerMap() { onCareerMap(); }
   function newValley() {
     const body = el(
       "div.settings-body",
@@ -547,7 +407,6 @@ export function createExperience({
             type: "button",
             onclick: () => {
               startGame(mode, true);
-              shownResult = false;
               app.sheets.close();
               refresh();
             },
@@ -566,164 +425,6 @@ export function createExperience({
     app.sheets.open({
       id: "new-valley",
       title: "Une nouvelle histoire",
-      content: body,
-    });
-  }
-  function welcome() {
-    let seen = false;
-    try {
-      seen = localStorage.getItem("tiletown.welcomed") === "2";
-    } catch {
-      /* facultatif */
-    }
-    if (seen) {
-      welcomed = true;
-      refresh();
-      return;
-    }
-    pause(true);
-    const overlay = el("div.welcome", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "welcome-title",
-    });
-    const modes = el("div.welcome-modes");
-    let mode = "career";
-    for (const [id, label] of [
-      ["career", "Aventure"],
-      ["sandbox", "Mode libre"],
-    ])
-      modes.append(
-        el(
-          "button",
-          {
-            type: "button",
-            "aria-pressed": String(id === mode),
-            onclick: (e) => {
-              mode = id;
-              for (const b of modes.children)
-                b.setAttribute("aria-pressed", String(b === e.currentTarget));
-            },
-          },
-          label,
-        ),
-      );
-    const enter = () => {
-      audio.unlock();
-      audio.effect("reward");
-      if (!restored) startGame(mode);
-      else pause(false);
-      overlay.remove();
-      welcomed = true;
-      try {
-        localStorage.setItem("tiletown.welcomed", "2");
-      } catch {
-        /* facultatif */
-      }
-      refresh();
-      onResize();
-    };
-    overlay.append(
-      el(
-        "div.welcome-card",
-        el("span.eyebrow", "UN PETIT MONDE. DE GRANDES IDÉES."),
-        el(
-          "h1",
-          { id: "welcome-title" },
-          "Et si on faisait",
-          el("br"),
-          "pousser une ville ?",
-        ),
-        el(
-          "p",
-          "Quelques maisons, une rivière, des voisins heureux. Le reste de l’histoire vous appartient.",
-        ),
-        restored ? null : modes,
-        el(
-          "button.btn.welcome-play",
-          { id: "welcome-play", type: "button", onclick: enter },
-          restored ? "Retrouver ma vallée" : "Bienvenue chez vous",
-          icon("arrow"),
-        ),
-        el(
-          "span.welcome-note",
-          "Jouez à votre rythme · sauvegarde automatique",
-        ),
-      ),
-    );
-    root.append(overlay);
-    requestAnimationFrame(() => overlay.querySelector(".welcome-play").focus());
-  }
-  function result() {
-    shownResult = true;
-    const score = getGame().journey?.result || journeyScore(getGame());
-    const body = el(
-      "div.result-body",
-      el(
-        "div.result-stars",
-        "★".repeat(score.stars) + "☆".repeat(3 - score.stars),
-      ),
-      el("h3", "Trois années, une belle histoire."),
-      el(
-        "p",
-        "Votre ville et sa nature ont grandi ensemble. Voici le bilan de votre vallée.",
-      ),
-      el("div.result-score", `${score.score}`, el("small", " / 100")),
-      el(
-        "div.result-metrics",
-        el("span", `Nature ${score.nature}`),
-        el("span", `Prospérité ${score.prosperity}`),
-      ),
-      el(
-        "button.btn",
-        {
-          type: "button",
-          onclick: () => {
-            applyGame(
-              { ...getGame(), mode: "sandbox", speed: 1 },
-              { kind: "continue" },
-            );
-            app.sheets.close();
-          },
-        },
-        "Continuer ma vallée",
-      ),
-      el(
-        "button.btn.btn--ghost",
-        { type: "button", onclick: newValley },
-        "Créer une autre vallée",
-      ),
-    );
-    const firstAction = body.querySelector("button");
-    if (score.goals)
-      for (const g of score.goals)
-        body.insertBefore(
-          el(
-            "div.metric-row",
-            el("span", g.label),
-            el("strong", g.done ? "Atteint" : `${g.value}/${g.target}`),
-          ),
-          firstAction,
-        );
-    if (score.details)
-      for (const detail of score.details)
-        body.insertBefore(
-          el("p.sheet-hint", `${detail.done ? "★" : "☆"} ${detail.label}`),
-          firstAction,
-        );
-    if (getGame().career)
-      body.append(
-        el(
-          "button.btn",
-          { type: "button", onclick: careerMap },
-          score.stars > 0
-            ? "Découvrir la vallée suivante"
-            : "Rejouer cette vallée",
-        ),
-      );
-    app.sheets.open({
-      id: "result",
-      title: "Votre vallée, trois ans plus tard",
       content: body,
     });
   }
@@ -746,9 +447,8 @@ export function createExperience({
       mission.classList.toggle("is-ready", !!goal?.ready);
     }
     mission.hidden = game.mode === "sandbox";
-    if (game.journey?.finished && !shownResult && welcomed) result();
     refreshSound();
   }
   refresh();
-  return { refresh, welcome, openGoals, careerMap, settings, take };
+  return { refresh, openGoals, careerMap, settings, take };
 }
