@@ -2,6 +2,15 @@
 
 Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour à chaque travail.
 
+## 2026-10-05 — Résolution des conflits de la PR #1
+
+- Intégration de `main` au commit `acbfb3e` dans `feat/refonte-vallee-mobile`. Sauvegarde avant intervention : branche et tag `backup/avant-resolution-pr1-2026-10-05`, publiés sur GitHub (ancien sommet `63a9de3`).
+- Terrain continu, rivière sinueuse, nouveaux modèles, semis de végétation et abords de rues de `main` conservés. Ses 85 modèles remplacent les adaptations provisoires redondantes de la PR ; les 22 aperçus du catalogue sont régénérés depuis ces GLB.
+- Écrans titre, carte, résultat, objectifs et tutoriel de `main` raccordés à l’interface crème/vert, aux raccourcis tactiles, aux huit primes, aux trois musiques et aux réglages de la PR. Un seul accueil et un seul tutoriel ; commandes accessibles sur téléphone et ordinateur.
+- Réconciliation des carrières sauvegardées dans la partie et dans la clé séparée : meilleur nombre d’étoiles et union des niveaux, tuiles et leçons. Le mode libre et une nouvelle vallée conservent la carrière. Bilan figé, sauvegardé et retrouvé après rechargement ; « Continuer ma vallée » reprend le même monde sans rouvrir le bilan au retour du menu.
+- Tests : **264 réussis, aucun échec, aucun ignoré**, dont le nouveau contrôle des deux formats de carrière et les cibles tactiles sur 360 × 740 et 412 × 915. Parcours `play-career.mjs` validé (trois premières leçons au toucher, fin de niveau, déblocages et reprise). `review-mobile.mjs` couvre en plus les primes, les réglages, le bilan après recharge et le mode libre ; vues jusqu’à 1440 × 1000. Vérification hors ligne : 85 modèles sans erreur et audio partiel Range 206. Exécution dans Chromium avec rendu logiciel.
+- Build régénéré depuis l’historique de production de `main`, en conservant ses quatre versions précédentes ; `npm run check` valide. Crédits, architecture et captures actualisés. La recherche d’assets dans `docs/ASSETS.md` est conservée.
+
 ## 2026-10-04 — Création du dépôt et conception initiale
 
 - Séance de réflexion sur le gameplay avec quatre agents : réutilisable dans Seve, jeux comparables, systèmes nature (air, eau, faune, sols), économie / boucle / routes automatiques / UX mobile.
@@ -232,3 +241,42 @@ parallèle de TERRAIN — `src/render3d/ground.js`, `renderer.js`, `camera.js` �
 ## Bugs
 
 - Aucun pour l'instant.
+
+## 2026-10-05 — Refonte complète de l’expérience mobile « Une ville qui respire »
+
+Demande : une version beaucoup plus belle, en 3D, jouable sur téléphone en portrait, avec de beaux assets et de la musique.
+
+### Sauvegarde préalable
+
+Branche et tag `backup/avant-refonte-mobile-2026-10-05` créés sur l’état de `main` avant les modifications. Développement sur `feat/refonte-vallee-mobile`.
+
+### Réalisation
+
+- Nouvelle interface crème et vert sapin : identité, quatre jauges, pictogrammes, raccourcis de construction au pouce, commandes de caméra, panneaux illustrés et écran d’accueil.
+- Catalogue : 22 images WebP pré-rendues à partir des véritables GLB ; prix, entretien, description et conditions de déblocage lisibles.
+- Rendu 3D : lumière chaude et tone mapping filmique, terrain continu aux couleurs fondues, collines raccordées et berges en pente, arbres arrondis, grille locale pendant la pose, toitures terre cuite, jardins, clôtures, lampadaires et cailloux sur les berges. Variante d’éclairage du soir. Environ 27 appels de dessin sur la carte initiale avec multi-draw.
+- Audio : trois compositions CC0 complètes, niveau homogénéisé, liste de lecture, réglage du volume, musique et bruitages indépendants, préférences mémorisées. Lecture débloquée par un geste et suspendue quand l’onglet est caché. Les musiques sont mises en cache à leur première utilisation par le service worker existant.
+- Carrière : mairie seule au départ, cinq vallées à débloquer, objectifs de population et de nature propres à chaque carte, huit étapes de découverte avec primes uniques, bilan à 36 mois, score et étoiles persistantes, possibilité de continuer la vallée. Mode libre : catalogue débloqué et budget de 100 000 $. Confirmation explicite dans l’interface avant de remplacer une partie.
+- Sauvegardes précédentes compatibles ; mode, progression et bilan sérialisés. Une prime supprime l’annulation précédente pour empêcher un remboursement incohérent.
+- Vues téléphone / ordinateur adaptées, cibles tactiles de 48 px minimum, chiffres abrégés pour les gros budgets, prise en compte des animations réduites.
+
+### Validation
+
+Tests Node et parcours Chromium automatisés : simulation, sauvegardes, objectifs, fin à trois ans, tactile, aperçu puis confirmation, débit, remboursement, prime, rechargement, paramètres sonores et mode libre. Formats 360 × 740, 412 × 915, 430 × 932 et 1440 × 1000 ; captures produites par `tools/review-mobile.mjs`.
+
+Les mesures sont réalisées dans Chromium avec rendu logiciel en environnement de développement ; elles ne remplacent pas un essai de fluidité sur un appareil Android physique. Aucun achat ni ressource générée par IA ajouté. Le jeu publié sur `main` reste disponible pendant l’examen de la pull request.
+
+Résultats finaux : **235 tests réussis, aucun échec ni test sauté**. Parcours mobile et desktop réussi, sans erreur JavaScript. Contrôle hors ligne réussi après installation du service worker : reprise de la partie, 63 modèles chargés sans erreur, musique mise en cache servie en HTTP 206 pour une requête Range. `npm run check` confirme que les fichiers publiables correspondent aux sources.
+
+Contrôle économique final : `node tools/simulate.js --career --level vallee-1 --quiet --dt 30`, démarrage avec 700 $ et mairie seule ; au mois 36, 151 habitants, nature 82, deux étoiles, score 73 et aucun mois d’exode. Objectifs atteints au mois 22, sans prime du carnet ni injection de budget. Les tests des niveaux vérifient aussi les quatre autres vallées.
+
+Correction du retour Android : attendre le `popstate` de fermeture avant de poser une nouvelle entrée d’historique ; un test de régression reproduit l’ouverture d’une couche pendant la fermeture d’une autre. Les paramètres de nouvelle partie sont nettoyés avant de créer la pile des panneaux.
+
+Intégration du commit `220a2e2` arrivé sur `main` pendant la refonte : moteur de carrière, cartes, règles d’étoiles, dix leçons, suivi d’exode et simulateur conservés. L’adaptateur `career-session.js` les raccorde à la partie sauvegardée ; « Premiers pas » affiche les leçons dans le carnet. Les huit missions à primes restent un parcours complémentaire.
+
+## 2026-10-05 — Recherche complémentaire d'assets et génération 3D
+
+- Demande : rechercher de meilleurs assets 3D et examiner la possibilité de les créer ou de les faire générer.
+- Sélection et licences vérifiées sur les pages officielles : Tiny Treats Homely House / Pretty Park, KayKit Forest / City Builder Bits ; Quaternius Stylized Nature comme alternative plus foisonnante. La compatibilité Tiny Treats–KayKit est confirmée par leurs auteurs.
+- Comparaison des possibilités réelles : modèles GLB construits par code, images de concept, Meshy et Tripo. Aucun connecteur pour ces deux services trouvé ; aucun achat et aucune génération 3D externe effectués.
+- Recherche enregistrée dans `docs/ASSETS.md`. Aucun changement au jeu : la PR #1 reste la version testée (235 tests).

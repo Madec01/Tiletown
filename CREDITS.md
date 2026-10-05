@@ -65,3 +65,13 @@ Palette commune de 24 teintes (`PALETTE`, `src/data/palette.js`) : création Til
 | Ressource | Auteur | Source | Licence | Fichiers |
 |---|---|---|---|---|
 | Icônes PWA (tuile verte et maison stylisée, couleurs de la palette) | création du projet, générée par `tools/make-icons.mjs` | ce dépôt | CC0 | `assets/icons/*.png` |
+
+## Refonte « Une ville qui respire » — octobre 2026
+
+- **Chill Out Theme** — Komiku, publié par Loyalty Freak Music — [source](https://opengameart.org/content/chill-out-theme) — **CC0 1.0**.
+- **Apple Cider** — Zane Little Music — [source](https://opengameart.org/content/apple-cider) — **CC0 1.0**.
+- **Exploring Town** — Spring Spring (Julie Damsgaard) — [source](https://opengameart.org/content/exploring-town) — **CC0 1.0**, option choisie parmi les licences proposées.
+- Musiques complètes adaptées en MP3 128 kbit/s, 44,1 kHz, normalisation −18 LUFS / −2 dBTP. Sources et transformations dans `assets/audio/SOURCES.md`. Aucun extrait de Seve.
+- Pictogrammes d’interface adaptés des tracés **Lucide** — [projet](https://lucide.dev), [source](https://github.com/lucide-icons/lucide) — **ISC**. Licence dans `assets/icons/LICENSE-lucide.txt`. Tracés embarqués dans `src/ui/icons.js`.
+- Les **22 aperçus WebP** de `assets/previews/` sont des rendus des modèles GLB libres déjà crédités ci-dessus, réalisés par `tools/render-previews.mjs`. Aucune illustration de bâtiment provenant d’un autre jeu.
+- Les abords et les sols continus sont produits par `src/render3d/buildings.js`, `roads.js` et `ground.js`. Les arbres proviennent des modèles libres enrichis crédités ci-dessus. Retours sonores de validation : synthèse Web Audio (`src/audio.js`).

@@ -8,3 +8,6 @@ assets/models/raw/
 
 # Sorties des mesures et planches (régénérables : node tools/measure.mjs, tools/preview-models.mjs)
 tools/measure-out/
+
+# Captures et rapports des parcours de validation
+artifacts/

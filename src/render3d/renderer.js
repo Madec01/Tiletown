@@ -38,7 +38,7 @@ const GRID_HINT_RADIUS = 1;
 
 /**
  * Crée le rendu. options : { manifestUrl = 'assets/models/manifest.json', pixelRatioMax = 2,
- * shadows = true, shadowMapSize = 2048, markings = true, background = PALETTE.wallCream,
+ * shadows = true, shadowMapSize = 2048, markings = true, background = '#e1ead6',
  * modelFor (bâtiment → identifiant de modèle), strategy ('batched' | 'instanced' | 'auto'),
  * fetch (injection pour les tests), yaw / pitch (radians) }.
  * Rejette seulement si WebGL2 est indisponible.
@@ -50,7 +50,7 @@ export async function createRenderer(canvas, options = {}) {
     shadows = true,
     shadowMapSize = 2048,
     markings = true,
-    background = PALETTE.wallCream,
+    background = '#e1ead6',
   } = options;
 
   let renderer;
@@ -68,7 +68,8 @@ export async function createRenderer(canvas, options = {}) {
   renderer.setPixelRatio(Math.min(pixelRatioMax, (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1) || 1));
   renderer.shadowMap.enabled = shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoftShadowMap a disparu en r186
-  renderer.toneMapping = THREE.NoToneMapping;     // couleurs de la palette fidèles
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;     // lumière douce, hautes lumières contenues
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const multiDraw = renderer.extensions.has('WEBGL_multi_draw');
@@ -322,6 +323,11 @@ export async function createRenderer(canvas, options = {}) {
 
     /** Demande explicitement une nouvelle image (après un changement externe). */
     invalidate() { dirty = true; },
+    setEvening(on) {
+      sun.color.set(on ? '#ffc68a' : '#ffe9bd'); sun.intensity = on ? 1.7 : 2.75;
+      hemi.color.set(on ? '#c5c6f2' : '#c3dcf5'); hemi.intensity = on ? 1.2 : 0.95;
+      scene.background.set(on ? '#c9d0d7' : background); dirty = true;
+    },
     /** Fournit l'état des acteurs à afficher (objet de src/core/actors.js, mis à jour par l'appelant). */
     setActors(next) { actors = next || null; dirty = true; },
     /** Animation en cours : redessine à chaque appel de `render` (acteurs, étape 2). */

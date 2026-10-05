@@ -384,6 +384,8 @@ export function createGame(options = {}) {
   const game = {
     version: GAME_VERSION,
     seed,
+    mode: 'career',
+    journey: { claimed: [] },
     levelId: level ? level.id : null,
     world,
     eco: createEcology(world),
@@ -947,6 +949,9 @@ export function serialize(game) {
     flags: { ...(game.flags || { exodusMonths: 0 }) },
     unlocked: Array.from(game.unlocked),
     natureBaseline: game.natureBaseline,
+    mode: game.mode || 'career',
+    career: game.career ? structuredClone(game.career) : null,
+    journey: structuredClone(game.journey || {claimed: []}),
     log: game.log.map((e) => ({ ...e })),
     undo: null,
     stats: structuredClone(game.stats),
@@ -997,6 +1002,9 @@ export function deserialize(obj) {
   const eco = obj.version >= 2 && obj.eco ? reviveEcology(obj.eco, world) : createEcology(world);
   const game = {
     version: GAME_VERSION,
+    mode: obj.mode === 'sandbox' ? 'sandbox' : 'career',
+    ...(obj.career ? {career: structuredClone(obj.career)} : {}),
+    journey: obj.journey && Array.isArray(obj.journey.claimed) ? structuredClone(obj.journey) : {claimed: []},
     seed: obj.seed ?? world.seed ?? 1,
     levelId: typeof obj.levelId === 'string' ? obj.levelId : null,
     world,

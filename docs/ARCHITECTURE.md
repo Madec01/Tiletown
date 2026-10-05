@@ -415,3 +415,13 @@ Diagnostic : **l'aspect cubique vient du terrain et de l'organisation du décor*
 ### 11.5 Critères (étape 5)
 
 `tools/play-career.mjs` : démarrer une carrière neuve → vallée vierge avec la seule mairie, bulle du tutoriel visible ; suivre les trois premières leçons par gestes réels ; vérifier l'avancement des objectifs ; forcer l'atteinte des objectifs et vérifier l'écran de fin avec ses étoiles ; vérifier que le niveau suivant s'ouvre et que le catalogue débloqué est conservé ; recharger et retrouver la carrière. Plus : `node --test tests/` vert, build à jour, et les captures des variantes visuelles.
+
+
+### Livraison de la refonte du 2026-10-05
+
+- `ground.js` utilise un maillage continu pour la terre et pour l’eau : relief interpolé, berges inclinées, rivière sinueuse et grille locale pendant la pose. Les calques écologiques restent actifs.
+- Les variantes de bâtiments, les feuillus, conifères et arbustes sont chargés depuis les GLB enrichis de `main`. `buildings.js` et `roads.js` gèrent leurs abords. Les 22 aperçus du catalogue sont régénérés depuis ces modèles. La lumière du soir et le rendu ACES restent disponibles.
+- `career.js` gère les cinq niveaux, les étoiles et les déblocages. `career-session.js` prépare les parties et réunit les anciennes carrières embarquées dans la partie avec la clé séparée `tiletown.career`, en conservant le meilleur progrès. `journey.js` conserve les huit missions avec primes uniques.
+- Les écrans titre, carte et résultat ainsi que les objectifs et le tutoriel utilisent les composants de `main`. Le résultat arrive quand les objectifs sont atteints ou après trois ans ; il permet aussi de continuer la même vallée en mode libre. La fin est sauvegardée et restaurée après rechargement.
+- `experience.js` apporte l’habillage mobile, les raccourcis de construction, le carnet et les réglages. `audio.js` déverrouille musique et effets après un geste, et mémorise les préférences. Les trois MP3 sont chargés et cachés à la demande.
+- Contrôles reproductibles : `npm test`, `npm run check`, `npm run review:mobile`, `node tools/play-career.mjs`. Les parcours couvrent la pose tactile, les primes, les trois premières leçons, le passage à la vallée suivante et la reprise des étoiles après rechargement.

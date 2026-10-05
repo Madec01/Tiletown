@@ -246,7 +246,7 @@ export function createBackStack({ onBack, history: hist = globalThis.history, wi
   let suppress = 0; // popstate déclenchés par nous (history.back() au relâchement)
 
   function arm() {
-    if (armed || !hist || typeof hist.pushState !== 'function') return;
+    if (armed || suppress > 0 || !hist || typeof hist.pushState !== 'function') return;
     try {
       hist.pushState({ tiletown: 'layer' }, '');
       armed = true;
@@ -259,7 +259,12 @@ export function createBackStack({ onBack, history: hist = globalThis.history, wi
     try { hist.back(); } catch { suppress -= 1; }
   }
   function onPop() {
-    if (suppress > 0) { suppress -= 1; return; }
+    if (suppress > 0) {
+      suppress -= 1;
+      // Une autre couche peut s'ouvrir avant la fin asynchrone de history.back().
+      if (held.size) arm();
+      return;
+    }
     if (!armed) return;
     armed = false;
     held.clear();

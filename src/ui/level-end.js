@@ -53,7 +53,7 @@ export function starDetails(stars) {
   return out;
 }
 
-export function createLevelEnd(host, { vibrate = null, onReplay = null, onNext = null, onMap = null } = {}) {
+export function createLevelEnd(host, { vibrate = null, onReplay = null, onNext = null, onMap = null, onContinue = null } = {}) {
   const buzz = (n) => { try { vibrate?.(n); } catch { /* rien */ } };
   let open = false;
   let data = null;
@@ -134,6 +134,9 @@ export function createLevelEnd(host, { vibrate = null, onReplay = null, onNext =
         nextLabel(next),
       ),
     );
+    if (onContinue) actions.append(el('button.end-btn.end-btn--ghost', {
+      type: 'button', dataset: { action: 'continue' }, onclick: () => { buzz(10); onContinue(); },
+    }, 'Continuer ma vallée'));
   }
 
   return {

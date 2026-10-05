@@ -15,6 +15,7 @@
 import { el, clear, fmt } from './dom.js';
 import { tilesOfFamily } from '../data/tiles.js';
 import { FAMILIES, TOOLS } from './hud.js';
+import { tileImage } from './experience.js';
 
 /** Couleur de pastille par famille (variables de la palette, css/style.css). */
 export const FAMILY_SWATCH = Object.freeze({
@@ -146,8 +147,8 @@ export function createCatalog({ sheets, placement, getGame, vibrate, toasts, unl
         'aria-disabled': card.locked ? 'true' : undefined,
         onclick: () => pick(card),
       },
-      el('span.card-swatch', { style: { '--sw': card.color } }, card.locked ? lockIcon() : null),
-      el('span.card-body', el('span.card-title', card.label), price),
+      el('span.card-art', tileImage(card.id), card.locked ? lockIcon() : null),
+      el('span.card-body', el('span.card-title', card.label), el('span.card-description',card.description), price),
     );
     return node;
   }

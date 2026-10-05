@@ -53,3 +53,11 @@ Décision héritée de « Une année à la ferme » et confirmée pour Tiletown 
 ## Tests
 
 - Un test Node mesure les cibles tactiles (≥ 48 px) sur l'écran de référence et sur 360 × 740, comme `tests/touch-targets.test.js` dans Seve.
+
+## Mise à jour de l’interface — 2026-10-05
+
+Le bandeau de marque et les quatre jauges occupent désormais au plus 190 px, hors encoche, avec un carnet d’objectif séparé. Les cinq familles restent en bas ; Démolir et Calques sont deux boutons flottants. Les raccourcis illustrés (quartier, commerce, forêt) se masquent pendant une pose ou l’ouverture d’un panneau. Les panneaux restent sous les jauges, avec défilement interne.
+
+Le mode libre abrège les grands budgets (`100 k$`) tout en conservant le montant exact dans le libellé accessible. Toutes les commandes mesurées font au moins 48 × 48 px. La souris dispose aussi de boutons de zoom ; le double toucher et le pincement restent disponibles sur téléphone. Le réglage « Animations réduites » suspend les mouvements visuels de la scène sans suspendre l’économie.
+
+Parcours reproductible : démarrer `python3 -m http.server 8000`, puis lancer `npm run review:mobile`. Les captures et le rapport sont écrits dans `artifacts/review/`, non committé. Le test simule le tactile Chromium, pas un appareil Android réel.

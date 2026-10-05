@@ -27,7 +27,7 @@ import { speciesSummary } from './core/ecology.js';
 import { calendar } from './core/calendar.js';
 import { SPEEDS, UNLOCKS } from './data/balance.js';
 import { LEVELS, levelById, nextLevelId } from './data/levels.js';
-import { createCareer, startLevel as startCareerLevel, evaluateGoals, evaluateStars, finishLevel as finishCareerLevel, scoreOf } from './core/career.js';
+import { evaluateGoals, evaluateStars, finishLevel as finishCareerLevel, levelResult } from './core/career.js';
 import { nextLesson, lessonDone, markSeen, lessonHighlight } from './core/tutorial.js';
 import { TILES } from './data/tiles.js';
 import { createActors, updateActors } from './core/actors.js';
@@ -56,13 +56,17 @@ import { createCareerMap } from './ui/career-map.js';
 import { createGoals } from './ui/goals.js';
 import { createTutorialUi } from './ui/tutorial-ui.js';
 import { createLevelEnd } from './ui/level-end.js';
-import { $ } from './ui/dom.js';
+import { $, el } from './ui/dom.js';
+import { createAudio } from './audio.js';
+import { createExperience } from './ui/experience.js';
+import { claimGoal, startMode } from './core/journey.js';
+import { startLevel as startSession, reconcileCareer } from './core/career-session.js';
 
 const DEFAULT_SEED = 12345;
 const WORLD_COLS = 12;
 const WORLD_ROWS = 16;
 /** Vue de jeu par défaut : largeur visible en îlots (la vue d'ensemble se cadre toute seule). */
-const GAME_ZOOM = 8;
+const GAME_ZOOM = 9;
 const IDLE_FPS = 30;
 const INTERACT_AFTER_MS = 300; // on reste à 60 i/s un instant après le dernier geste
 const STATS_EVERY_MS = 500;
@@ -288,6 +292,8 @@ async function main() {
 
   // ── 1. Réglages et interface ───────────────────────────────────────────────────
   app.a11y = initA11y();
+  app.audio = createAudio();
+  document.addEventListener('pointerdown', () => app.audio.unlock(), { once: true });
   const vibrate = (n) => app.a11y.vibrate(n);
   app.toasts = createToasts($('#toasts'));
   app.stats = createStats($('#stats'), { visible: statsWanted(location.search, dev) });
@@ -343,6 +349,7 @@ async function main() {
   }
 
   let sizeKey = '';
+  let lastViewportWidth = 0;
   function resizeScene() {
     if (!app.renderer) return;
     const rect = stage.getBoundingClientRect();
@@ -353,6 +360,8 @@ async function main() {
     if (key !== sizeKey) {
       sizeKey = key;
       app.renderer.resize(w, h, dpr);
+      if (lastViewportWidth && (lastViewportWidth >= 900) !== (w >= 900)) homeView();
+      lastViewportWidth = w;
       poke();
     }
     updateInsets();
@@ -391,7 +400,7 @@ async function main() {
     else savedMeta = null;
   }
   // Carrière : séparée de la partie en cours (perdre l'une ne perd jamais l'autre).
-  let career = careerStore.load() || createCareer();
+  let career = reconcileCareer(careerStore.load(), game?.career);
   // Mode de la partie restaurée : l'enveloppe le dit, et `game.levelId` le confirme (sauvegarde
   // d'avant la carrière : aucun des deux, c'est un bac à sable).
   const savedLevelId = (savedMeta && savedMeta.levelId) || (restored ? game.levelId : null) || null;
@@ -399,9 +408,15 @@ async function main() {
   let level = restored && mode === 'career' ? levelById(savedLevelId) : null;
   if (mode === 'career' && !level) mode = 'sandbox';
   if (!game) game = createGame({ seed: seedParam, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true });
+  game = { ...game, mode, career };
   let seed = game.seed ?? seedParam;
   /** Sauvegarde la partie en cours avec son mode et, en carrière, son niveau. */
-  const saveNow = () => storage.saveGame(game, { mode, levelId: level ? level.id : null });
+  const saveNow = () => {
+    // Compatibilité avec les sauvegardes de la PR : carrière embarquée et clé séparée.
+    game = { ...game, mode, career };
+    careerStore.save(career);
+    return storage.saveGame(game, { mode, levelId: level ? level.id : null });
+  };
   const saveCareer = () => careerStore.save(career);
   // Acteurs : habitants, véhicules, faune (simulation pure, affichée par le rendu ; non sauvegardés).
   let actors = createActors(game.world, seed);
@@ -413,6 +428,7 @@ async function main() {
     app.hud.setGauges(gaugesOf(game));
     app.hud.setDate(calendar(game));
     app.hud.setSpeed(game.speed);
+    app.experience?.refresh();
   };
   syncHud();
   boot.progress(0.3);
@@ -428,10 +444,14 @@ async function main() {
   boot.progress(0.92);
 
   // ── 3 bis. Feuilles, catalogue, pose, fiche ─────────────────────────────────────
+  // Les paramètres de création sont consommés avant d'empiler l'historique des panneaux.
+  const cleanUrl = new URL(location.href);
+  for (const key of ['new', 'seed', 'mode']) cleanUrl.searchParams.delete(key);
+  history.replaceState(history.state, '', cleanUrl);
   const back = createBackStack({ onBack: () => onBack() });
   app.sheets = createSheets($('#sheet-layer'), {
     vibrate,
-    onChange: (id) => { if (id) back.hold('sheet'); else back.release('sheet'); syncTabs(); },
+    onChange: (id) => { if (id) back.hold('sheet'); else back.release('sheet'); syncTabs(); updateInsets(); },
   });
 
   /** Remplace l'état de partie ; pousse le monde au rendu s'il a changé ; met l'interface à jour ; sauvegarde. */
@@ -451,6 +471,7 @@ async function main() {
     if (meta.kind) {
       saveNow();
       lastSavedMonth = game.month;
+      if (meta.kind === 'place') app.audio.effect('build');
     }
     return game;
   }
@@ -528,6 +549,7 @@ async function main() {
     vibrate,
     onSeen: (id, seen) => {
       career = { ...career, seen: [...seen] };
+      game = { ...game, career };
       saveCareer();
     },
   });
@@ -547,6 +569,13 @@ async function main() {
     onReplay: () => { app.levelEnd.close(); startLevelById(level ? level.id : career.levelId); },
     onNext: (id) => { app.levelEnd.close(); startLevelById(id); },
     onMap: () => { app.levelEnd.close(); openCareerMap(); },
+    onContinue: () => {
+      app.levelEnd.close();
+      mode = 'sandbox'; level = null;
+      levelEnded = false;
+      game = { ...game, mode, levelId: null, speed: 1, career, unlocked: allTileIds() };
+      syncGoals(); syncHud(); app.catalog.refresh(); saveNow(); poke();
+    },
   });
 
   /** Avancement des objectifs du niveau courant (vide hors carrière). */
@@ -609,6 +638,10 @@ async function main() {
 
   /** Carte de carrière (depuis l'écran titre, ou après un niveau). */
   function openCareerMap() {
+    app.sheets.close('career');
+    app.placement.drop();
+    if (playing) saveNow();
+    applyGame(setSpeed(game, 0), { silent: true });
     app.title.close();
     app.levelEnd.close();
     app.tutorial.stop();
@@ -630,7 +663,8 @@ async function main() {
     syncGoals();
     syncTabs();
     homeView();
-    applyGame(setSpeed(game, 1), { silent: true });
+    applyGame(setSpeed(game, levelEnded ? 0 : 1), { silent: true });
+    if (levelEnded) showLevelEnd();
     saveNow();
     poke();
   }
@@ -640,7 +674,8 @@ async function main() {
     app.placement.drop();
     app.sheets.close('new');
     app.hud.hideBanner();
-    game = next;
+    app.toasts.clearAll();
+    game = { ...next, mode, career };
     seed = game.seed ?? seed;
     actors = createActors(game.world, seed);
     r.setWorld(game.world);
@@ -659,7 +694,7 @@ async function main() {
   function startLevelById(levelId) {
     let started = null;
     try {
-      started = startCareerLevel(career, levelId);
+      started = { game: startSession(career, levelId, { seed: hasSeedParam(search) ? seedParam : undefined }), level: levelById(levelId) };
     } catch (err) {
       console.warn('Niveau indisponible :', err);
       app.toasts.show({ key: 'level', kind: 'warn', text: 'Ce niveau n’est pas encore ouvert.' });
@@ -669,7 +704,7 @@ async function main() {
     playing = true;
     mode = 'career';
     level = started.level;
-    career = { ...career, levelId: level.id };
+    career = started.game.career;
     app.title.close();
     app.careerMap.close();
     app.levelEnd.close();
@@ -693,7 +728,7 @@ async function main() {
     app.careerMap.close();
     app.levelEnd.close();
     app.tutorial.stop();
-    installGame(createGame({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true, unlocked: allTileIds() }));
+    installGame(startMode(createGame({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true, unlocked: allTileIds() }), 'sandbox'));
     syncGoals();
     syncTabs();
     saveNow();
@@ -701,22 +736,30 @@ async function main() {
   }
 
   /** Fin de niveau : étoiles, carrière mise à jour, écran de fin. */
-  let levelEnded = false;
+  let levelEnded = mode === 'career' && !!game.journey?.finished;
   function endLevel() {
     if (mode !== 'career' || !level || levelEnded) return null;
     levelEnded = true;
-    const goals = currentGoals();
     const stars = evaluateStars(game, level);
     const finished = level;
     career = finishCareerLevel(career, finished.id, stars.count, game);
+    game = { ...game, career, journey: { ...game.journey, finished: true, recorded: true, result: levelResult(game, finished) } };
     saveCareer();
     applyGame(setSpeed(game, 0), { silent: true });
+    saveNow();
     app.sheets.close('end');
     app.placement.drop();
     app.tutorial.stop();
-    app.levelEnd.open({ level: finished, stars, goals, score: levelScoreOf(game, finished, scoreOf), nextLevel: levelById(nextLevelId(finished.id)) });
+    showLevelEnd();
     poke();
     return stars;
+  }
+
+  function showLevelEnd() {
+    app.tutorial.stop();
+    const next = nextLevelId(level.id);
+    const result = game.journey?.result || levelResult(game, level);
+    app.levelEnd.open({ level, stars: { count: result.stars, details: result.details }, goals: result.goals, score: result.score, nextLevel: career.unlocked.includes(next) ? levelById(next) : null });
   }
 
   /** À chaque mois franchi : objectifs atteints, ou dernière année écoulée → écran de fin. */
@@ -730,6 +773,7 @@ async function main() {
   /** Onglet allumé : la feuille ouverte, sinon l'outil Démolir, sinon la famille de la tuile en main. */
   function syncTabs() {
     const sheet = app.sheets.current;
+    document.body.classList.toggle('is-building', app.placement.state !== 'idle');
     let active = null;
     if (sheet && sheet !== 'tile') active = sheet === 'nature' || sheet === 'species' ? null : sheet;
     else if (app.layers?.kind && app.layers.kind !== 'none') active = 'layers';
@@ -764,10 +808,16 @@ async function main() {
       if (app.placement.tool === 'demolish') app.placement.drop();
       app.natureSheet.open();
       syncTabs();
+    } else {
+      const s = game.stats;
+      const titles = {population:'Les habitants',happiness:'Le bonheur',money:'Le budget de la ville'};
+      const rows = id === 'population' ? [['Habitants',Math.round(s.population||0)],['Capacité des logements',Math.round(s.capacity||0)],['Emplois',Math.round(s.jobs||0)]] : id === 'money' ? [['Trésorerie',Math.round(game.money)+' $'],['Revenu mensuel net',Math.round(monthlyDelta(s))+' $']] : [['Bonheur',Math.round(s.happiness||0)+' %'],['Nature',Math.round(s.nature||0)+' %']];
+      const body = el('div.settings-body',...rows.map(([k,v])=>el('div.metric-row',el('span',k),el('strong',v))),el('p.sheet-hint',id==='happiness'?'Rapprochez logements, commerces et services. Des espaces verts et des ressources suffisantes rendent les habitants heureux.':id==='population'?'Offrez des logements, des emplois et des ressources : les familles s’installent progressivement.':'Les recettes et l’entretien sont comptabilisés chaque mois. Les objectifs du carnet offrent des primes.'));
+      app.sheets.open({id:'gauge-'+id,title:titles[id],content:body});
     }
   }
 
-  /** Bouton « retour » / Échap : ferme la couche du dessus (écran, feuille, puis tuile en main ou outil). */
+  /** Bouton « retour » / Échap : ferme la couche du dessus (feuille, puis tuile en main ou outil). */
   function onBack() {
     if (app.levelEnd?.isOpen()) return; // fin de niveau : il faut choisir (Rejouer ou la suite)
     if (app.careerMap?.isOpen()) { openTitle(); return; }
@@ -789,7 +839,7 @@ async function main() {
   /** Vue de jeu : rapprochée (≈ GAME_ZOOM îlots de large), centrée sur la mairie. */
   function homeView() {
     const c = centerOf(game.world);
-    r.camera.lookAt(c.x, c.y, GAME_ZOOM, { insets: insetsNow() });
+    r.camera.lookAt(c.x, c.y, stage.clientWidth >= 900 ? 18 : GAME_ZOOM, { insets: insetsNow() });
     viewMode = 'home';
   }
 
@@ -888,6 +938,9 @@ async function main() {
     const res = advance(game, dt);
     if (!res || !res.game || res.game === before) return;
     game = res.game;
+    if (res.events?.some(e => e.type === 'departures' || e.type === 'exodus')) {
+      game = { ...game, journey: { ...game.journey, hadExodus: true } };
+    }
     if (game.world !== before.world) { r.setWorld(game.world); poke(); }
     if (game.month !== before.month) {
       syncHud();
@@ -942,10 +995,10 @@ async function main() {
     lastRender = now;
     const tu = performance.now();
     stepGame(simDt);
-    if (game.speed > 0) updateActors(actors, game.world, simDt * game.speed);
+    if (game.speed > 0 && !app.a11y.reducedMotion()) updateActors(actors, game.world, simDt * game.speed);
     updateMs = performance.now() - tu;
     const t0 = performance.now();
-    r.render(Math.min(MAX_FRAME_DT, dtMs / 1000));
+    r.render(app.a11y.reducedMotion() ? 0 : Math.min(MAX_FRAME_DT, dtMs / 1000));
     app.stats.frame(performance.now() - t0);
     if (now - lastHud >= HUD_EVERY_MS) {
       lastHud = now;
@@ -990,17 +1043,30 @@ async function main() {
     app.toasts.show({ key: 'gl', kind: 'success', text: 'Affichage rétabli.' });
   });
 
-  // Première image (vue de jeu centrée sur la mairie, ou vue d'ensemble avec ?view=all), puis la page de chargement s'efface.
-  {
+  // Première image, puis recadrage après installation de l'interface.
+  function initialView() {
     const q = new URLSearchParams(search);
     const z = Number(q.get('zoom'));
     if (q.get('view') === 'all') fitView();
     else if (Number.isFinite(z) && z > 0) { const c = centerOf(game.world); r.camera.lookAt(c.x, c.y, z, { insets: insetsNow() }); }
     else homeView();
   }
+  initialView();
   r.render(0);
   app.stats.update(r.stats());
   start();
+
+  app.experience = createExperience({
+    root: $('#ui'), app, getGame, applyGame, audio: app.audio, homeView, fitView,
+    getCareer: () => career,
+    onCareerMap: () => openCareerMap(),
+    onTutorial: () => { app.sheets.close(); app.tutorial.setScenario(level?.tutorial || 'base', career.seen); app.tutorial.resume(); },
+    onResize: () => { insetsKey = ''; updateInsets(); poke(); },
+    zoom: factor => { r.camera.zoomAt(factor, stage.clientWidth / 2, stage.clientHeight / 2); poke(); },
+    claim: () => { applyGame(claimGoal(game), { kind: 'claim' }); app.placement.refresh(); },
+    startGame: nextMode => nextMode === 'career' ? startLevelById(LEVELS[0].id) : startSandbox(Math.floor(Math.random() * 1000000)),
+  });
+  insetsKey = ''; updateInsets(); initialView();
 
   // ── Mode de départ (§11.3) : écran titre, sauf si l'adresse impose « ?mode= » ──────────────────
   if (forcedMode === 'career') {
@@ -1017,6 +1083,8 @@ async function main() {
     app.toasts.show({ key: 'restore', kind: 'success', text: `Partie en attente : ${cal.monthLabel}, an ${cal.year}.`, duration: 3000 });
   }
   syncGoals();
+
+  initialView();
 
   // ── PWA ───────────────────────────────────────────────────────────────────────
   pwa.initPWA();
@@ -1173,6 +1241,8 @@ async function main() {
     /** Nouvelle partie (graine) sans recharger : utile aux mesures. */
     regenerate: (newSeed) => newGame(newSeed).world,
     newGame,
+    experience: app.experience,
+    audio: app.audio,
     fitView,
     homeView,
   };
@@ -1185,4 +1255,4 @@ async function main() {
   }
 }
 
-main().catch((err) => boot.fail(err));
+if (typeof window !== 'undefined') main().catch((err) => boot.fail(err));
