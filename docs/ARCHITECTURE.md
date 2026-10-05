@@ -261,3 +261,66 @@ Le fantôme est **un seul objet** (Mesh translucide + segments) mis à jour sans
 ### 9.4 Critères (étape 3)
 
 Un parcours automatisé Playwright (`tools/play.mjs`) : charger, sélectionner une carte du catalogue, poser une maison sur une case libre (l'argent baisse du prix, une rue de ceinture apparaît), poser une forêt plantée, démolir, annuler, passer la vitesse à ×4 et attendre un mois (recettes encaissées, événement de saison au 3e mois), recharger la page (la partie est restaurée). Cibles tactiles ≥ 48 px ; 0 erreur console ; appels de dessin ≤ 60 avec le fantôme affiché.
+
+## 10. Écologie : air, eau, faune, sols (étape 4)
+
+Les formules viennent de `docs/GAME_DESIGN.md` §5. Tout est calculé **à chaque tick de mois**, jamais par image. Les champs par case sont des `Float32Array` de `cols × rows` réutilisés d'un mois à l'autre (aucune allocation dans le chemin chaud).
+
+### 10.1 État (`src/core/ecology.js`, pur)
+
+```js
+eco = {
+  air:   Float32Array,   // 0 = pur … 100 = irrespirable, par case
+  water: Float32Array,   // 0 = claire … 100 = polluée (rivière, lac, nappe mêlés : la valeur « de la case »)
+  fauna: Float32Array,   // 0 … 100 : biodiversité locale
+  soil:  Float32Array,   // fertilité des champs, 0 … 100 (70 au départ ; 0 ailleurs)
+  patches: [ { id, habitat: 'forest'|'meadow'|'wetland'|'lake', cells: [i], size, connectedTo: [id] } ],
+  species: { deer: { present: true, since: 4, cells: [i] }, heron: {...}, ... },
+  scores: { air, water, fauna, soil, nature },    // 0 … 100, `nature` = agrégat §7.1
+  alerts: { smog: 0, algae: 0, flood: 0, heat: 0 } // compteurs de mois consécutifs au-dessus du seuil
+}
+```
+
+Fonctions (chacune pure, `eco` réutilisé en place par `stepEcology` qui renvoie le même objet mis à jour) :
+
+- `createEcology(world)` → `eco` (champs à zéro, fertilité 70 sur les champs, patches et espèces calculés).
+- `stepEcology(eco, world, { month, season })` → `{ eco, events }` : une passe mensuelle complète, dans cet ordre : air, eau, patches et faune, sols, espèces, scores, alertes.
+- `airStep`, `waterStep`, `faunaStep`, `soilStep`, `speciesStep` exportées pour les tests.
+- `findPatches(world)` → liste de parcelles d'habitat contiguës (8 voisins), avec leurs liaisons par corridor (chaîne de cases nature de tout type) ; une **arête de rue à trafic ≥ 3 coupe la contiguïté** entre les deux cases qu'elle sépare, sauf passage à faune (`wildlife-crossing`, à ajouter au catalogue).
+- `speciesSummary(eco)` → `[ { id, label, present, since, hint } ]` pour le carnet.
+
+**Air** (§5.1) : émissions par case (centrale 20, usine 12, commerce 2, bureaux 2, quartier niveau 3 : 2, plus 0,5 × trafic des arêtes riveraines), puits (forêt 6, parc 4, zone humide 3, verger 2, prairie 1, lac 1 : `airSink` de `terrain.js` et une table pour les bâtiments), puis diffusion `0,6·A + 0,4·moyenne(voisins)`, vent dominant `+0,15·(A du voisin au vent − A)`, dissipation `×0,97`.
+
+**Eau** (§5.2) : la rivière transporte vers l'aval (`flow`) : `R = clamp(0,8·R[amont] + rejets − dépollution)` ; le lac accumule (une valeur par lac, répartie sur ses cases) ; la nappe = moyenne locale. Rejets : usine 15, champ intensif 6 (3 avec haie), quartier sans station d'épuration à moins de 5 cases 4, champ bio 1. Dépollution : station −20, zone humide −8, ripisylve (forêt touchant l'eau) −4, lac −2.
+
+**Faune** (§5.3) : `fauna = base(habitat) × (1 + 0,1·min(taille de parcelle, 10)) − 0,5·arêtes routières − (air + eau)/50`. Espèces emblématiques avec leurs seuils (cerf, héron, loutre, abeilles, chouette, hirondelle, renard : tableau de GAME_DESIGN §5.3), apparition au seuil, disparition après 15 mois à 20 % sous le seuil ; chaque espèce présente vaut +5 au score nature et nourrit le tourisme.
+
+**Sols** (§5.4) : intensif rendement 1,5·F/100 et F −2 (−2 de plus si colline voisine sans haie) ; bio 0,9·F/100 (×1,2 avec abeilles) et F +1 ; jachère F +4 ; haie annule l'érosion et divise les rejets par 2.
+
+**Scores** : `nature = 0,3·(100 − air moyen des quartiers) + 0,3·(100 − eau moyenne) + 0,25·min(100, 15·espèces) + 0,15·fertilité moyenne`.
+
+**Alertes** (événements de `stepEcology`) : `smog` si l'air moyen des quartiers > 60 pendant 5 mois ; `algae` si un lac > 60 pendant 10 mois ; `flood` si moins de 20 % de zones humides le long de la rivière (probabiliste) ; `heat` si un quartier n'a aucun espace vert à 2 cases en été. Chaque alerte produit un événement `{ type: 'eco-alert', key, text, x, y, layer }` : l'interface peut centrer la carte et activer le bon calque.
+
+### 10.2 Intégration dans la partie (`src/core/game.js`)
+
+- `game.eco` créé par `createGame`, avancé dans `monthTick` **avant** le calcul des stats.
+- `computeStats` lit `game.eco.scores` : `nature` devient le vrai score (la formule provisoire de l'étape 3 disparaît) ; le bonheur d'un quartier perd 1 point par tranche de 10 d'air au-dessus de 40 et la santé baisse avec la nappe au-dessus de 40 ; les recettes des commerces sont multipliées par `1 + tourisme/100` (tourisme = espèces + lac propre + forêts) ; le rendement des champs suit la fertilité et la pollinisation.
+- `describeTile` ajoute `eco: { air, water, fauna, soil, species: [ids] }` pour la fiche.
+- `serialize` / `deserialize` : les champs de `eco` sont sauvegardés (tableaux) et restaurés ; version portée à 2 avec migration depuis 1 (recalcul complet).
+
+### 10.3 Rendu (`src/render3d/`)
+
+- `r.setLayer(kind, values)` existe déjà : l'interface lui passe `game.eco.air`, `.water` ou `.fauna`. Ajouter `LAYER_RAMPS` pour `soil`, une **légende** (min/max) renvoyée par `r.layerInfo(kind)`, et un mode daltonien (hachures) : `r.setLayerPattern(true)`.
+- `src/render3d/species.js` : petites icônes 3D (billboards) au-dessus des parcelles où une espèce est présente, et pilotage de la faune animée : les acteurs `deer`, `heron`, `otter`, `bee`, `swallow`, `owl`, `fox` ne sont créés que si l'espèce est présente dans `eco.species` (contrat avec `src/core/actors.js` : `createActors(world, seed, { species })`).
+- Effets d'ambiance liés à l'écologie : voile gris au-dessus des quartiers quand l'air est mauvais (brume instanciée, réutilise `effects.js`), lac qui verdit quand l'eau se dégrade (teinte du matériau d'eau selon `water`).
+
+### 10.4 Interface (`src/ui/`)
+
+- Onglet **Calques** : feuille avec quatre choix (Aucun, Air, Eau, Faune) + légende colorée + bascule hachures ; le calque choisi reste actif jusqu'à ce qu'on le coupe.
+- Tap sur la jauge **Nature** : fiche détaillée (air, eau, faune, sols, espèces présentes et manquantes avec leur condition en une phrase).
+- **Carnet des espèces** : liste illustrée (icône, nom, phrase de condition, date de première apparition) ; une espèce qui arrive déclenche un toast chaleureux et une entrée dans le carnet.
+- Alertes `eco-alert` en bandeau avec bouton **Voir** : centre la carte sur la case et active le calque concerné.
+
+### 10.5 Critères (étape 4)
+
+`tools/play-eco.mjs` : partir d'une partie neuve, poser une usine au bord de la rivière, avancer 6 mois, vérifier que l'eau en aval se dégrade et que l'air monte sous le vent ; poser une station d'épuration, vérifier l'amélioration ; raser une forêt et vérifier que le cerf disparaît ; vérifier qu'un calque s'affiche avec sa légende et que l'alerte smog propose « Voir ». Plus : `node --test tests/` vert, `node tools/build.js --check` à jour, appels de dessin ≤ 60 avec un calque actif, et `node tools/simulate.js` qui montre une partie « tout bétonner » qui s'effondre et une partie équilibrée qui prospère.
