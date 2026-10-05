@@ -32,13 +32,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/tiletown/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '839b0b1af5f1';
-// 102 fichiers, 14.08 Mo ; installés d'emblée (core) : 99 fichiers, 3.01 Mo
+const VERSION = 'd84433579d7c';
+// 102 fichiers, 14.10 Mo ; installés d'emblée (core) : 99 fichiers, 3.02 Mo
 const PRECACHE = [
-  ["index.html", '1203fcc4c64affc8', 29672, 'core'],
+  ["index.html", 'a637c0e5b40594bc', 29672, 'core'],
   ["manifest.webmanifest", 'd781b7f56357c6a9', 1194, 'core'],
-  ["dist/game.dbbd1adab4.js", 'c7e6f446a69012dc', 981089, 'core'],
-  ["dist/game.9f5553ebee.css", '9f5553ebeeca3c6b', 44337, 'core'],
+  ["dist/game.f33b2f6bd2.js", '8ad5f49b29bcca6d', 994051, 'core'],
+  ["dist/game.487cf3d71a.css", '487cf3d71ad15b79', 44398, 'core'],
   ["assets/audio/apple-cider.mp3", '9c971dd5effc7eb6', 3198684, 'lazy'],
   ["assets/audio/chill-out.mp3", '07c46ada49152e6b', 4154522, 'lazy'],
   ["assets/audio/exploring-town.mp3", '395cec8735528ee1', 4256957, 'lazy'],

@@ -98,6 +98,16 @@ try {
     placedMoney + 100,
     "prime unique",
   );
+  await page.getByRole("button", { name: /Premiers pas ·/ }).click();
+  await page
+    .getByRole("button", { name: "Leçon suivante", exact: true })
+    .click();
+  assert.ok(
+    await page.evaluate(() =>
+      window.__tiletown.game.career.seen.includes("pose"),
+    ),
+    "leçon comprise mémorisée",
+  );
   await page.locator("#sheet-close").click();
   const saved = await page.evaluate(() => {
     window.__tiletown.save();
@@ -139,7 +149,7 @@ try {
   // État de fin construit par la logique métier : vérifie ensuite le vrai parcours d'interface.
   await page.evaluate(async () => {
     const { createCareer, startLevel, finishCareer } =
-      await import("/src/core/career.js");
+      await import("/src/core/career-session.js");
     const { finishJourney } = await import("/src/core/journey.js");
     const game = startLevel(createCareer(), "vallee-1");
     game.month = 36;
@@ -151,7 +161,7 @@ try {
     .click();
   assert.equal(
     await page
-      .getByRole("button", { name: /Les jardins du bocage/ })
+      .getByRole("button", { name: /Le bocage/ })
       .getAttribute("aria-disabled"),
     "true",
   );

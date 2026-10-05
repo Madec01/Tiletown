@@ -13,7 +13,7 @@
 import { createRng } from './rng.js';
 import { index, inBounds, tileAt, neighbors4, neighbors8, createEdges, createTraffic, DIRS4 } from './grid.js';
 import { rebuildRoads, computeTraffic, faceTowardRoad } from './roads.js';
-import { isBuiltTile } from '../data/tiles.js';
+import { isBuiltTile, TILE_BY_ID } from '../data/tiles.js';
 
 export const DEFAULT_COLS = 12;
 export const DEFAULT_ROWS = 16;
@@ -422,4 +422,102 @@ export function validateWorld(world) {
   if (hall.terrain !== 'grass') problems.push(`la mairie n’est pas sur de l’herbe (${hall.terrain})`);
   if (hall.native) problems.push('la case de la mairie est marquée native');
   return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Portrait d'une vallée, pour choisir et vérifier les graines des niveaux (src/data/levels.js) :
+ *
+ *   { cols, rows, cells, terrains: { grass, forest, … },
+ *     buildings,            bâtiments posés (une vallée vierge n'a que la mairie)
+ *     hall,                 la case de la mairie, ou null
+ *     freeAroundHall,       cases libres et constructibles sans défrichement touchant la mairie (0 à 4)
+ *     openNear,             idem à trois cases ou moins de la mairie
+ *     buildableShare,       part de la carte où un quartier peut se poser (défrichement compris)
+ *     riverDistance,        distance (Chebyshev) de la rivière à la mairie, null sans rivière
+ *     crossings,            cases de rivière franchissables (du terrain constructible des deux côtés)
+ *     forestPatches,        tailles des massifs de forêt, du plus grand au plus petit
+ *     wind }
+ *
+ * Tout est lu : rien n'est modifié.
+ */
+export function surveyWorld(world) {
+  const house = TILE_BY_ID.house;
+  const clearingOf = (terrain) => (house.clearing && house.clearing[terrain]) || 0;
+  const buildable = (x, y) => {
+    const t = tileAt(world, x, y);
+    return Boolean(t) && house.terrains.includes(t.terrain) && !t.building;
+  };
+  const soft = (x, y) => buildable(x, y) && clearingOf(tileAt(world, x, y).terrain) === 0;
+
+  const terrains = {};
+  let buildings = 0;
+  let buildableCells = 0;
+  for (let y = 0; y < world.rows; y++) {
+    for (let x = 0; x < world.cols; x++) {
+      const t = tileAt(world, x, y);
+      terrains[t.terrain] = (terrains[t.terrain] || 0) + 1;
+      if (t.building) buildings++;
+      if (buildable(x, y)) buildableCells++;
+    }
+  }
+
+  const c = centerOf(world);
+  const hallTile = tileAt(world, c.x, c.y);
+  const hall = hallTile && hallTile.building && hallTile.building.type === 'townhall' ? { x: c.x, y: c.y } : null;
+  let freeAroundHall = 0;
+  for (const d of DIRS4) if (soft(c.x + d.dx, c.y + d.dy)) freeAroundHall++;
+  let openNear = 0;
+  let riverDistance = null;
+  let crossings = 0;
+  for (let y = 0; y < world.rows; y++) {
+    for (let x = 0; x < world.cols; x++) {
+      const d = chebyshev({ x, y }, c);
+      if (d >= 1 && d <= 3 && soft(x, y)) openNear++;
+      if (tileAt(world, x, y).terrain !== 'river') continue;
+      riverDistance = riverDistance === null ? d : Math.min(riverDistance, d);
+      const across = (dx, dy) => buildable(x + dx, y + dy) || (tileAt(world, x + dx, y + dy) || {}).building;
+      if ((across(-1, 0) && across(1, 0)) || (across(0, -1) && across(0, 1))) crossings++;
+    }
+  }
+
+  // Massifs de forêt (8 voisins), du plus grand au plus petit : le cerf en demande six d'un tenant.
+  const seen = new Uint8Array(world.cols * world.rows);
+  const forestPatches = [];
+  for (let y = 0; y < world.rows; y++) {
+    for (let x = 0; x < world.cols; x++) {
+      const i = index(world, x, y);
+      if (seen[i] || tileAt(world, x, y).terrain !== 'forest') continue;
+      let size = 0;
+      const stack = [{ x, y }];
+      seen[i] = 1;
+      while (stack.length > 0) {
+        const cur = stack.pop();
+        size++;
+        for (const n of neighbors8(world, cur.x, cur.y)) {
+          const j = index(world, n.x, n.y);
+          if (seen[j] || tileAt(world, n.x, n.y).terrain !== 'forest') continue;
+          seen[j] = 1;
+          stack.push(n);
+        }
+      }
+      forestPatches.push(size);
+    }
+  }
+  forestPatches.sort((a, b) => b - a);
+
+  return {
+    cols: world.cols,
+    rows: world.rows,
+    cells: world.tiles.length,
+    terrains,
+    buildings,
+    hall,
+    freeAroundHall,
+    openNear,
+    buildableShare: buildableCells / world.tiles.length,
+    riverDistance,
+    crossings,
+    forestPatches,
+    wind: world.wind,
+  };
 }

@@ -45,7 +45,7 @@ import { $, el } from './ui/dom.js';
 import { createAudio } from './audio.js';
 import { createExperience } from './ui/experience.js';
 import { claimGoal, startMode, finishJourney } from './core/journey.js';
-import { createCareer, startLevel, finishCareer } from './core/career.js';
+import { createCareer, startLevel, finishCareer } from './core/career-session.js';
 
 const DEFAULT_SEED = 12345;
 const WORLD_COLS = 12;

@@ -3,7 +3,9 @@ import { el, fmt, setText } from "./dom.js";
 import { icon } from "./icons.js";
 import { currentGoal, GOALS, journeyScore } from "../core/journey.js";
 import { LEVELS, LEVEL_BY_ID } from "../data/levels.js";
-import { evaluateGoals } from "../core/career.js";
+import { evaluateGoals } from "../core/career-session.js";
+import { rememberLesson } from "../core/career.js";
+import { tutorialState, tutorialProgress } from "../core/tutorial.js";
 import { assetUrl } from "../version.js";
 export function tileImage(id, cls = "") {
   return el("img", {
@@ -188,7 +190,7 @@ export function createExperience({
           "Toutes les étapes sont accomplies. Continuez à faire grandir votre ville jusqu’au bilan des trois ans.",
         ),
       );
-    const level = LEVEL_BY_ID[game.career?.levelId];
+    const level = LEVEL_BY_ID[game.levelId];
     if (level) {
       body.append(
         el("h3", level.title),
@@ -207,6 +209,15 @@ export function createExperience({
           "button.btn.btn--ghost",
           { type: "button", onclick: careerMap },
           "Les cinq vallées",
+        ),
+      );
+      const progress = tutorialProgress("base", game.career.seen);
+      body.append(
+        el(
+          "button.btn.btn--ghost",
+          { type: "button", onclick: openTutorial },
+          icon("book"),
+          `Premiers pas · ${progress.done}/${progress.total} leçons`,
         ),
       );
     }
@@ -369,6 +380,92 @@ export function createExperience({
       content: body,
     });
   }
+  function openTutorial() {
+    const game = getGame();
+    const state = tutorialState("base", game, game.career?.seen || [], {
+      layer: app.layers.kind,
+    });
+    const body = el("div.help-body");
+    if (!state) {
+      body.append(
+        el("h3", "Vous connaissez les chemins de la vallée"),
+        el(
+          "p",
+          "Les dix leçons sont terminées. Votre carnet garde les objectifs et les primes à venir.",
+        ),
+      );
+    } else {
+      body.append(
+        el("span.eyebrow", `LEÇON ${state.index + 1} / ${state.total}`),
+        el("h3", state.title),
+        el("p", state.text),
+      );
+      if (state.done && state.reward?.text)
+        body.append(el("p.sheet-hint", state.reward.text));
+      const remember = () => {
+        const current = getGame();
+        if (current.career)
+          applyGame(
+            {
+              ...current,
+              career: rememberLesson(current.career, state.lesson.id),
+            },
+            { kind: "tutorial" },
+          );
+        openTutorial();
+      };
+      body.append(
+        el(
+          "button.btn",
+          {
+            type: "button",
+            onclick: () => {
+              if (state.done) {
+                remember();
+                return;
+              }
+              if (state.tile) take(state.tile);
+              else {
+                app.sheets.close();
+                const h = state.highlight;
+                if (h?.kind === "tile")
+                  app.renderer.setHighlight([{ x: h.x, y: h.y }]);
+                if (h?.kind === "tab" && h.id === "layers")
+                  app.layers.set("air");
+                const selector =
+                  h?.kind === "tab"
+                    ? `.tab--${h.id}`
+                    : h?.kind === "gauge"
+                      ? `.gauge--${h.id}`
+                      : h?.kind === "speed"
+                        ? "#speed"
+                        : null;
+                if (selector) {
+                  const node = document.querySelector(selector);
+                  node?.classList.add("tutorial-focus");
+                  setTimeout(
+                    () => node?.classList.remove("tutorial-focus"),
+                    5000,
+                  );
+                }
+              }
+            },
+          },
+          state.done ? "Leçon suivante" : "Me montrer",
+          icon("arrow"),
+        ),
+      );
+      if (!state.done)
+        body.append(
+          el(
+            "button.btn.btn--ghost",
+            { type: "button", onclick: remember },
+            "Passer cette leçon",
+          ),
+        );
+    }
+    app.sheets.open({ id: "tutorial", title: "Premiers pas", content: body });
+  }
   function careerMap() {
     const game = getGame(),
       career = game.career;
@@ -376,7 +473,7 @@ export function createExperience({
       "div.settings-body",
       el(
         "p.sheet-hint",
-        "Cinq vallées à découvrir. Choisir une vallée remplace la partie en cours ; vos étoiles et vos déblocages sont conservés.",
+        "Cinq vallées à découvrir. Choisir une vallée remplace la partie en cours ; vos étoiles, vos leçons et vos déblocages sont conservés.",
       ),
     );
     for (const level of LEVELS) {
@@ -392,7 +489,7 @@ export function createExperience({
             onclick: () => {
               if (!unlocked) {
                 app.toasts.show({
-                  text: "Terminez la vallée précédente avec une étoile pour ouvrir celle-ci.",
+                  text: "Terminez la vallée précédente pour ouvrir celle-ci.",
                 });
                 return;
               }

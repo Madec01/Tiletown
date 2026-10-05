@@ -134,8 +134,10 @@ Tests Node et parcours Chromium automatisés : simulation, sauvegardes, objectif
 
 Les mesures sont réalisées dans Chromium avec rendu logiciel en environnement de développement ; elles ne remplacent pas un essai de fluidité sur un appareil Android physique. Aucun achat ni ressource générée par IA ajouté. Le jeu publié sur `main` reste disponible pendant l’examen de la pull request.
 
-Résultats finaux : **211 tests réussis, aucun échec ni test sauté**. Parcours mobile et desktop réussi, sans erreur JavaScript. Contrôle hors ligne réussi après installation du service worker : reprise de la partie, 63 modèles chargés sans erreur, musique mise en cache servie en HTTP 206 pour une requête Range. `npm run check` confirme que les fichiers publiables correspondent aux sources.
+Résultats finaux : **235 tests réussis, aucun échec ni test sauté**. Parcours mobile et desktop réussi, sans erreur JavaScript. Contrôle hors ligne réussi après installation du service worker : reprise de la partie, 63 modèles chargés sans erreur, musique mise en cache servie en HTTP 206 pour une requête Range. `npm run check` confirme que les fichiers publiables correspondent aux sources.
 
-Contrôle économique supplémentaire : démarrage réel avec 500 $ et mairie seule, poses légales et stratégie équilibrée du simulateur ; au mois 36, 210 habitants, nature 91, 698 $ et deux étoiles. Aucune injection de budget ni modification de la simulation pendant ce parcours.
+Contrôle économique final : `node tools/simulate.js --career --level vallee-1 --quiet --dt 30`, démarrage avec 700 $ et mairie seule ; au mois 36, 151 habitants, nature 82, deux étoiles, score 73 et aucun mois d’exode. Objectifs atteints au mois 22, sans prime du carnet ni injection de budget. Les tests des niveaux vérifient aussi les quatre autres vallées.
 
 Correction du retour Android : attendre le `popstate` de fermeture avant de poser une nouvelle entrée d’historique ; un test de régression reproduit l’ouverture d’une couche pendant la fermeture d’une autre. Les paramètres de nouvelle partie sont nettoyés avant de créer la pile des panneaux.
+
+Intégration du commit `220a2e2` arrivé sur `main` pendant la refonte : moteur de carrière, cartes, règles d’étoiles, dix leçons, suivi d’exode et simulateur conservés. L’adaptateur `career-session.js` les raccorde à la partie sauvegardée ; « Premiers pas » affiche les leçons dans le carnet. Les huit missions à primes restent un parcours complémentaire.

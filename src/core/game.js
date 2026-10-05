@@ -17,6 +17,10 @@
 // en fait une copie — `place`, `demolish`, `setFieldMode`, l'annulation et la sauvegarde — si bien que
 // deux parties dérivées d'une même partie ne partagent jamais leur écologie.
 //
+// Carrière (§11.1) : une partie créée par `createGame({ level })` porte `levelId` (le niveau joué, nul
+// hors carrière) et `flags` — pour l'instant `{ exodusMonths }`, le nombre de mois où des habitants sont
+// partis, que l'étoile « sans exode » consulte (src/core/career.js). Les deux voyagent dans la sauvegarde.
+//
 // Repères d'économie (§6.4) : les recettes et l'entretien du catalogue sont des montants par saison,
 // encaissés par tiers chaque mois ; un quartier rapporte INCOME_PER_RESIDENT $ par habitant présent et
 // consomme au prorata de ses habitants (ses `consume` valent pour la pleine capacité).
@@ -351,18 +355,38 @@ function withStats(game) {
 // Création.
 
 /**
- * Crée une partie : vallée générée (rues et trafic compris), ville de départ, stats et demande.
- * @param {{ seed?, cols?, rows?, starterTown?: boolean, money?: number, unlocked?: string[] }} options
+ * Crée une partie : vallée générée (rues et trafic compris), stats et demande.
+ *
+ * Deux façons d'appeler :
+ *   - à la main (bac à sable, tests, simulations) : `createGame({ seed, cols, rows, starterTown, money, unlocked })` ;
+ *   - par un niveau de carrière (docs/ARCHITECTURE.md §11.1) : `createGame({ level })` — la graine, la
+ *     taille, la carte, l'argent de départ et le catalogue débloqué viennent du niveau, et la vallée est
+ *     **vierge** (la seule mairie) sauf si le niveau demande `starterTown`. Une option passée
+ *     explicitement l'emporte sur le niveau (`createGame({ level, unlocked })` : le catalogue cumulé de
+ *     la carrière, voir `startLevel` dans src/core/career.js).
+ *
+ * @param {{ seed?, cols?, rows?, map?, starterTown?: boolean, money?: number, unlocked?: string[], level?: object }} options
  */
-export function createGame({ seed = 1, cols, rows, starterTown = true, money = START_MONEY, unlocked = START_UNLOCKED } = {}) {
-  const world = generateWorld({ seed, cols, rows, map: 'valley', starterTown });
+export function createGame(options = {}) {
+  const level = options.level || null;
+  const seed = options.seed ?? (level ? level.seed : 1);
+  const cols = options.cols ?? (level ? level.cols : undefined);
+  const rows = options.rows ?? (level ? level.rows : undefined);
+  const map = options.map ?? (level && level.map) ?? 'valley';
+  // Hors niveau, la ville de départ reste le défaut (bac à sable) ; en carrière, on arrive sur une
+  // vallée vierge avec la seule mairie.
+  const starterTown = options.starterTown ?? (level ? Boolean(level.starterTown) : true);
+  const money = options.money ?? (level && Number.isFinite(level.money) ? level.money : START_MONEY);
+  const unlocked = options.unlocked ?? (level && Array.isArray(level.unlock) ? level.unlock : START_UNLOCKED);
+  const world = generateWorld({ seed, cols, rows, map, starterTown });
   let capacity = 0;
   for (const t of world.tiles) capacity += residentsOfTile(t);
   const game = {
     version: GAME_VERSION,
     seed,
     mode: 'career',
-    journey: {claimed: []},
+    journey: { claimed: [] },
+    levelId: level ? level.id : null,
     world,
     eco: createEcology(world),
     clock: 0,
@@ -375,6 +399,9 @@ export function createGame({ seed = 1, cols, rows, starterTown = true, money = S
     unlocked: Array.from(unlocked),
     natureBaseline: countNativeNature(world),
     streaks: { unhappy: 0, broke: 0 },
+    // Faits marquants de la partie, lus par les objectifs de carrière (§11.1) : nombre de mois où des
+    // habitants sont partis (une étoile demande « sans exode »).
+    flags: { exodusMonths: 0 },
     log: [],
     undo: null,
   };
@@ -472,6 +499,7 @@ export function monthTick(game) {
 
   // 2. Les habitants : exode par lassitude, puis exode écologique (§7.3), sinon arrivées.
   let population = Math.min(game.population, stats.capacity);
+  let departed = false;
   const unhappy = stats.happiness < HAPPINESS_EXODUS ? game.streaks.unhappy + 1 : 0;
   // §5.1 et §7.3 : les quartiers dont l'air dépasse le seuil perdent des habitants, et une santé trop
   // basse vide toute la ville.
@@ -481,6 +509,7 @@ export function monthTick(game) {
   if (unhappy >= EXODUS_MONTHS && population > 0) {
     const departures = Math.min(population, Math.max(1, Math.round(population * EXODUS_RATE)));
     population -= departures;
+    departed = true;
     events.push(event('departures', month, departures === 1
       ? 'Un habitant quitte la vallée, lassé d’attendre mieux.'
       : `${departures} habitants quittent la vallée, lassés d’attendre mieux.`));
@@ -488,6 +517,7 @@ export function monthTick(game) {
     const rate = ECO_EXODUS_RATE * Math.max(sick ? 1 : 0, choking);
     const departures = Math.min(population, Math.max(1, Math.round(population * rate)));
     population -= departures;
+    departed = true;
     const why = choking > 0 ? 'l’air y est devenu irrespirable' : 'la santé se dégrade';
     events.push(event('departures', month, departures === 1
       ? `Un habitant s’en va : ${why}.`
@@ -551,6 +581,8 @@ export function monthTick(game) {
   }
 
   next.streaks = { unhappy, broke };
+  // Faits marquants (§11.1) : un mois de départs de plus ferme la porte à l'étoile « sans exode ».
+  next.flags = { ...(game.flags || { exodusMonths: 0 }), exodusMonths: (game.flags?.exodusMonths || 0) + (departed ? 1 : 0) };
   next.log = appendLog(game.log, events);
   return { game: next, events };
 }
@@ -907,12 +939,14 @@ export function serialize(game) {
   return {
     version: GAME_VERSION,
     seed: game.seed,
+    levelId: game.levelId ?? null,
     clock: game.clock,
     month: game.month,
     speed: game.speed,
     money: game.money,
     population: game.population,
     streaks: { ...game.streaks },
+    flags: { ...(game.flags || { exodusMonths: 0 }) },
     unlocked: Array.from(game.unlocked),
     natureBaseline: game.natureBaseline,
     mode: game.mode || 'career',
@@ -972,6 +1006,7 @@ export function deserialize(obj) {
     ...(obj.career ? {career: structuredClone(obj.career)} : {}),
     journey: obj.journey && Array.isArray(obj.journey.claimed) ? structuredClone(obj.journey) : {claimed: []},
     seed: obj.seed ?? world.seed ?? 1,
+    levelId: typeof obj.levelId === 'string' ? obj.levelId : null,
     world,
     eco,
     clock: Number.isFinite(obj.clock) ? obj.clock : 0,
@@ -984,6 +1019,7 @@ export function deserialize(obj) {
     unlocked: Array.isArray(obj.unlocked) ? obj.unlocked.filter((id) => TILE_BY_ID[id]) : Array.from(START_UNLOCKED),
     natureBaseline: Number.isFinite(obj.natureBaseline) ? obj.natureBaseline : countNativeNature(world),
     streaks: { unhappy: obj.streaks?.unhappy || 0, broke: obj.streaks?.broke || 0 },
+    flags: { exodusMonths: obj.flags?.exodusMonths || 0 },
     log: Array.isArray(obj.log) ? obj.log.map((e) => ({ ...e })) : [],
     undo: null,
   };

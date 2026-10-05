@@ -17,7 +17,7 @@ Projet frère de [Une année à la ferme](https://github.com/Madec01/Seve).
 
 ![Tiletown sur téléphone](docs/screenshots/mobile-portrait.png)
 
-Un paysage 3D continu, des arbres arrondis, un catalogue illustré et trois musiques libres. La carrière commence avec la mairie seule et propose cinq vallées, chacune sur trois années de jeu, avec huit étapes guidées, des objectifs propres et des étoiles persistantes. Le mode libre démarre avec un village, tout le catalogue et 100 000 $. Les anciennes sauvegardes restent compatibles.
+Un paysage 3D continu, des arbres arrondis, un catalogue illustré et trois musiques libres. La carrière commence avec la mairie seule et propose cinq vallées, chacune sur trois années de jeu, avec dix leçons de tutoriel, huit missions à primes, des objectifs propres et des étoiles persistantes. Le mode libre démarre avec un village, tout le catalogue et 100 000 $. Les anciennes sauvegardes restent compatibles.
 
 La capture montre le mode libre.
 
