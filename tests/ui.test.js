@@ -3,12 +3,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { wheelFactor } from '../src/ui/gestures.js';
 import { formatStats, statsWanted } from '../src/ui/stats.js';
-import { seasonOf, speedText, nextSpeed, cardsFor, FAMILIES, TOOLS } from '../src/ui/hud.js';
-import { durationOf, MAX_VISIBLE } from '../src/ui/toasts.js';
+import { seasonOf, speedText, nextSpeed, deltaText, dateParts, FAMILIES, TOOLS, DEFAULT_SPEEDS } from '../src/ui/hud.js';
+import { durationOf, MAX_VISIBLE, MAX_ACTION_MS } from '../src/ui/toasts.js';
 import { normalizeTextScale, DEFAULT_SETTINGS } from '../src/ui/a11y.js';
-import { seedFromSearch, describeTile, initialGauges } from '../src/main.js';
+import { shouldClose } from '../src/ui/sheets.js';
+import { cardsFor, priceText, demandRows, lockTextOf, isUnlocked, DEMAND_ROWS, LAYER_CARDS } from '../src/ui/catalog.js';
+import { costText, costParts, reasonText, ghostStatus, DEMOLISH_COST } from '../src/ui/placement.js';
+import { yieldLines, conditionsTitle } from '../src/ui/sheet-tile.js';
+import { seedFromSearch, hasSeedParam, describeTile, unlockHintFor, monthlyDelta, gaugesOf, eventPresentation } from '../src/main.js';
 import { generateWorld } from '../src/core/worldgen.js';
-import { TILES } from '../src/data/tiles.js';
+import { TILES, TILE_BY_ID } from '../src/data/tiles.js';
+import { SPEEDS, UNLOCKS } from '../src/data/balance.js';
 
 test('molette : vers le haut = rapprocher (facteur > 1), symétrique, lignes et pages converties', () => {
   assert.ok(wheelFactor(-100) > 1);
@@ -27,7 +32,7 @@ test('mesures : texte compact, activation par ?stats=1 / 0 / développement', ()
   assert.equal(statsWanted('?seed=4', false), false);
 });
 
-test('barre du haut : saisons, vitesses, onglets', () => {
+test('barre du haut : saisons, vitesses (cycle pause → ×½ → ×1 → ×2 → ×4 → pause), delta, date, onglets', () => {
   assert.equal(seasonOf(2), 'Printemps');
   assert.equal(seasonOf(7), 'Été');
   assert.equal(seasonOf(10), 'Automne');
@@ -36,27 +41,96 @@ test('barre du haut : saisons, vitesses, onglets', () => {
   assert.equal(speedText(0.5), '×½');
   assert.equal(speedText(2), '×2');
   assert.equal(speedText(0), 'Pause');
-  assert.deepEqual([0, 1, 2, 4].map(nextSpeed), [1, 2, 4, 0]);
+  assert.deepEqual([...DEFAULT_SPEEDS], [...SPEEDS], 'les vitesses de l’interface sont celles de balance.js');
+  assert.deepEqual([0, 0.5, 1, 2, 4].map((s) => nextSpeed(s)), [0.5, 1, 2, 4, 0]);
+  assert.equal(nextSpeed(3), 1, 'vitesse inconnue → ×1');
+  assert.equal(deltaText(12), '+12 $/mois');
+  assert.equal(deltaText(-4), '−4 $/mois');
+  assert.equal(deltaText(0), '±0 $/mois');
+  assert.deepEqual(dateParts({ seasonLabel: 'Printemps', monthLabel: 'mars', year: 1 }), { season: 'Printemps', month: 'mars', year: 'an 1' });
+  assert.deepEqual(dateParts({ month: 7, year: 2 }), { season: 'Été', month: 'août', year: 'an 2' }, 'repli : mois du calendrier (0 = janvier)');
   assert.equal(FAMILIES.length + TOOLS.length, 7, 'sept onglets : cinq familles, Démolir, Calques');
   assert.deepEqual(FAMILIES.map((f) => f.id), ['habitat', 'activity', 'services', 'infrastructure', 'nature']);
+  const infra = FAMILIES.find((f) => f.id === 'infrastructure');
+  assert.equal(infra.label, 'Infrastructures');
+  assert.ok(infra.short && infra.short.length <= 8, 'libellé court pour les onglets de téléphone');
 });
 
-test('catalogue : les cartes viennent de src/data/tiles.js quand il est fourni, démo sinon', () => {
-  const real = cardsFor('habitat', TILES);
-  assert.ok(real.length >= 1);
-  assert.ok(TILES.filter((t) => t.family === 'habitat').every((t) => real.some(([title]) => title === t.label)));
-  assert.ok(cardsFor('nature', null).length >= 1, 'démo sans catalogue');
-  assert.deepEqual(cardsFor('demolish', TILES), []);
-  assert.ok(cardsFor('layers', TILES).length === 3, 'calques : air, eau, faune');
+test('feuilles : un glissement long, ou court mais vif, ferme la feuille', () => {
+  assert.equal(shouldClose(100, 0.1), true);
+  assert.equal(shouldClose(40, 1), true);
+  assert.equal(shouldClose(40, 0.1), false);
+  assert.equal(shouldClose(10, 5), false);
 });
 
-test('messages : durées (≥ 5 s pour une erreur ou une action, 7 s au plus), deux visibles au plus', () => {
+test('catalogue : cartes depuis src/data/tiles.js, cadenas et condition, grisées si trop cher, barres de demande', () => {
+  const game = { money: 70, unlocked: ['house', 'shop', 'park'], demand: { habitat: 0.5, activity: 1.4, services: -1 } };
+  const habitat = cardsFor('habitat', game);
+  assert.ok(habitat.length >= 1);
+  assert.ok(TILES.filter((t) => t.family === 'habitat' && t.buyable !== false).every((t) => habitat.some((c) => c.id === t.id)));
+  const house = habitat.find((c) => c.id === 'house');
+  assert.equal(house.locked, false);
+  assert.equal(house.poor, false, '70 $ suffisent pour 60 $');
+  assert.equal(priceText(house), '60 $ · 5 $/mois');
+  assert.equal(priceText({ price: 30, upkeep: 0 }), '30 $');
+  const activity = cardsFor('activity', game, (id) => (id === 'office' ? 'Dès 80 habitants' : null));
+  const shop = activity.find((c) => c.id === 'shop');
+  assert.equal(shop.poor, true, '80 $ > 70 $ : grisée');
+  const office = activity.find((c) => c.id === 'office');
+  assert.equal(office.locked, true);
+  assert.equal(office.lockText, 'Dès 80 habitants');
+  const factory = activity.find((c) => c.id === 'factory');
+  assert.equal(factory.locked, true);
+  assert.ok(factory.lockText.length > 5, 'condition générique quand le cœur n’en donne pas');
+  assert.equal(lockTextOf('x', { unlockHints: { x: 'Bientôt' } }), 'Bientôt');
+  assert.equal(isUnlocked('anything', {}), true, 'sans liste unlocked : tout est ouvert');
+  assert.ok(!cardsFor('services', game).some((c) => c.id === 'townhall'), 'la mairie n’est pas à vendre');
+  assert.deepEqual(demandRows(game).map((r) => r.percent), [50, 100, 0], 'demande bornée à 0..100 %');
+  assert.deepEqual(DEMAND_ROWS.map((r) => r.key), ['habitat', 'activity', 'services']);
+  assert.equal(LAYER_CARDS.length, 3, 'calques : air, eau, faune');
+  assert.deepEqual(cardsFor('demolish', game), []);
+});
+
+test('pose : résumé du coût, raisons de refus en clair, couleur du fantôme', () => {
+  const house = TILE_BY_ID.house;
+  assert.equal(costText(house, { ok: true, cost: 60, clearing: 0, path: [] }), 'Quartier · 60 $');
+  assert.equal(costText(house, { ok: true, cost: 160, clearing: 80, path: [{ kind: 'h', x: 1, y: 1, value: 2 }, { kind: 'v', x: 1, y: 1, value: 2 }] }), 'Quartier · 60 $ + défrichement 80 $ + rue 20 $ = 160 $');
+  assert.equal(costText(house, { ok: true, cost: 100, clearing: 0, path: [{ kind: 'h', x: 1, y: 1, value: 3 }] }), 'Quartier · 60 $ + rue et pont 40 $ = 100 $');
+  assert.equal(costParts(house, { cost: 80, clearing: 20, path: [] }).total, 80);
+  assert.equal(costParts(house, {}).total, 60, 'sans résultat : le prix');
+  assert.equal(reasonText('unreachable'), 'Il faut passer par la terre ferme');
+  assert.equal(reasonText('money'), 'Pas assez d’argent');
+  assert.equal(reasonText('locked', { hint: 'Dès 80 habitants' }), 'Verrouillé : Dès 80 habitants');
+  assert.equal(reasonText('terrain', { terrain: 'lake' }), 'Pas sur l’eau');
+  assert.equal(reasonText('occupied'), 'La case est déjà occupée');
+  assert.equal(reasonText('townhall'), 'La mairie ne se démolit pas');
+  assert.ok(/Impossible/.test(reasonText('quelque-chose')));
+  assert.equal(ghostStatus({ ok: true, clearing: 0, path: [] }), true);
+  assert.equal(ghostStatus({ ok: true, clearing: 80, path: [] }), 'warn');
+  assert.equal(ghostStatus({ ok: true, clearing: 0, path: [{}] }), 'warn');
+  assert.equal(ghostStatus({ ok: false, reason: 'money' }), false);
+  assert.equal(ghostStatus(null), false);
+  assert.equal(DEMOLISH_COST, 10);
+});
+
+test('fiche d’une case : lignes des rendements et titre des conditions', () => {
+  assert.deepEqual(yieldLines({ income: 40, upkeep: 5, jobs: 0, capacity: 20, residents: 6 }), ['Recettes : 40 $/saison', 'Entretien : 5 $/saison', 'Habitants : 6 / 20\u00a0places']);
+  assert.deepEqual(yieldLines({ jobs: 15, energy: -1 }), ['Emplois : 15', 'Énergie : −1']);
+  assert.deepEqual(yieldLines({}), []);
+  assert.equal(conditionsTitle({ level: 1 }, [{ label: 'x', met: false }]), 'Prochaine évolution (niveau 2)');
+  assert.equal(conditionsTitle({ level: 3 }, []), 'Au niveau maximal');
+  assert.equal(conditionsTitle(null, []), '');
+});
+
+test('messages : durées (≥ 5 s pour une erreur ou une action, 7 s au plus, 12 s avec une action), deux visibles au plus', () => {
   assert.equal(MAX_VISIBLE, 2);
   assert.equal(durationOf({ text: 'x' }), 3000);
   assert.equal(durationOf({ text: 'x', kind: 'error' }), 5000);
   assert.equal(durationOf({ text: 'x', onClick: () => {} }), 5000);
   assert.equal(durationOf({ text: 'x', duration: 20000 }), 7000);
   assert.equal(durationOf({ text: 'x', duration: 1500 }), 1500);
+  assert.equal(durationOf({ text: 'Annuler', duration: 10000, onClick: () => {} }), 10000, 'le message « Annuler » reste 10 s');
+  assert.equal(MAX_ACTION_MS, 12000);
 });
 
 test('accessibilité : facteurs de texte valides', () => {
@@ -67,21 +141,35 @@ test('accessibilité : facteurs de texte valides', () => {
   assert.equal(DEFAULT_SETTINGS.pinchZoom, false, 'zoom de page bloqué par défaut (les gestes vont à la carte)');
 });
 
-test('main : graine depuis l’adresse, description d’une case, jauges de départ', () => {
+test('main : graine depuis l’adresse, description d’une case, déblocages, delta mensuel, événements', () => {
   assert.equal(seedFromSearch(''), 12345);
   assert.equal(seedFromSearch('?seed=7'), 7);
   assert.equal(seedFromSearch('?seed=vallee'), seedFromSearch('?seed=vallee'));
   assert.notEqual(seedFromSearch('?seed=vallee'), seedFromSearch('?seed=colline'));
+  assert.equal(hasSeedParam('?seed=7'), true);
+  assert.equal(hasSeedParam('?new=1'), false);
   const world = generateWorld({ seed: 3, cols: 12, rows: 16, map: 'valley', starterTown: true });
   const d = describeTile(world, 0, 0);
   assert.ok(d && /^Case 0,0 : /.test(d.text));
   const hall = world.tiles.findIndex((t) => t.building && t.building.type === 'townhall');
-  if (hall >= 0) {
-    const x = hall % world.cols;
-    const y = Math.floor(hall / world.cols);
-    assert.ok(describeTile(world, x, y).building, 'la mairie est nommée');
-  }
-  const g = initialGauges(world);
-  assert.ok(g.population >= 0 && g.money > 0 && g.nature >= 0 && g.nature <= 100 && g.happiness > 0);
+  assert.ok(hall >= 0);
+  assert.ok(describeTile(world, hall % world.cols, Math.floor(hall / world.cols)).building, 'la mairie est nommée');
   assert.equal(describeTile(world, 99, 99), null);
+  // Déblocages (balance.js UNLOCKS) : chaque tuile d'un palier a une condition lisible.
+  for (const u of UNLOCKS) for (const id of u.tiles) assert.equal(unlockHintFor(id), `Dès ${u.population} habitants`);
+  assert.equal(unlockHintFor('house'), null);
+  assert.equal(unlockHintFor('x', [{ year: 2, tiles: ['x'] }]), 'Dès l’an 2');
+  // Delta mensuel : recettes et entretien du mois (stats du cœur).
+  assert.equal(monthlyDelta({ income: 36, upkeep: 0 }), 36);
+  assert.equal(monthlyDelta({ income: 0, upkeep: 12 }), -12);
+  assert.equal(monthlyDelta({ monthlyNet: 7, income: 999 }), 7);
+  const g = gaugesOf({ money: 500, stats: { population: 12, happiness: 72, nature: 65, income: 30, upkeep: 15 } });
+  assert.deepEqual(g, { population: 12, happiness: 72, nature: 65, money: 500, delta: 15 });
+  // Événements : saison et année en bandeau, évolutions et arrivées en message, mois sans rien.
+  assert.equal(eventPresentation({ type: 'season', text: 'x' }, { seasonLabel: 'Été', year: 1 }).channel, 'banner');
+  assert.equal(eventPresentation({ type: 'year', text: 'x' }).channel, 'banner');
+  assert.equal(eventPresentation({ type: 'evolve', text: 'x' }).channel, 'toast');
+  assert.equal(eventPresentation({ type: 'arrivals', text: 'x' }).kind, 'info');
+  assert.equal(eventPresentation({ type: 'month' }).channel, null);
+  assert.equal(eventPresentation(null).channel, null);
 });

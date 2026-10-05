@@ -10,16 +10,19 @@
 // message ne capte JAMAIS le doigt (la carte et les onglets dessous restent utilisables) : seul le
 // bouton d'un message qui propose une action (actionLabel + onClick) se touche, et il fait ≥ 48 px.
 // `key` : un message déjà affiché avec la même clé est mis à jour au lieu d'être empilé.
-// Textes ≥ 15 px (css/style.css). Les messages importants (erreur, action) restent ≥ 5 s.
+// Textes ≥ 15 px (css/style.css). Les messages importants (erreur, action) restent ≥ 5 s ; un message qui
+// propose une action (« Annuler » après une pose : 10 s) peut rester jusqu'à MAX_ACTION_MS.
 
 import { el, typo } from './dom.js';
 
 export const MAX_VISIBLE = 2;
+export const MAX_INFO_MS = 7000;
+export const MAX_ACTION_MS = 12000;
 const KINDS = new Set(['info', 'success', 'warn', 'error', 'money']);
 
-/** Durée d'affichage : 5 s au moins pour ce qui compte (erreur, action à toucher), 3 s pour une info (7 s au plus). */
+/** Durée d'affichage : 5 s au moins pour ce qui compte (erreur, action à toucher), 3 s pour une info (7 s au plus ; 12 s avec une action). */
 export function durationOf(o, kind = o.kind || 'info') {
-  const d = Math.min(7000, o.duration || 3000);
+  const d = Math.min(o.onClick ? MAX_ACTION_MS : MAX_INFO_MS, o.duration || 3000);
   const important = !!o.onClick || kind === 'error' || kind === 'warn';
   return important ? Math.max(5000, d) : d;
 }

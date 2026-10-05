@@ -1,28 +1,40 @@
-// Point d'entrée de Tiletown : crée le monde, le rendu, l'interface et la boucle (docs/ARCHITECTURE.md §6).
+// Point d'entrée de Tiletown : crée (ou recharge) la partie, le rendu, l'interface et la boucle
+// (docs/ARCHITECTURE.md §6, §9).
 //
 // Ordre de démarrage (la jauge de src/loader.js suit chaque étape via window.__bootProgress) :
-//   1. réglages d'accessibilité, interface HTML (barre du haut, onglets, feuille, messages, mesures) ;
-//   2. monde : generateWorld({ seed, cols: 12, rows: 16, map: 'valley', starterTown: true }) puis rebuildRoads ;
-//   3. rendu three.js : createRenderer(canvas, { manifestUrl, pixelRatioMax: 2 }) → setWorld, resize, fitAll ;
-//   4. gestes → caméra (glisser = pan, pincer / molette = zoomAt, double toucher = fitAll, toucher = pick → message) ;
-//   5. boucle rAF : 60 i/s en interaction (geste ou élan), 30 i/s au repos, arrêt quand l'onglet est caché ;
-//      mesures toutes les 500 ms (#stats) ; window.__tiletown = { ready, stats(), world, renderer } pour
-//      tools/measure.mjs (Playwright).
-// Redimensionnement : visualViewport → --app-h, --inset-top / --inset-bottom (barre du haut, onglets) et
-// r.resize(largeur, hauteur, dpr) ; téléphone en paysage → écran « Tournez votre téléphone ».
-// Toute erreur de démarrage remonte à window.__bootFail (écran d'erreur lisible du chargeur).
+//   1. réglages d'accessibilité, interface HTML (barre du haut, onglets, feuille, barre d'action, alertes, messages) ;
+//   2. partie : sauvegarde locale (src/storage.js, clé tiletown.save) si elle existe et que « ?seed= » ne la contredit
+//      pas, sinon createGame({ seed, cols: 12, rows: 16, starterTown: true }) ; « ?new=1 » repart de zéro ;
+//   3. rendu three.js : createRenderer(canvas, { manifestUrl, pixelRatioMax: 2 }) → setWorld, resize, vue de jeu ;
+//   4. gestes → caméra (glisser = pan, pincer / molette = zoomAt, double toucher = vue d'ensemble / de jeu) et
+//      → pose (toucher bref = placement.tap : fantôme puis confirmation ; appui long = fiche de la case) ;
+//   5. boucle rAF : advance(game, dt ≤ 0,1 s) chaque image → événements (saison, année : bandeau ; évolutions,
+//      arrivées : messages) ; r.setWorld(game.world) seulement quand la référence change ; updateActors avec
+//      dt × game.speed ; HUD toutes les 250 ms ; 60 i/s en interaction, 30 au repos, arrêt quand l'onglet est caché ;
+//      sauvegarde à chaque mois franchi et après chaque pose / démolition / annulation.
+// window.__tiletown = { ready, game, place, demolish, undo, setSpeed, advance(seconds), actors, stats(), hud, toasts, … }
+// pour tools/play.mjs et tools/measure.mjs (Playwright). « ?seed= », « ?zoom= », « ?view=all », « ?new=1 »,
+// « ?stats=1 » sont lus dans l'adresse. Toute erreur de démarrage remonte à window.__bootFail.
 
-import { generateWorld, centerOf } from './core/worldgen.js';
+import { createGame, advance, canPlace, place, demolish, undoLast, setSpeed, cycleSpeed, describeTile as describeGameTile } from './core/game.js';
+import { calendar } from './core/calendar.js';
+import { SPEEDS, UNLOCKS } from './data/balance.js';
 import { createActors, updateActors } from './core/actors.js';
-import { rebuildRoads } from './core/roads.js';
+import { applyPath, faceTowardRoad } from './core/roads.js';
+import { centerOf } from './core/worldgen.js';
 import { TERRAINS } from './data/terrain.js';
-import { TILES, TILE_BY_ID, residentsOfTile } from './data/tiles.js';
+import { TILE_BY_ID } from './data/tiles.js';
 import { createRenderer } from './render3d/renderer.js';
 import { assetUrl, isDev } from './version.js';
 import * as pwa from './pwa.js';
+import { createStorage, wantsNewGame } from './storage.js';
 import { initA11y } from './ui/a11y.js';
 import { createToasts } from './ui/toasts.js';
 import { createHud } from './ui/hud.js';
+import { createSheets, createBackStack } from './ui/sheets.js';
+import { createCatalog } from './ui/catalog.js';
+import { createPlacement } from './ui/placement.js';
+import { createTileSheet } from './ui/sheet-tile.js';
 import { createStats, statsWanted } from './ui/stats.js';
 import { createGestures } from './ui/gestures.js';
 import { $ } from './ui/dom.js';
@@ -35,7 +47,8 @@ const GAME_ZOOM = 8;
 const IDLE_FPS = 30;
 const INTERACT_AFTER_MS = 300; // on reste à 60 i/s un instant après le dernier geste
 const STATS_EVERY_MS = 500;
-const START_MONEY = 500; // (provisoire : src/data/balance.js fixera la vraie valeur)
+const HUD_EVERY_MS = 250;
+const MAX_FRAME_DT = 0.1; // s : au-delà (onglet revenu au premier plan), le temps de jeu ne rattrape pas
 
 const boot = {
   progress: (v) => { try { window.__bootProgress?.(v); } catch { /* chargeur absent */ } },
@@ -55,6 +68,12 @@ export function seedFromSearch(search, fallback = DEFAULT_SEED) {
   return h >>> 0;
 }
 
+/** Vrai si l'adresse impose une graine (« ?seed=… » non vide). */
+export function hasSeedParam(search) {
+  const v = new URLSearchParams(search || '').get('seed');
+  return v !== null && v !== '';
+}
+
 /**
  * Options de rendu lisibles dans l'adresse (débogage et mesures) : « ?strategy=batched|instanced|auto »,
  * « ?shadows=0 », « ?dpr=1.5 » (plafond du pixel ratio). Rien d'autre que ce qui est reconnu.
@@ -71,7 +90,7 @@ export function renderOptionsFromSearch(search) {
   return out;
 }
 
-/** Résumé d'une case pour le message au toucher : « Case 3,4 : Herbe » (+ bâtiment). */
+/** Résumé d'une case pour le message au toucher (sans tuile en main) : « Case 3,4 : Herbe » (+ bâtiment). */
 export function describeTile(world, x, y) {
   const tile = world.tiles[y * world.cols + x];
   if (!tile) return null;
@@ -81,19 +100,57 @@ export function describeTile(world, x, y) {
   return { terrain, building, native: !!tile.native, text: `Case ${x},${y} : ${terrain}${building ? ` · ${building}` : ''}` };
 }
 
-/** Jauges de départ calculées sur le monde (statiques tant que le tick n'existe pas). */
-export function initialGauges(world) {
-  let population = 0;
-  let natureTiles = 0;
-  for (const t of world.tiles) {
-    if (t.building) {
-      const def = TILE_BY_ID[t.building.type];
-      if (def) population += residentsOfTile({ ...def, level: t.building.level });
+/** Condition de déblocage d'une tuile (src/data/balance.js UNLOCKS, par palier de population) ou null. */
+export function unlockHintFor(id, unlocks = UNLOCKS) {
+  for (const u of unlocks || []) {
+    if (u.tiles && u.tiles.includes(id)) {
+      if (Number.isFinite(u.population)) return `Dès ${u.population} habitants`;
+      if (Number.isFinite(u.year)) return `Dès l’an ${u.year}`;
     }
-    if (t.native && TERRAINS[t.terrain]?.habitat) natureTiles += 1;
   }
-  const nature = Math.round((100 * natureTiles) / Math.max(1, world.tiles.length) * 2.2);
-  return { population, happiness: 72, nature: Math.min(100, nature), money: START_MONEY };
+  return null;
+}
+
+/**
+ * Delta mensuel de l'argent pour la jauge (« +12 $/mois ») : `stats.income` et `stats.upkeep` du cœur sont ce qui
+ * est encaissé et payé à chaque tick de mois (les montants par saison sont dans `seasonIncome` / `seasonUpkeep`).
+ */
+export function monthlyDelta(stats = {}) {
+  if (Number.isFinite(stats.monthlyNet)) return stats.monthlyNet;
+  if (Number.isFinite(stats.net)) return stats.net;
+  return (Number(stats.income) || 0) - (Number(stats.upkeep) || 0);
+}
+
+/** Jauges du HUD depuis l'état de partie. */
+export function gaugesOf(game) {
+  const s = game.stats || {};
+  return {
+    population: s.population || 0,
+    happiness: s.happiness ?? 50,
+    nature: s.nature ?? 50,
+    money: game.money ?? 0,
+    delta: monthlyDelta(s),
+  };
+}
+
+/**
+ * Présentation d'un événement du cœur pour l'interface : { channel: 'banner' | 'toast' | null, kind, title, text }.
+ * `season` et `year` passent en bandeau (bouton OK) ; `evolve`, `arrivals`, `unlock`… en message ; `month` : rien.
+ */
+export function eventPresentation(ev, cal = null) {
+  if (!ev || typeof ev !== 'object') return { channel: null };
+  const text = typeof ev.text === 'string' ? ev.text : '';
+  switch (ev.type) {
+    case 'season': return { channel: 'banner', kind: 'season', title: ev.title || `Bilan de saison${cal ? ` · an ${cal.year}` : ''}`, text: text || 'La saison s’achève.' };
+    case 'year': return { channel: 'banner', kind: 'year', title: ev.title || `Bilan de l’an ${cal ? Math.max(1, cal.year - 1) : ''}`.trim(), text: text || 'Une année de plus pour la ville.' };
+    case 'broke': return { channel: 'banner', kind: 'error', title: ev.title || 'La ville est en faillite', text: text || 'Les caisses sont vides depuis deux saisons.' };
+    case 'evolve': return { channel: 'toast', kind: 'success', title: ev.title || 'Évolution', text: text || 'Un îlot a changé de niveau.' };
+    case 'arrivals': return { channel: 'toast', kind: 'info', title: null, text: text || 'De nouveaux habitants arrivent.' };
+    case 'departures': case 'exodus': return { channel: 'toast', kind: 'warn', title: null, text: text || 'Des habitants s’en vont.' };
+    case 'unlock': return { channel: 'toast', kind: 'success', title: ev.title || 'Catalogue', text: text || 'Nouvelle tuile disponible.' };
+    case 'month': case 'tick': return { channel: null };
+    default: return text ? { channel: 'toast', kind: ev.kind || 'info', title: ev.title || null, text } : { channel: null };
+  }
 }
 
 async function main() {
@@ -107,21 +164,24 @@ async function main() {
   const canvas = $('#scene');
   const stage = $('#stage');
   if (!canvas || !stage) throw new Error('page incomplète : #scene introuvable');
+  const actionBar = $('#action');
+  const alerts = $('#alerts');
+  const tabbar = $('#tabbar');
 
   // ── 1. Réglages et interface ───────────────────────────────────────────────────
   app.a11y = initA11y();
+  const vibrate = (n) => app.a11y.vibrate(n);
   app.toasts = createToasts($('#toasts'));
   app.stats = createStats($('#stats'), { visible: statsWanted(location.search, dev) });
   app.hud = createHud(
-    { hud: $('#hud'), tabbar: $('#tabbar'), sheetLayer: $('#sheet-layer') },
+    { hud: $('#hud'), tabbar, action: actionBar, alerts },
     {
-      catalog: TILES,
-      vibrate: (n) => app.a11y.vibrate(n),
-      onSpeed: (sp) => { app.speed = sp; },
-      onTab: () => { updateInsets(); poke(); },
+      speeds: SPEEDS,
+      vibrate,
+      onSpeed: (sp) => { applyGame(setSpeed(game, sp), { silent: true }); poke(); },
+      onTab: (id) => { onTab(id); updateInsets(); poke(); },
     },
   );
-  app.speed = 1;
   boot.progress(0.15);
 
   // Hauteur réelle de l'écran (barre d'adresse de Chrome Android, clavier) ; téléphone en paysage.
@@ -141,15 +201,17 @@ async function main() {
     if (vv && (vv.offsetTop || vv.offsetLeft) && vv.scale <= 1.01) window.scrollTo(0, 0);
   }
 
-  // Zones de l'écran couvertes par la barre du haut et les onglets (px CSS) → CSS et rendu.
+  // Zones de l'écran couvertes par la barre du haut et, en bas, par les onglets et la barre d'action → CSS et rendu.
   let insetsKey = '';
   function updateInsets() {
     const { top, bottom } = app.hud.insets();
-    const key = `${top},${bottom}`;
+    const tabH = tabbar.offsetHeight;
+    const key = `${top},${bottom},${tabH}`;
     if (key === insetsKey) return;
     insetsKey = key;
     document.documentElement.style.setProperty('--inset-top', `${top}px`);
     document.documentElement.style.setProperty('--inset-bottom', `${bottom}px`);
+    document.documentElement.style.setProperty('--tabbar-h', `${tabH}px`);
     if (typeof app.renderer?.setInsets === 'function') app.renderer.setInsets({ top, bottom, left: 0, right: 0 });
   }
 
@@ -175,7 +237,8 @@ async function main() {
   window.addEventListener('orientationchange', () => setTimeout(() => { applyViewport(); resizeScene(); }, 150));
   new ResizeObserver(() => resizeScene()).observe(stage);
   new ResizeObserver(() => updateInsets()).observe($('#hud'));
-  new ResizeObserver(() => updateInsets()).observe($('#tabbar'));
+  new ResizeObserver(() => updateInsets()).observe(tabbar);
+  new ResizeObserver(() => updateInsets()).observe(actionBar);
   // Changement de densité de pixels sans changement de taille (fenêtre glissée sur un autre écran).
   (function watchDpr() {
     const mq = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
@@ -183,42 +246,140 @@ async function main() {
     mq.addEventListener?.('change', onChange);
   })();
 
-  // ── 2. Monde ──────────────────────────────────────────────────────────────────
-  const seed = seedFromSearch(location.search);
-  let world = rebuildRoads(generateWorld({ seed, cols: WORLD_COLS, rows: WORLD_ROWS, map: 'valley', starterTown: true }));
-  // Acteurs : habitants, véhicules, faune (simulation pure, affichée par le rendu).
-  let actors = createActors(world, seed);
-  let simSpeed = 1; // vitesse du temps (0 = pause) ; reliée au bouton pause/vitesse du HUD quand il sera actif
+  // ── 2. Partie ─────────────────────────────────────────────────────────────────
+  const storage = createStorage();
+  const search = location.search;
+  const seedParam = seedFromSearch(search);
+  let game = null;
+  let restored = false;
+  if (wantsNewGame(search)) storage.clearGame();
+  else {
+    const saved = storage.loadGame();
+    // Une graine imposée dans l'adresse qui diffère de la sauvegarde : nouvelle vallée (débogage, mesures).
+    if (saved && (!hasSeedParam(search) || saved.seed === seedParam)) { game = saved; restored = true; }
+  }
+  if (!game) game = createGame({ seed: seedParam, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true });
+  let seed = game.seed ?? seedParam;
+  // Acteurs : habitants, véhicules, faune (simulation pure, affichée par le rendu ; non sauvegardés).
+  let actors = createActors(game.world, seed);
   let updateMs = 0;
-  app.world = world;
-  app.hud.setGauges(initialGauges(world));
-  app.hud.setDate({ month: 2, year: 1 });
+  let lastSavedMonth = game.month;
+  const getGame = () => game;
+
+  const syncHud = () => {
+    app.hud.setGauges(gaugesOf(game));
+    app.hud.setDate(calendar(game));
+    app.hud.setSpeed(game.speed);
+  };
+  syncHud();
   boot.progress(0.3);
 
   // ── 3. Rendu ──────────────────────────────────────────────────────────────────
-  const r = await createRenderer(canvas, { manifestUrl: assetUrl('assets/models/manifest.json'), pixelRatioMax: 2, ...renderOptionsFromSearch(location.search) });
+  const r = await createRenderer(canvas, { manifestUrl: assetUrl('assets/models/manifest.json'), pixelRatioMax: 2, ...renderOptionsFromSearch(search) });
   app.renderer = r;
   boot.progress(0.8);
-  r.setWorld(world);
+  r.setWorld(game.world);
   r.setActors(actors);
   sizeKey = '';
   resizeScene();
   boot.progress(0.92);
 
-  // ── 4. Gestes → caméra ────────────────────────────────────────────────────────
+  // ── 3 bis. Feuilles, catalogue, pose, fiche ─────────────────────────────────────
+  const back = createBackStack({ onBack: () => onBack() });
+  app.sheets = createSheets($('#sheet-layer'), {
+    vibrate,
+    onChange: (id) => { if (id) back.hold('sheet'); else back.release('sheet'); syncTabs(); },
+  });
+
+  /** Remplace l'état de partie ; pousse le monde au rendu s'il a changé ; met l'interface à jour ; sauvegarde. */
+  function applyGame(next, meta = {}) {
+    if (!next || next === game) return game;
+    const prevWorld = game.world;
+    game = next;
+    if (game.world !== prevWorld) {
+      r.setWorld(game.world);
+      poke();
+    }
+    syncHud();
+    app.catalog?.refresh();
+    if (meta.kind) {
+      storage.saveGame(game);
+      lastSavedMonth = game.month;
+    }
+    return game;
+  }
+
+  const unlockHint = (id) => unlockHintFor(id);
+  const ops = {
+    canPlace,
+    place,
+    demolish,
+    undoLast,
+    describeTile: describeGameTile,
+    /** Orientation du fantôme (degrés) : vers la rue la plus proche, tracé de raccordement compris. */
+    previewYaw(g, x, y, res) {
+      try {
+        const w = res && Array.isArray(res.path) && res.path.length ? applyPath(g.world, res.path) : g.world;
+        return faceTowardRoad(w, x, y, centerOf(g.world));
+      } catch {
+        return 0;
+      }
+    },
+  };
+  app.placement = createPlacement({
+    bar: actionBar, renderer: r, ops, getGame, apply: applyGame, toasts: app.toasts, vibrate, back, unlockHint,
+    onState: () => { syncTabs(); updateInsets(); poke(); },
+  });
+  app.catalog = createCatalog({ sheets: app.sheets, placement: app.placement, getGame, vibrate, toasts: app.toasts, unlockHint });
+  app.tileSheet = createTileSheet({
+    sheets: app.sheets, ops, getGame, renderer: r, vibrate,
+    onDemolish: (x, y) => { app.placement.demolishAt(x, y); },
+  });
+
+  /** Onglet allumé : la feuille ouverte, sinon l'outil Démolir, sinon la famille de la tuile en main. */
+  function syncTabs() {
+    const sheet = app.sheets.current;
+    let active = null;
+    if (sheet && sheet !== 'tile') active = sheet;
+    else if (app.placement.tool === 'demolish') active = 'demolish';
+    else if (app.placement.hand) active = TILE_BY_ID[app.placement.hand]?.family || null;
+    app.hud.setActiveTab(active);
+  }
+
+  function onTab(id) {
+    if (id === 'demolish') {
+      if (app.placement.tool === 'demolish') { app.placement.drop(); return; }
+      app.sheets.close('tab');
+      app.placement.setTool('demolish');
+      app.toasts.show({ key: 'tool', text: 'Démolir : touchez un îlot, puis confirmez.', duration: 2500 });
+      return;
+    }
+    // Un onglet de famille : si la tuile en main est de cette famille et la feuille fermée, on la lâche d'abord.
+    if (app.placement.tool === 'demolish') app.placement.drop();
+    app.catalog.open(id);
+    syncTabs();
+  }
+
+  /** Bouton « retour » / Échap : ferme la couche du dessus (feuille, puis tuile en main ou outil). */
+  function onBack() {
+    if (app.sheets.isOpen()) { app.sheets.close('back'); return; }
+    if (app.placement.state !== 'idle') { app.placement.drop(); return; }
+    app.hud.hideBanner();
+  }
+
+  // ── 4. Gestes → caméra et pose ────────────────────────────────────────────────
+  const insetsNow = () => { const { top, bottom } = app.hud.insets(); return { top, bottom, left: 0, right: 0 }; };
 
   /** Cadre toute la carte dans la zone libre entre la barre du haut et les onglets. */
   function fitView() {
-    const { top, bottom } = app.hud.insets();
-    r.camera.fitAll({ insets: { top, bottom, left: 0, right: 0 } });
+    r.camera.fitAll({ insets: insetsNow() });
     viewMode = 'all';
   }
 
   /** Vue de jeu : rapprochée (≈ GAME_ZOOM îlots de large), centrée sur la mairie. */
   function homeView() {
-    const { top, bottom } = app.hud.insets();
-    const c = centerOf(world);
-    r.camera.lookAt(c.x, c.y, GAME_ZOOM, { insets: { top, bottom, left: 0, right: 0 } });
+    const c = centerOf(game.world);
+    r.camera.lookAt(c.x, c.y, GAME_ZOOM, { insets: insetsNow() });
     viewMode = 'home';
   }
 
@@ -228,22 +389,29 @@ async function main() {
   }
   let viewMode = 'home';
 
-  function tapAt(p, long) {
+  function tapAt(p) {
     const hit = r.pick(p.clientX, p.clientY);
+    if (app.placement.tap(hit)) { poke(); return; }
     if (!hit) {
       app.toasts.show({ key: 'tile', text: 'Hors de la vallée', duration: 1500 });
       return;
     }
-    const d = describeTile(world, hit.x, hit.y);
-    if (!d) return;
-    if (long) app.a11y.vibrate(20);
-    app.toasts.show({ key: 'tile', kind: long ? 'info' : 'info', title: long ? (d.building || d.terrain) : undefined, text: long ? `Case ${hit.x},${hit.y}${d.native ? ' · nature d’origine' : ''}` : d.text, duration: long ? 3500 : 2200 });
+    const d = describeTile(game.world, hit.x, hit.y);
+    if (d) app.toasts.show({ key: 'tile', text: d.text, duration: 2200 });
+  }
+
+  function longPressAt(p) {
+    const hit = r.pick(p.clientX, p.clientY);
+    if (!hit) return;
+    vibrate(20);
+    app.tileSheet.open(hit.x, hit.y);
+    poke();
   }
 
   app.gestures = createGestures(canvas, {
-    onTap: (p) => tapAt(p, false),
-    onLongPress: (p) => tapAt(p, true),
-    onDoubleTap: () => { toggleView(); inertia = null; app.a11y.vibrate(8); poke(); },
+    onTap: (p) => tapAt(p),
+    onLongPress: (p) => longPressAt(p),
+    onDoubleTap: () => { toggleView(); inertia = null; vibrate(8); poke(); },
     onPanStart: () => { inertia = null; poke(); },
     onPan: ({ dx, dy }) => { r.camera.pan(dx, dy); poke(); },
     onPanEnd: ({ vx, vy }) => {
@@ -259,11 +427,48 @@ async function main() {
     onPinchEnd: () => poke(),
   });
 
-  // ── 5. Boucle ─────────────────────────────────────────────────────────────────
+  // ── 5. Temps de jeu et événements ─────────────────────────────────────────────
+  function presentEvents(events) {
+    if (!Array.isArray(events) || !events.length) return;
+    const cal = calendar(game);
+    for (const ev of events) {
+      const p = eventPresentation(ev, cal);
+      if (p.channel === 'banner') {
+        app.hud.showBanner({ kind: p.kind, title: p.title, text: p.text, actionLabel: 'OK' });
+      } else if (p.channel === 'toast') {
+        app.toasts.show({ key: ev.type, kind: p.kind, title: p.title || undefined, text: p.text, duration: 4000 });
+      }
+      if (ev.type === 'unlock') app.catalog.refresh();
+    }
+  }
+
+  /** Avance le temps de jeu de `dt` secondes réelles (× game.speed dans le cœur) : événements, HUD, sauvegarde mensuelle. */
+  function stepGame(dt) {
+    if (!(dt > 0) || !game.speed) return;
+    const before = game;
+    const res = advance(game, dt);
+    if (!res || !res.game || res.game === before) return;
+    game = res.game;
+    if (game.world !== before.world) { r.setWorld(game.world); poke(); }
+    if (game.month !== before.month) {
+      syncHud();
+      app.catalog.refresh();
+      app.placement.refresh();
+      if (game.month !== lastSavedMonth) {
+        storage.saveGame(game);
+        lastSavedMonth = game.month;
+      }
+    }
+    presentEvents(res.events);
+  }
+
+  // ── 6. Boucle ─────────────────────────────────────────────────────────────────
   let rafId = 0;
   let running = false;
   let lastRender = performance.now();
   let lastStats = lastRender;
+  let lastHud = lastRender;
+  let lastSim = lastRender;
   function frame(now) {
     if (!running) return;
     rafId = requestAnimationFrame(frame);
@@ -277,16 +482,26 @@ async function main() {
       if (Math.hypot(inertia.vx, inertia.vy) < 0.02) inertia = null;
       poke();
     }
+    // Le temps de jeu avance à chaque image (même au repos : une image sur deux), plafonné à 0,1 s.
+    const simDt = Math.min(MAX_FRAME_DT, (now - lastSim) / 1000);
+    lastSim = now;
     const interacting = app.gestures.active || now < interactUntil;
-    if (!interacting && dtMs < 1000 / IDLE_FPS - 1) return; // repos : une image sur deux
+    if (!interacting && dtMs < 1000 / IDLE_FPS - 1) {
+      stepGame(simDt);
+      return; // repos : une image sur deux
+    }
     lastRender = now;
-    const dt = Math.min(0.1, dtMs / 1000);
     const tu = performance.now();
-    if (simSpeed > 0) updateActors(actors, world, dt * simSpeed);
+    stepGame(simDt);
+    if (game.speed > 0) updateActors(actors, game.world, simDt * game.speed);
     updateMs = performance.now() - tu;
     const t0 = performance.now();
-    r.render(dt);
+    r.render(Math.min(MAX_FRAME_DT, dtMs / 1000));
     app.stats.frame(performance.now() - t0);
+    if (now - lastHud >= HUD_EVERY_MS) {
+      lastHud = now;
+      app.hud.setGauges(gaugesOf(game));
+    }
     if (now - lastStats >= STATS_EVERY_MS) {
       lastStats = now;
       app.stats.update(r.stats());
@@ -296,13 +511,17 @@ async function main() {
     if (running) return;
     running = true;
     lastRender = performance.now();
+    lastSim = lastRender;
     rafId = requestAnimationFrame(frame);
   }
   function stop() {
     running = false;
     cancelAnimationFrame(rafId);
   }
-  document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stop(); storage.saveGame(game); } else start();
+  });
+  window.addEventListener('pagehide', () => storage.saveGame(game));
 
   // Perte du contexte WebGL (onglet longtemps en arrière-plan) : pause, puis reconstruction à la restauration.
   canvas.addEventListener('webglcontextlost', (e) => {
@@ -312,7 +531,7 @@ async function main() {
   });
   canvas.addEventListener('webglcontextrestored', () => {
     try {
-      r.setWorld(world);
+      r.setWorld(game.world);
       sizeKey = '';
       resizeScene();
     } catch (err) {
@@ -324,15 +543,19 @@ async function main() {
 
   // Première image (vue de jeu centrée sur la mairie, ou vue d'ensemble avec ?view=all), puis la page de chargement s'efface.
   {
-    const q = new URLSearchParams(location.search);
+    const q = new URLSearchParams(search);
     const z = Number(q.get('zoom'));
     if (q.get('view') === 'all') fitView();
-    else if (Number.isFinite(z) && z > 0) { const { top, bottom } = app.hud.insets(); const c = centerOf(world); r.camera.lookAt(c.x, c.y, z, { insets: { top, bottom, left: 0, right: 0 } }); }
+    else if (Number.isFinite(z) && z > 0) { const c = centerOf(game.world); r.camera.lookAt(c.x, c.y, z, { insets: insetsNow() }); }
     else homeView();
   }
   r.render(0);
   app.stats.update(r.stats());
   start();
+  if (restored) {
+    const cal = calendar(game);
+    app.toasts.show({ key: 'restore', kind: 'success', text: `Partie reprise : ${cal.monthLabel}, an ${cal.year}.`, duration: 3000 });
+  }
 
   // ── PWA ───────────────────────────────────────────────────────────────────────
   pwa.initPWA();
@@ -342,29 +565,72 @@ async function main() {
   pwa.onOfflineReady(() => app.toasts.show({ key: 'offline', kind: 'success', text: 'Tiletown est prêt à jouer hors ligne.' }));
 
   // ── Prêt ──────────────────────────────────────────────────────────────────────
+  const nowSeconds = () => performance.now() / 1000;
+  function newGame(newSeed = seed) {
+    app.placement.drop();
+    app.sheets.close('new');
+    storage.clearGame();
+    game = createGame({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, starterTown: true });
+    seed = game.seed ?? newSeed;
+    actors = createActors(game.world, seed);
+    r.setWorld(game.world);
+    r.setActors(actors);
+    homeView();
+    syncHud();
+    lastSavedMonth = game.month;
+    poke();
+    return game;
+  }
+
   window.__tiletown = {
     ready: true,
-    seed,
-    world,
+    get seed() { return seed; },
+    get game() { return game; },
+    get world() { return game.world; },
     renderer: r,
     hud: app.hud,
     toasts: app.toasts,
-    /** { calls, triangles, frameMs, fps } : valeurs fraîches du rendu + i/s de la dernière fenêtre. */
+    sheets: app.sheets,
+    catalog: app.catalog,
+    placement: app.placement,
+    tileSheet: app.tileSheet,
+    storage,
+    /** { calls, triangles, frameMs, fps, ghost } : valeurs fraîches du rendu + i/s de la dernière fenêtre. */
     stats: () => ({ ...app.stats.snapshot(), ...r.stats(), updateMs: updateMs + (r.stats().layersUpdateMs || 0) }),
     get actors() { return actors; },
-    /** Change de monde (graine) sans recharger : utile aux mesures. */
-    regenerate(newSeed) {
-      world = rebuildRoads(generateWorld({ seed: newSeed, cols: WORLD_COLS, rows: WORLD_ROWS, map: 'valley', starterTown: true }));
-      app.world = world;
-      window.__tiletown.world = world;
-      actors = createActors(world, newSeed);
-      r.setWorld(world);
-      r.setActors(actors);
-      homeView();
-      app.hud.setGauges(initialGauges(world));
-      poke();
-      return world;
+    /** Pose directe (sans geste) : { ok, cost, reason } ; passe par le même chemin que la confirmation du fantôme. */
+    place(x, y, id) {
+      const res = place(game, x, y, id, nowSeconds());
+      if (res && res.ok) applyGame(res.game, { kind: 'place', x, y, tileId: id, cost: res.cost });
+      return res;
     },
+    canPlace: (x, y, id) => canPlace(game, x, y, id),
+    demolish(x, y) {
+      const res = demolish(game, x, y);
+      if (res && res.ok) applyGame(res.game, { kind: 'demolish', x, y, cost: res.cost });
+      return res;
+    },
+    undo: () => app.placement.undo(),
+    setSpeed(sp) { applyGame(setSpeed(game, sp), { silent: true }); return game.speed; },
+    cycleSpeed() { applyGame(cycleSpeed(game), { silent: true }); return game.speed; },
+    /** Avance le temps de jeu de `seconds` secondes réelles, par pas de 0,1 s (tests) ; renvoie la partie. */
+    advance(seconds) {
+      let left = Math.max(0, Number(seconds) || 0);
+      while (left > 1e-9) {
+        const dt = Math.min(MAX_FRAME_DT, left);
+        stepGame(dt);
+        left -= dt;
+      }
+      r.invalidate?.();
+      return game;
+    },
+    save: () => storage.saveGame(game),
+    describeTile: (x, y) => describeGameTile(game, x, y),
+    /** Nouvelle partie (graine) sans recharger : utile aux mesures. */
+    regenerate: (newSeed) => newGame(newSeed).world,
+    newGame,
+    fitView,
+    homeView,
   };
   boot.ok();
   document.body.classList.remove('is-loading');

@@ -6,10 +6,12 @@
    Plan de l'écran (portrait) :
      #stage > #scene      la scène three.js, plein écran, sous tout le reste (touch-action: none)
      #ui                  calque de l'interface (pointer-events: none ; ses enfants le réactivent)
-       #hud               barre du haut : 4 jauges (Population, Bonheur, Nature, Argent), date, pause/vitesse
+       #hud               barre du haut : 4 jauges (Population, Bonheur, Nature, Argent + delta), date, pause/vitesse
        #stats             mesures du prototype (appels de dessin, triangles, ms/image, i/s), en haut à droite
-       #sheet-layer       feuille coulissante du bas (catalogue, fiches)
-       #toasts            messages temporaires (au-dessus des onglets)
+       #alerts            bandeau d'alerte (bilan de saison / d'année), un à la fois, bouton OK
+       #sheet-layer       feuille coulissante du bas (catalogue avec barres de demande, fiche d'une case)
+       #toasts            messages temporaires (au-dessus des onglets et de la barre d'action)
+       #action            barre d'action : tuile « en main », résumé du fantôme, boutons ✓ (56 px) et ✕ (48 px)
        #tabbar            barre d'onglets du catalogue (≥ 56 px) : familles + Démolir + Calques
        #rotate            « Tournez votre téléphone » (paysage sur téléphone)
        #loading           écran de chargement et garde-fou (src/loader.js)
@@ -274,6 +276,18 @@ html.reduced-motion *::after { animation-duration: 0.01ms !important; transition
 .gauge--nature { --g: var(--g-nature); }
 .gauge--money { --g: var(--g-money); }
 .gauge--money.is-negative .gauge-value { color: var(--c-roof-red); }
+/* Delta mensuel de l'argent (« +12 $/mois »), en petit sous le montant */
+.gauge-delta {
+  display: block;
+  font-size: 0.75rem; /* 12 px : mention secondaire */
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gauge-delta.is-up { color: var(--btn-bg); }
+.gauge-delta.is-down { color: var(--c-roof-red); }
 
 .hud-date {
   grid-column: 1 / 5;
@@ -368,6 +382,12 @@ html.reduced-motion *::after { animation-duration: 0.01ms !important; transition
 }
 .tab:active { transform: translateY(1px); background: var(--panel-2); }
 .tab.is-active { background: var(--panel-2); color: var(--ink); box-shadow: inset 0 -3px 0 var(--accent); }
+/* « Infrastructures » ne tient pas dans un onglet de téléphone : libellé court sous 700 px (comme les jauges). */
+.tab-label-long { display: none; }
+@media (min-width: 700px) {
+  .tab-label-long { display: inline; }
+  .tab-label-short { display: none; }
+}
 .tab--tool { color: var(--ink-soft); }
 .tab--tool.is-active { box-shadow: inset 0 -3px 0 var(--c-roof-red); }
 .tab-ico {
@@ -435,16 +455,18 @@ html.reduced-motion *::after { animation-duration: 0.01ms !important; transition
   visibility: hidden;
   touch-action: pan-y;
 }
-#sheet-layer.is-open .sheet { transform: none; visibility: visible; transition: transform 260ms var(--ease-out); }
+#sheet-layer.is-open .sheet.is-visible { transform: none; visibility: visible; transition: transform 260ms var(--ease-out); }
 .sheet-grab {
   display: grid;
   place-items: center;
   flex: none;
   height: 18px;
-  pointer-events: none; /* décorative : la feuille se ferme par le ✕ (48 px) ou le fond */
+  touch-action: none; /* zone de glissement vers le bas (src/ui/sheets.js) ; le ✕ (48 px), le fond et Échap ferment aussi */
 }
 .sheet-grab-bar { display: block; width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
-.sheet-head { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 0 4px; }
+.sheet-head { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 0 4px; touch-action: none; }
+.sheet-actions { display: flex; gap: 8px; margin-top: 12px; }
+.sheet-actions > .btn { flex: 1 1 0; min-width: 0; }
 .sheet-title { flex: 1; min-width: 0; margin: 0; font-size: 1.25rem; font-weight: 800; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-x {
   display: grid;
@@ -493,10 +515,116 @@ html.reduced-motion *::after { animation-duration: 0.01ms !important; transition
 }
 .card:active { transform: translateY(1px); border-color: var(--accent); }
 .card.is-selected { border-color: var(--accent); background: var(--panel-2); }
-.card-swatch { flex: none; width: 36px; height: 36px; border-radius: 9px; background: var(--sw, var(--c-sidewalk)); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12); }
+.card-swatch { position: relative; display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 9px; background: var(--sw, var(--c-sidewalk)); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12); color: var(--c-wall-cream); }
 .card-body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .card-title { font-size: 0.9375rem; font-weight: 800; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-price { font-size: 0.875rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+/* Trop cher pour le moment : grisée mais touchable (le fantôme dira « Pas assez d'argent ») */
+.card.is-poor { opacity: 0.62; }
+.card.is-poor .card-price { color: var(--c-roof-red); }
+/* Verrouillée : cadenas sur la pastille, condition à la place du prix */
+.card.is-locked { opacity: 0.78; border-style: dashed; cursor: not-allowed; }
+.card.is-locked .card-swatch { filter: saturate(0.3) brightness(0.9); }
+.card-price--locked { display: flex; align-items: center; gap: 4px; white-space: normal; line-height: 1.2; }
+.card-price--locked .ico-lock { flex: none; width: 14px; height: 14px; }
+.ico-lock { display: inline-block; }
+
+/* Barres de demande en tête du catalogue : Habitat, Activité, Services (ce qui manque, 0 à 100 %) */
+.demand { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; margin: 6px 2px 12px; }
+.demand-row { display: contents; }
+.demand-label { font-size: 0.875rem; font-weight: 700; color: var(--ink-soft); }
+.demand-bar { display: block; height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(58, 58, 66, 0.08); }
+.demand-fill { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--c-grass), var(--c-wheat) 60%, var(--c-roof-orange)); transition: width var(--t-med) ease; }
+.demand-value { font-size: 0.75rem; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+
+/* Fiche d'une case (appui long) */
+.tile-sheet { display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 4px; }
+.tile-terrain, .tile-level, .tile-desc { margin: 0; font-size: 1rem; line-height: 1.3; }
+.tile-native, .tile-pos { color: var(--ink-soft); }
+.tile-desc { color: var(--ink-soft); font-size: 0.9375rem; }
+.tile-sub { margin: 8px 0 0; font-size: 0.9375rem; font-weight: 800; }
+.tile-yields, .cond-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.tile-yields li { font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.cond { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 0.9375rem; color: var(--c-roof-red); }
+.cond.is-met { color: var(--btn-bg); }
+.cond-mark { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%; color: var(--c-wall-cream); background: var(--c-roof-red); font-weight: 900; font-size: 0.875rem; }
+.cond.is-met .cond-mark { background: var(--btn-bg); }
+.cond-text { color: var(--ink); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+/* ─── Barre d'action (tuile en main, fantôme, démolition) : au-dessus des onglets ─── */
+#action {
+  position: absolute;
+  z-index: 28;
+  left: 0;
+  right: 0;
+  bottom: var(--tabbar-h, 64px);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 6px calc(var(--safe-r) + 8px) 6px calc(var(--safe-l) + 12px);
+  background: var(--panel);
+  border-top: 2px solid var(--line);
+  box-shadow: 0 -4px 16px rgba(58, 58, 66, 0.12);
+  animation: action-in 200ms var(--ease-out);
+}
+#action.is-open { display: flex; }
+.action-text { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.action-title { font-size: 0.9375rem; /* 15 px */ font-weight: 800; line-height: 1.2; }
+.action-sub { font-size: 0.875rem; /* 14 px */ color: var(--ink-soft); line-height: 1.25; }
+#action.action--no .action-sub { color: var(--c-roof-red); font-weight: 700; }
+#action.action--warn .action-title { color: color-mix(in srgb, var(--c-roof-orange) 70%, #000); }
+#action.action--demolish .action-title { color: var(--c-roof-red); }
+.action-ok {
+  flex: none;
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  min-height: 56px;
+  padding: 0;
+  font-size: 1.5rem;
+  background: var(--btn-bg);
+}
+#action.action--demolish .action-ok { background: var(--c-roof-red); }
+.action-ok.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.action-x { flex: none; width: 48px; min-width: 48px; height: 48px; padding: 0; font-size: 1.25rem; }
+@keyframes action-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ─── Bandeau d'alertes (saison, année) ─── */
+#alerts {
+  position: absolute;
+  z-index: 32;
+  left: 50%;
+  top: calc(var(--inset-top) + 8px);
+  transform: translateX(-50%);
+  width: min(30rem, calc(100vw - 16px));
+  display: none;
+}
+#alerts.is-open { display: block; }
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 6px solid var(--alert-c, var(--c-sun));
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  animation: toast-in 280ms var(--ease-pop);
+}
+.alert--season { --alert-c: var(--c-grass); }
+.alert--year { --alert-c: var(--c-sun); }
+.alert--warn { --alert-c: var(--c-roof-orange); }
+.alert--error { --alert-c: var(--c-roof-red); }
+.alert-body { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; gap: 2px; font-size: 0.9375rem; line-height: 1.3; }
+.alert-title { font-size: 1rem; font-weight: 800; }
+.alert-text { color: var(--ink-soft); }
+.alert-ok { flex: none; min-width: 64px; }
 
 /* ─── Messages (toasts) ─────────────────────────────────────────────────────── */
 #toasts {
@@ -649,3 +777,7 @@ body.is-rotated #rotate { display: grid; }
   #hud { left: 50%; right: auto; width: min(100%, 52rem); transform: translateX(-50%); border-radius: 0 0 var(--radius) var(--radius); border: 2px solid var(--line); border-top: 0; }
   #tabbar { left: 50%; right: auto; width: min(100%, 52rem); transform: translateX(-50%); border-radius: var(--radius) var(--radius) 0 0; border: 2px solid var(--line); border-bottom: 0; }
 }
+
+/* Fiche : adjacences du bonheur local (bonus en vert, malus en rouge) */
+.tile-adjacency li.is-up { color: var(--btn-bg); }
+.tile-adjacency li.is-down { color: var(--c-roof-red); }

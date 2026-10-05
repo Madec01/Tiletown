@@ -43,13 +43,19 @@
     <!-- Mesures du prototype (?stats=1 ou développement) : appels de dessin, triangles, ms/image, i/s -->
     <div id="stats" aria-hidden="true"></div>
 
-    <!-- Feuille coulissante du bas (catalogue, fiches) -->
+    <!-- Bandeau d'alertes (bilan de saison, d'année), un à la fois, bouton OK (src/ui/hud.js) -->
+    <div id="alerts" aria-live="polite"></div>
+
+    <!-- Feuille coulissante du bas : catalogue (src/ui/catalog.js), fiche d'une case (src/ui/sheet-tile.js) -->
     <div id="sheet-layer"></div>
 
     <!-- Messages temporaires -->
     <div id="toasts" aria-live="polite"></div>
 
-    <!-- Barre d'onglets du catalogue : Habitat · Activité · Services · Réseaux · Nature · Démolir · Calques -->
+    <!-- Barre d'action au-dessus des onglets : tuile « en main », résumé du fantôme, ✓ et ✕ (src/ui/placement.js) -->
+    <div id="action" aria-hidden="true"></div>
+
+    <!-- Barre d'onglets du catalogue : Habitat · Activité · Services · Infrastructures · Nature · Démolir · Calques -->
     <nav id="tabbar" aria-label="Catalogue"></nav>
 
     <!-- Téléphone tenu à l'horizontale -->

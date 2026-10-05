@@ -1,85 +1,75 @@
-// Barre du haut, barre d'onglets du catalogue et feuille coulissante (statiques pour le prototype).
+// Barre du haut, barre d'onglets du catalogue et bandeau d'alertes (saison, année).
 //
-//   const hud = createHud({ hud, tabbar, sheetLayer }, { onSpeed, onTab, vibrate, catalog });
-//   catalog : src/data/tiles.js TILES ([{ id, family, label, price }]) ; sans lui, un catalogue de démonstration
-//   hud.setGauges({ population, happiness, nature, money })   valeurs des 4 jauges
-//   hud.setDate({ month, year })                               « Printemps · mars · an 1 »
-//   hud.setSpeed(0 | 0.5 | 1 | 2 | 4)                          bouton pause / vitesse
-//   hud.openSheet(familyId) / hud.closeSheet() / hud.isSheetOpen()
-//   hud.insets() → { top, bottom }                             hauteur couverte par la barre du haut et les onglets
+//   const hud = createHud({ hud, tabbar, action, alerts }, { onSpeed, onTab, vibrate, speeds });
+//   hud.setGauges({ population, happiness, nature, money, delta })   4 jauges ; delta = recettes − entretien ($/mois)
+//   hud.setDate(calendar(game))                                      « Printemps · mars · an 1 » ({ seasonLabel, monthLabel, year })
+//   hud.setSpeed(0 | 0.5 | 1 | 2 | 4)                                bouton pause / vitesse (⏸ ×½ ×1 ×2 ×4)
+//   hud.setActiveTab(id | null)                                      onglet allumé (feuille ouverte, outil actif)
+//   hud.showBanner({ title, text, kind, actionLabel, onAction })     bandeau d'alerte, un à la fois (file d'attente), bouton OK
+//   hud.hideBanner()                                                 ferme le bandeau courant (et montre le suivant)
+//   hud.insets() → { top, bottom }                                   hauteur couverte par la barre du haut et, en bas, par les onglets + la barre d'action
 //
-// Disposition (docs/MOBILE.md) : 4 jauges (Population, Bonheur, Nature, Argent) + date à gauche, pause/vitesse
-// à droite (48 × 96) ; en bas, onglets Habitat · Activité · Services · Réseaux · Nature · Démolir · Calques
-// (≥ 56 px de haut, ≥ 48 px de large chacun) ; la feuille du bas montre les cartes du catalogue (≥ 64 px)
-// de la famille touchée (statique : la pose viendra avec le cœur du jeu).
+// Disposition (docs/MOBILE.md, docs/GAME_DESIGN.md §9) : 4 jauges (Population, Bonheur, Nature, Argent) + date à
+// gauche, pause/vitesse à droite (48 px de large, toute la hauteur) ; en bas, onglets Habitat · Activité · Services ·
+// Infrastructures · Nature · Démolir · Calques (≥ 56 px de haut, ≥ 48 px de large chacun). Les feuilles (catalogue,
+// fiches) vivent dans src/ui/sheets.js et src/ui/catalog.js ; la pose dans src/ui/placement.js.
 // Toute information de la barre se lit aussi au toucher : chaque jauge est un bouton (fiche plus tard).
 
-import { el, clear, fmt, setText } from './dom.js';
+import { el, clear, fmt, setText, signed } from './dom.js';
 
 export const FAMILIES = Object.freeze([
   { id: 'habitat', label: 'Habitat', title: 'Habitat' },
   { id: 'activity', label: 'Activité', title: 'Activité' },
   { id: 'services', label: 'Services', title: 'Services' },
-  { id: 'infrastructure', label: 'Réseaux', title: 'Infrastructures' },
+  // « Infrastructures » ne tient pas dans un onglet de 48 à 56 px à 12 px : libellé court sur téléphone (css/style.css).
+  { id: 'infrastructure', label: 'Infrastructures', short: 'Infras.', title: 'Infrastructures' },
   { id: 'nature', label: 'Nature', title: 'Nature' },
 ]);
 export const TOOLS = Object.freeze([
-  { id: 'demolish', label: 'Démolir', title: 'Démolir' },
+  { id: 'demolish', label: 'Démolir', title: 'Démolir (10 $ par îlot)' },
   { id: 'layers', label: 'Calques', title: 'Calques : air, eau, faune' },
 ]);
+
+/** Vitesses du temps (docs/ARCHITECTURE.md §9.1 : SPEEDS de src/data/balance.js ; recopiées ici pour l'interface pure). */
+export const DEFAULT_SPEEDS = Object.freeze([0, 0.5, 1, 2, 4]);
 
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const SEASONS = ['Hiver', 'Hiver', 'Printemps', 'Printemps', 'Printemps', 'Été', 'Été', 'Été', 'Automne', 'Automne', 'Automne', 'Hiver'];
 
-/** Saison d'un mois (0 = janvier) : fonction pure. */
+/** Saison d'un mois du calendrier (0 = janvier) : fonction pure (repli quand `calendar(game)` n'est pas fourni). */
 export function seasonOf(month) {
   return SEASONS[((Math.round(month) % 12) + 12) % 12];
 }
 
-/** Texte court de la vitesse (bouton) : « ×½ », « ×1 »… ; pause : « ⏸ ». */
+/** Texte court de la vitesse (bouton) : « ×½ », « ×1 »… ; pause : « Pause ». */
 export function speedText(sp) {
   if (!sp) return 'Pause';
   return sp === 0.5 ? '×½' : `×${sp}`;
 }
 
-/** Vitesse suivante au toucher : pause → ×1 → ×2 → ×4 → pause. */
-export function nextSpeed(sp) {
-  const cycle = [1, 2, 4];
-  if (!sp) return cycle[0];
-  const i = cycle.indexOf(sp);
-  return i === -1 ? 1 : i === cycle.length - 1 ? 0 : cycle[i + 1];
+/** Vitesse suivante au toucher : 0 (pause) → ×½ → ×1 → ×2 → ×4 → pause (le cycle de `cycleSpeed` du cœur). */
+export function nextSpeed(sp, speeds = DEFAULT_SPEEDS) {
+  const i = speeds.indexOf(sp);
+  if (i === -1) return speeds.includes(1) ? 1 : speeds[0];
+  return speeds[(i + 1) % speeds.length];
 }
 
-// Catalogue de démonstration (remplacé par src/data/tiles.js quand il sera branché).
-const DEMO_CARDS = {
-  habitat: [['Quartier', 60, 'var(--c-roof-red)'], ['Immeuble', 140, 'var(--c-roof-orange)'], ['Tour', 320, 'var(--c-roof-slate)']],
-  activity: [['Commerce', 90, 'var(--c-sun)'], ['Bureaux', 160, 'var(--c-roof-slate)'], ['Usine', 220, 'var(--c-metal)']],
-  services: [['École', 180, 'var(--c-wall-beige)'], ['Dispensaire', 240, 'var(--c-blossom)'], ['Caserne', 260, 'var(--c-roof-red)']],
-  infrastructure: [['Éolienne', 150, 'var(--c-metal-light)'], ['Château d’eau', 120, 'var(--c-river)'], ['Gare', 400, 'var(--c-asphalt)']],
-  nature: [['Parc', 40, 'var(--c-grass-light)'], ['Bosquet', 30, 'var(--c-forest-dark)'], ['Mare', 50, 'var(--c-lake-deep)'], ['Prairie fleurie', 25, 'var(--c-wheat)']],
-  demolish: [],
-  layers: [['Air', 0, 'var(--c-metal-light)'], ['Eau', 0, 'var(--c-river)'], ['Faune', 0, 'var(--c-forest-dark)']],
-};
+/** Texte du delta mensuel de l'argent : « +12 $/mois », « −4 $/mois », « ±0 $/mois ». */
+export function deltaText(delta) {
+  const v = Math.round(Number(delta) || 0);
+  return v === 0 ? '±0 $/mois' : `${signed(v)} $/mois`;
+}
 
-/** Couleur de carte par famille (pastille), depuis la palette. */
-const FAMILY_SWATCH = {
-  habitat: 'var(--c-roof-red)',
-  activity: 'var(--c-roof-slate)',
-  services: 'var(--c-sun)',
-  infrastructure: 'var(--c-metal)',
-  nature: 'var(--c-forest-dark)',
-};
-
-/** Cartes à montrer pour une famille : [titre, prix, couleur] ; catalogue réel s'il est fourni, sinon démo. */
-export function cardsFor(id, catalog) {
-  if (Array.isArray(catalog) && catalog.length) {
-    const list = catalog.filter((t) => t.family === id).map((t) => [t.label, t.price || 0, FAMILY_SWATCH[t.family] || 'var(--c-sidewalk)']);
-    if (list.length || FAMILIES.some((f) => f.id === id)) return list;
+/** Libellé de la date depuis `calendar(game)` ou, à défaut, { month (0 = janvier), year }. */
+export function dateParts(cal = {}) {
+  if (cal.seasonLabel || cal.monthLabel) {
+    return { season: cal.seasonLabel || seasonOf(cal.month ?? 2), month: cal.monthLabel || '', year: `an ${cal.year ?? 1}` };
   }
-  return DEMO_CARDS[id] || [];
+  const m = ((Math.round(cal.month ?? 2) % 12) + 12) % 12;
+  return { season: seasonOf(m), month: MONTHS[m], year: `an ${cal.year ?? 1}` };
 }
 
-export function createHud({ hud, tabbar, sheetLayer }, { onSpeed, onTab, vibrate, catalog } = {}) {
+export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpeed, onTab, vibrate, speeds = DEFAULT_SPEEDS } = {}) {
   const buzz = (n) => { try { vibrate?.(n); } catch { /* rien */ } };
 
   // ── Barre du haut ────────────────────────────────────────────────────────────
@@ -107,7 +97,7 @@ export function createHud({ hud, tabbar, sheetLayer }, { onSpeed, onTab, vibrate
       'aria-label': 'Vitesse du temps',
       onclick: () => {
         buzz(8);
-        const next = nextSpeed(speed);
+        const next = nextSpeed(speed, speeds);
         setSpeed(next);
         onSpeed?.(next);
       },
@@ -115,101 +105,46 @@ export function createHud({ hud, tabbar, sheetLayer }, { onSpeed, onTab, vibrate
     speedGlyph,
     speedLabel,
   );
+  const moneyDelta = el('span.gauge-delta', '±0 $/mois');
   clear(hud).append(makeGauge('population', 'Population', 'Habitants'), makeGauge('happiness', 'Bonheur'), makeGauge('nature', 'Nature'), makeGauge('money', 'Argent'), dateNode, speedBtn);
+  gauges.money.node.append(moneyDelta);
 
   function setGauges(v = {}) {
     if (v.population !== undefined) setText(gauges.population.value, fmt(v.population));
     if (v.happiness !== undefined) setText(gauges.happiness.value, `${Math.round(v.happiness)} %`);
     if (v.nature !== undefined) setText(gauges.nature.value, `${Math.round(v.nature)} %`);
     if (v.money !== undefined) {
-      setText(gauges.money.value, fmt(v.money));
+      setText(gauges.money.value, `${fmt(v.money)} $`);
       gauges.money.node.classList.toggle('is-negative', v.money < 0);
+    }
+    if (v.delta !== undefined) {
+      const d = Math.round(Number(v.delta) || 0);
+      setText(moneyDelta, deltaText(d));
+      moneyDelta.classList.toggle('is-up', d > 0);
+      moneyDelta.classList.toggle('is-down', d < 0);
     }
   }
 
-  function setDate({ month = 2, year = 1 } = {}) {
-    setText(dateSeason, seasonOf(month));
-    setText(dateMonth, MONTHS[((month % 12) + 12) % 12]);
-    setText(dateYear, `an ${year}`);
+  function setDate(cal) {
+    const p = dateParts(cal || {});
+    setText(dateSeason, p.season);
+    setText(dateMonth, p.month);
+    setText(dateYear, p.year);
   }
 
   function setSpeed(sp) {
     speed = sp;
     speedBtn.classList.toggle('is-paused', !sp);
-    speedGlyph.textContent = sp ? '▶' : '❚❚';
-    setText(speedLabel, sp ? speedText(sp) : 'Pause');
+    speedGlyph.textContent = sp ? '▶' : '⏸';
+    setText(speedLabel, speedText(sp));
     speedBtn.setAttribute('aria-label', sp ? `Vitesse ${speedText(sp)} — toucher pour changer` : 'En pause — toucher pour reprendre');
-  }
-
-  // ── Feuille du bas ───────────────────────────────────────────────────────────
-  const sheetTitle = el('h2.sheet-title', { id: 'sheet-title' }, '');
-  const sheetBody = el('div.sheet-body');
-  const sheet = el(
-    'section.sheet',
-    { role: 'dialog', 'aria-labelledby': 'sheet-title', 'aria-modal': 'false' },
-    // Poignée décorative (le fond assombri et le bouton ✕, 48 px, ferment la feuille) : pas une cible.
-    el('div.sheet-grab', { 'aria-hidden': 'true' }, el('span.sheet-grab-bar')),
-    el('div.sheet-head', sheetTitle, el('button.sheet-x', { type: 'button', 'aria-label': 'Fermer', onclick: () => closeSheet() }, '✕')),
-    sheetBody,
-  );
-  const backdrop = el('div.sheet-backdrop', { onclick: () => closeSheet() });
-  clear(sheetLayer).append(backdrop, sheet);
-  let openId = null;
-
-  function renderSheet(id) {
-    const fam = [...FAMILIES, ...TOOLS].find((f) => f.id === id);
-    setText(sheetTitle, fam ? fam.title : id);
-    clear(sheetBody);
-    if (id === 'demolish') {
-      sheetBody.append(el('p.sheet-hint', 'Touchez un îlot de la carte pour le démolir (confirmation en deux temps). Bientôt disponible.'));
-      return;
-    }
-    const demo = !(Array.isArray(catalog) && catalog.length);
-    sheetBody.append(el('p.sheet-hint', id === 'layers'
-      ? 'Un seul calque à la fois, coloré sur la carte (bientôt).'
-      : `${demo ? 'Catalogue de démonstration. ' : ''}Pose en deux temps : premier toucher = fantôme avec aperçu des effets, second toucher = confirmation (bientôt).`));
-    const grid = el('div.card-grid');
-    for (const [title, price, color] of cardsFor(id, catalog)) {
-      grid.append(
-        el(
-          'button.card',
-          { type: 'button', onclick: (e) => { buzz(6); for (const c of grid.children) c.classList.toggle('is-selected', c === e.currentTarget); } },
-          el('span.card-swatch', { style: { '--sw': color } }),
-          el('span.card-body', el('span.card-title', title), el('span.card-price', price ? `${fmt(price)} pièces` : 'calque')),
-        ),
-      );
-    }
-    sheetBody.append(grid);
-  }
-
-  function publishSheetHeight() {
-    const h = sheetLayer.classList.contains('is-open') ? Math.round(sheet.getBoundingClientRect().height) : 0;
-    document.documentElement.style.setProperty('--sheet-h', `${h}px`);
-  }
-
-  function openSheet(id) {
-    openId = id;
-    renderSheet(id);
-    sheetLayer.classList.add('is-open');
-    document.body.classList.add('has-sheet');
-    for (const b of tabbar.children) b.classList.toggle('is-active', b.dataset.id === id);
-    requestAnimationFrame(publishSheetHeight);
-    setTimeout(publishSheetHeight, 280);
-  }
-
-  function closeSheet() {
-    if (!openId) return;
-    openId = null;
-    sheetLayer.classList.remove('is-open');
-    document.body.classList.remove('has-sheet');
-    for (const b of tabbar.children) b.classList.remove('is-active');
-    publishSheetHeight();
   }
 
   // ── Onglets ──────────────────────────────────────────────────────────────────
   clear(tabbar);
   for (const f of [...FAMILIES, ...TOOLS]) {
     const tool = TOOLS.includes(f);
+    const label = f.short ? [el('span.tab-label-long', f.label), el('span.tab-label-short', f.short)] : f.label;
     tabbar.append(
       el(
         `button.tab.tab--${f.id}${tool ? '.tab--tool' : ''}`,
@@ -217,20 +152,69 @@ export function createHud({ hud, tabbar, sheetLayer }, { onSpeed, onTab, vibrate
           type: 'button',
           dataset: { id: f.id },
           'aria-label': f.title,
+          title: f.title,
           onclick: () => {
             buzz(8);
-            if (openId === f.id) closeSheet();
-            else openSheet(f.id);
-            onTab?.(f.id, openId === f.id);
+            onTab?.(f.id);
           },
         },
         el('span.tab-ico', { 'aria-hidden': 'true' }),
-        el('span.tab-label', f.label),
+        el('span.tab-label', label),
       ),
     );
   }
 
-  setGauges({ population: 0, happiness: 50, nature: 50, money: 0 });
+  function setActiveTab(id) {
+    for (const b of tabbar.children) {
+      const on = !!id && b.dataset.id === id;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+
+  // ── Bandeau d'alertes (saison, année) : un à la fois, bouton OK ─────────────
+  const queue = [];
+  let banner = null; // { node, opts }
+  function showBanner(opts) {
+    if (!alerts) return null;
+    queue.push(opts);
+    if (!banner) nextBanner();
+    return opts;
+  }
+  function nextBanner() {
+    if (!alerts) return;
+    const opts = queue.shift();
+    if (!opts) {
+      banner = null;
+      alerts.classList.remove('is-open');
+      clear(alerts);
+      return;
+    }
+    const kind = opts.kind || 'info';
+    const ok = el(
+      'button.btn.alert-ok',
+      { type: 'button', 'aria-label': `${opts.actionLabel || 'OK'} : ${opts.title || opts.text}`, onclick: () => { buzz(6); hideBanner(); } },
+      opts.actionLabel || 'OK',
+    );
+    const node = el(
+      `div.alert.alert--${kind}`,
+      { role: 'status' },
+      el('div.alert-body', opts.title ? el('strong.alert-title', opts.title) : null, opts.text ? el('span.alert-text', opts.text) : null),
+      ok,
+    );
+    clear(alerts).append(node);
+    alerts.classList.add('is-open');
+    banner = { node, opts };
+  }
+  function hideBanner() {
+    if (!banner) return;
+    const { opts } = banner;
+    banner = null;
+    try { opts.onAction?.(); } catch (err) { console.warn('Alerte :', err); }
+    nextBanner();
+  }
+
+  setGauges({ population: 0, happiness: 50, nature: 50, money: 0, delta: 0 });
   setDate({ month: 2, year: 1 });
   setSpeed(1);
 
@@ -238,13 +222,16 @@ export function createHud({ hud, tabbar, sheetLayer }, { onSpeed, onTab, vibrate
     setGauges,
     setDate,
     setSpeed,
-    openSheet,
-    closeSheet,
-    isSheetOpen: () => !!openId,
+    setActiveTab,
+    showBanner,
+    hideBanner,
     get speed() {
       return speed;
     },
-    /** Hauteurs couvertes par la barre du haut et la barre d'onglets (px CSS). */
-    insets: () => ({ top: hud.offsetHeight, bottom: tabbar.offsetHeight }),
+    get bannerOpen() {
+      return !!banner;
+    },
+    /** Hauteurs couvertes par la barre du haut et, en bas, par les onglets et la barre d'action (px CSS). */
+    insets: () => ({ top: hud.offsetHeight, bottom: tabbar.offsetHeight + (action ? action.offsetHeight : 0) }),
   };
 }

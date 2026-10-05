@@ -15,6 +15,16 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 3 livrée : Tiletown se joue
+
+- **Logique de partie** (`src/core/game.js`, `calendar.js`, `src/data/balance.js`, purs) : horloge (1 mois = 30 s à vitesse 1, vitesses 0, ½, 1, 2, 4), argent, recettes et entretien encaissés chaque mois, arrivées et départs d'habitants, évolutions de quartier en fin de saison, déblocages par paliers de population, `canPlace` / `place` / `demolish` / `undoLast` (10 s), `describeTile`, `serialize`/`deserialize`. 16 tests.
+- **Équilibrage par simulation** (`tools/simulate.js`, 36 mois, plusieurs graines) : sans rien faire la ville ne fait pas faillite (1 510 $, exode limité) ; l'étalement sans services stagne ; une conduite équilibrée atteint 416 habitants et 71 bâtiments en 3 ans sans exode.
+- **Fantôme de pose** (`src/render3d/ghost.js`) : modèle translucide teinté vert, rouge ou jaune, anneau de case, tracé de raccordement en pointillés (jaunes sur un pont), arêtes déjà équipées sautées ; au plus 2 appels de dessin de plus. 20 tests.
+- **Interface** (`src/ui/{catalog,placement,sheet-tile,sheets,hud}.js`, `src/storage.js`) : feuille du catalogue avec barres de demande, cartes verrouillées ou trop chères, pose en deux temps avec bandeau de coût détaillé, outil Démolir, fiche de case (conditions d'évolution cochées), bouton pause/vitesse actif, bandeau de bilan de saison, sauvegarde locale et reprise au rechargement, retour Android et touche Échap.
+- **Parcours automatisé** (`tools/play.mjs`, Playwright, gestes réels) : 20 étapes vérifiées, sortie 0, 0 erreur console, fantôme à 28 appels de dessin. Captures `tools/measure-out/play-*.png`.
+- Vérifications finales : 153 tests, `node tools/build.js --check` à jour, précache 2,80 Mo.
+- Limites / à faire : les calques air, eau et faune restent informatifs (étape 3 bis) ; pas de son ; pas de contrats ni de politique municipale ; pas d'écran de fin d'année ni de score.
+
 ## 2026-10-05 — Étape 3 lancée : poser des tuiles et faire tourner le temps
 
 - Décision de l'utilisateur : étape 3 (le prototype devient un jeu) avant les systèmes nature et le son.
