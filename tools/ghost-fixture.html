@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Tiletown — fixture du fantôme de pose (§9.2)</title>
+<!-- Démo et mesure du fantôme de pose et de la surbrillance (docs/ARCHITECTURE.md §9.2, src/render3d/ghost.js) :
+     vallée générée (src/core/worldgen.js, roads.js), rendu existant (createRenderer), puis `r.setGhost` /
+     `r.setHighlight`. Trois états :
+       ok   : maison (vert) sur une case libre de l'autre côté de la rivière, tracé de raccordement réel
+              (connectTile : pont jaune sur la rivière) auquel on ajoute une arête déjà équipée (non pointillée) ;
+       ko   : maison (rouge) sur une case interdite (lac, sinon rivière), sans tracé ;
+       warn : même case que `ok`, avertissement (jaune), même tracé.
+     Sans paramètre la page tourne en boucle ok → ko → warn (2 s chacun). Paramètres : ?state=ok|ko|warn|none
+     (fixe ; none = fantôme caché, pour mesurer les appels de dessin de référence) ; ?highlight=0 (sans
+     surbrillance de la mairie et de sa voisine) ; ?seed= ?cols= ?rows= ; ?view=all|path|target|town|<x>,<y> ; ?zoom=<u> ;
+     ?stats=1 ; ?shadows=0 ; ?strategy=batched|instanced ; ?mix=0..1 (dosage de la teinte : 0 couleurs du modèle
+     teintées, 1 teinte plate ; défaut GHOST_TINT_MIX).
+     window.__tiletown : { ready, world, renderer, states, state, setState(name), stats(), renderFrames(n) }. -->
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/examples/jsm/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe6; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100dvh; }
+  #stats { position: fixed; left: 8px; top: 8px; font: 12px/1.4 monospace; color: #333; background: rgba(255,255,255,.75); padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="stats"></div>
+<script type="module">
+import { createRenderer } from '../src/render3d/renderer.js';
+import { generateWorld, centerOf } from '../src/core/worldgen.js';
+import { rebuildRoads, computeTraffic, connectTile, faceTowardRoad } from '../src/core/roads.js';
+import { tileAt, edgesOfTile, edgeValue } from '../src/core/grid.js';
+
+const params = new URLSearchParams(location.search);
+const num = (k, d) => (params.has(k) && params.get(k) !== '' && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : d);
+const seed = num('seed', 12345);
+const cols = num('cols', 12);
+const rows = num('rows', 16);
+const showStats = params.get('stats') === '1';
+const shadows = params.get('shadows') !== '0';
+const fixedState = params.get('state');
+const withHighlight = params.get('highlight') !== '0';
+
+// --- Monde : vallée générée avec la ville de départ, rues et trafic ----------------------------
+const world = computeTraffic(rebuildRoads(generateWorld({ seed, cols, rows, map: 'valley', starterTown: true })));
+const center = centerOf(world);
+const free = (t) => t && !t.building && (t.terrain === 'grass' || t.terrain === 'meadow');
+
+/** Première case libre de l'autre côté de la rivière sur la ligne de la mairie (sinon la plus lointaine libre). */
+function findTargetAcrossRiver() {
+  const riverXs = [];
+  for (let x = 0; x < cols; x++) if (tileAt(world, x, center.y).terrain === 'river') riverXs.push(x);
+  if (riverXs.length) {
+    const dir = riverXs[0] > center.x ? 1 : -1;
+    for (let x = riverXs[dir > 0 ? riverXs.length - 1 : 0] + dir; x >= 0 && x < cols; x += dir) {
+      if (free(tileAt(world, x, center.y))) return { x, y: center.y };
+    }
+  }
+  // Repli : la case libre la plus éloignée de la mairie dont le raccordement existe.
+  let best = null, bestD = -1;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const t = tileAt(world, x, y);
+    if (!free(t)) continue;
+    const d = Math.abs(x - center.x) + Math.abs(y - center.y);
+    if (d > bestD && connectTile(world, x, y).ok) { best = { x, y }; bestD = d; }
+  }
+  return best || { x: Math.min(cols - 1, center.x + 3), y: center.y };
+}
+
+/** Une case interdite : lac de préférence, sinon rivière, sinon zone humide. */
+function findForbidden() {
+  for (const terrain of ['lake', 'river', 'wetland']) {
+    const found = [];
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (tileAt(world, x, y).terrain === terrain) found.push({ x, y });
+    if (found.length) return found[Math.floor(found.length / 2)];
+  }
+  return { x: 0, y: 0 };
+}
+
+/** Une arête déjà équipée (rue) autour de la mairie, à ajouter au tracé pour montrer qu'elle n'est pas pointillée. */
+function equippedEdge() {
+  for (const ref of Object.values(edgesOfTile(world, center.x, center.y))) {
+    if (edgeValue(world, ref) >= 2) return { kind: ref.kind, x: ref.x, y: ref.y, value: edgeValue(world, ref) };
+  }
+  return null;
+}
+
+const target = findTargetAcrossRiver();
+const link = connectTile(world, target.x, target.y);
+const path = link.ok ? link.path.map((e) => ({ kind: e.kind, x: e.x, y: e.y, value: e.value })) : [];
+const equipped = equippedEdge();
+if (equipped) path.push(equipped);
+const yaw = faceTowardRoad(world, target.x, target.y, center);
+const forbidden = findForbidden();
+
+const states = {
+  ok: { x: target.x, y: target.y, tileId: 'house', ok: true, path, yaw },
+  ko: { x: forbidden.x, y: forbidden.y, tileId: 'house', ok: false, path: [], yaw: 0 },
+  warn: { x: target.x, y: target.y, tileId: 'house', ok: 'warn', path, yaw },
+  none: null,
+};
+const highlightCells = withHighlight ? [{ x: center.x, y: center.y }, { x: center.x - 1, y: center.y }] : null;
+
+// --- Démarrage ------------------------------------------------------------------------------
+const canvas = document.getElementById('map');
+const statsEl = document.getElementById('stats');
+if (showStats) statsEl.style.display = 'block';
+
+const tiletown = { ready: false, world, renderer: null, states, state: null, target, forbidden, path, equipped, link: { ok: link.ok, cost: link.cost, bridges: link.bridges, reason: link.reason } };
+window.__tiletown = tiletown;
+
+const renderer = await createRenderer(canvas, {
+  manifestUrl: '../assets/models/manifest.json',
+  pixelRatioMax: 2,
+  strategy: params.get('strategy') || 'auto',
+  shadows,
+});
+tiletown.renderer = renderer;
+renderer.setWorld(world);
+renderer.setHighlight(highlightCells);
+if (params.has('mix')) renderer.debug.ghost.setTintMix(num('mix', NaN));
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  renderer.resize(w, h, window.devicePixelRatio || 1);
+}
+resize();
+
+/** Cadre la case du fantôme ET son tracé (plus la mairie), ou la vue demandée. */
+function applyView(state) {
+  const view = params.get('view') || 'path';
+  if (view === 'all') { renderer.camera.fitAll(); return; }
+  if (view === 'target') { renderer.camera.lookAt(target.x, target.y, num('zoom', 4.5)); return; }
+  if (view === 'town') { renderer.camera.lookAt(center.x, center.y, num('zoom', 6)); return; }
+  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(view);
+  if (m) { renderer.camera.lookAt(Number(m[1]), Number(m[2]), num('zoom', 7)); return; }
+  const g = state && states[state];
+  const pts = [];
+  if (g) {
+    pts.push([g.x + 0.5, g.y + 0.5]);
+    for (const e of g.path || []) pts.push(e.kind === 'h' ? [e.x + 0.5, e.y] : [e.x, e.y + 0.5]);
+  }
+  if (!pts.length || (g && g.path && g.path.length)) pts.push([center.x + 0.5, center.y + 0.5]);
+  const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+  renderer.camera.lookAt(cx - 0.5, cz - 0.5, num('zoom', Math.max(6, span + 3.5)));
+}
+
+function setState(name) {
+  const key = name in states ? name : 'none';
+  tiletown.state = key;
+  renderer.setGhost(states[key]);
+  applyView(key);
+  refreshStats();
+}
+tiletown.setState = setState;
+tiletown.stats = () => renderer.stats();
+/** Force n images et renvoie la médiane du temps CPU de rendu (ms). */
+tiletown.renderFrames = (n = 10) => {
+  const times = [];
+  for (let i = 0; i < n; i++) { renderer.invalidate(); renderer.render(1 / 60); times.push(renderer.stats().frameMs); }
+  times.sort((a, b) => a - b);
+  return times[Math.floor(times.length / 2)];
+};
+
+function refreshStats() {
+  if (!showStats) return;
+  const s = renderer.stats();
+  statsEl.textContent = `état ${tiletown.state}  appels ${s.calls}  triangles ${s.triangles}  image ${s.frameMs.toFixed(1)} ms\n`
+    + `fantôme ${s.ghost.visible ? 'visible' : 'caché'}  pointillés ${s.ghost.dashes}  surbrillances ${s.ghost.highlights}\n`
+    + `cible (${target.x}, ${target.y}) yaw ${yaw}  tracé ${path.length} arêtes (ponts ${link.bridges ?? 0}${equipped ? ', 1 équipée' : ''})  interdite (${forbidden.x}, ${forbidden.y})\n`
+    + `stratégie ${s.strategy}  ${cols}×${rows}  graine ${seed}`;
+}
+
+const cycle = ['ok', 'ko', 'warn'];
+let cycleIndex = 0;
+setState(fixedState !== null ? fixedState : cycle[0]);
+window.addEventListener('resize', () => { resize(); applyView(tiletown.state); });
+
+let lastT = performance.now();
+let sinceSwitch = 0;
+function loop(t) {
+  const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
+  if (fixedState === null) {
+    sinceSwitch += dt;
+    if (sinceSwitch >= 2) { sinceSwitch = 0; cycleIndex = (cycleIndex + 1) % cycle.length; setState(cycle[cycleIndex]); }
+  }
+  const drew = renderer.render(dt);
+  if (drew && !tiletown.ready) tiletown.ready = true;
+  if (drew) refreshStats();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Gestes minimaux : glisser = défiler, molette / pincement = zoom, double clic = tout voir, tap = déplacer le fantôme.
+const pointers = new Map();
+let lastPinch = null;
+let moved = false;
+canvas.addEventListener('pointerdown', (e) => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 2) moved = true;
+  if (pointers.size === 1) renderer.camera.pan(e.clientX - p.x, e.clientY - p.y);
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (lastPinch) renderer.camera.zoomAt(d / lastPinch, cx, cy);
+    lastPinch = d;
+  }
+});
+const up = (e) => {
+  if (pointers.size === 1 && !moved && fixedState !== null && states[tiletown.state]) {
+    // Essai manuel : le fantôme suit le doigt, avec le vrai tracé de raccordement de la case touchée.
+    const cell = renderer.pick(e.clientX, e.clientY);
+    if (cell) {
+      const l = connectTile(world, cell.x, cell.y);
+      const t = tileAt(world, cell.x, cell.y);
+      const ok = free(t) ? (l.ok ? true : 'warn') : false;
+      renderer.setGhost({ x: cell.x, y: cell.y, tileId: 'house', ok, path: l.ok ? l.path : [], yaw: faceTowardRoad(world, cell.x, cell.y, center) });
+      refreshStats();
+    }
+  }
+  pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = null;
+};
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); renderer.camera.zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY); }, { passive: false });
+canvas.addEventListener('dblclick', () => renderer.camera.fitAll());
+</script>
+</body>
+</html>

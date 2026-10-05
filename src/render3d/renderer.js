@@ -5,7 +5,8 @@
 //   r.setWorld(world); r.setLayer(kind, values); r.resize(w, h, dpr);
 //   r.camera.pan(dx, dy); r.camera.zoomAt(f, cx, cy); r.camera.fitAll();
 //   r.pick(clientX, clientY) → { x, y } | null; r.render(dt) → bool (a dessiné ?);
-//   r.stats() → { calls, triangles, frameMs, … }; r.dispose();
+//   r.setGhost({ x, y, tileId, ok, path, yaw } | null); r.setHighlight([{ x, y }] | null);   // §9.2 (ghost.js)
+//   r.stats() → { calls, triangles, frameMs, …, ghost: { visible, dashes, highlights } }; r.dispose();
 //
 // Mode économie : `render` ne redessine que si quelque chose a changé (`dirty`) ou si une animation
 // est en cours (`setAnimating(true)`), la boucle appelante choisit la cadence (60 i/s en interaction,
@@ -20,6 +21,7 @@ import { createBuildings } from './buildings.js';
 import { createRoads } from './roads.js';
 import { createEffects } from './effects.js';
 import { createActorsLayer } from './actors.js';
+import { createGhost } from './ghost.js';
 import { layerColors } from './layers.js';
 
 /** Direction du soleil (du centre de la carte vers la lumière) : ouest-sud-ouest, haut. */
@@ -123,7 +125,9 @@ export async function createRenderer(canvas, options = {}) {
   const fx = createEffects(models, { palette: PALETTE, shadows });
   // Acteurs (habitants, véhicules, faune) : la simulation vit dans src/core/actors.js ; ici on l'affiche.
   const actorsLayer = createActorsLayer(models, { maxSkinned: options.maxSkinned ?? 8, manifestUrl: options.manifestUrl });
-  scene.add(ground.group, buildings.group, roads.group, fx.group, actorsLayer.group);
+  // Fantôme de pose, cadre et pointillés de raccordement, surbrillance des cases (étape 3, §9.2).
+  const ghost = createGhost(models, { palette: PALETTE });
+  scene.add(ground.group, buildings.group, roads.group, fx.group, actorsLayer.group, ghost.group);
   let actors = null;   // état des acteurs fourni par setActors (lecture seule)
   let elapsed = 0;     // temps d'animation cumulé (s)
   const upd = { ms: 0 }; // temps CPU de la mise à jour des couches animées
@@ -205,7 +209,7 @@ export async function createRenderer(canvas, options = {}) {
 
   const api = {
     /** Accès de débogage (fixture de mesure, outils) ; pas pour l'interface. */
-    debug: { scene, camera: threeCamera, renderer, models, ground, buildings, roads, sun },
+    debug: { scene, camera: threeCamera, renderer, models, ground, buildings, roads, sun, ghost },
     camera: cameraApi,
     get world() { return world; },
     get strategy() { return strategy; },
@@ -214,6 +218,7 @@ export async function createRenderer(canvas, options = {}) {
       world = nextWorld;
       fx.setWorld(world);
       actorsLayer.setWorld(world);
+      ghost.setWorld(world);
       animating = true; // vallée vivante : eau, fumée, pales, acteurs
       ground.setWorld(world);
       buildings.setWorld(world);
@@ -258,6 +263,13 @@ export async function createRenderer(canvas, options = {}) {
     setActors(next) { actors = next || null; dirty = true; },
     /** Animation en cours : redessine à chaque appel de `render` (acteurs, étape 2). */
     setAnimating(flag) { animating = Boolean(flag); },
+    /**
+     * Fantôme de pose (§9.2) : { x, y, tileId, ok: true | false | 'warn', path: [{ kind, x, y, value }], yaw (degrés),
+     * level, variant, modelId } ; null le cache. Un seul objet mis à jour sans reconstruire le monde.
+     */
+    setGhost(g) { ghost.set(g || null); dirty = true; },
+    /** Cases marquées d'un cadre jaune (sélection, fiche) : [{ x, y }] ; null ou [] efface. */
+    setHighlight(cells) { ghost.setHighlight(cells || null); dirty = true; },
     get needsRender() { return dirty || animating; },
 
     render(dt = 0) {
@@ -270,6 +282,7 @@ export async function createRenderer(canvas, options = {}) {
         fx.update(dt, elapsed);
         if (typeof ground.update === 'function') ground.update(dt);
         if (actors) actorsLayer.update(dt, actors);
+        ghost.update(dt);
         upd.ms = performance.now() - tu;
       }
       renderer.render(scene, threeCamera);
@@ -298,6 +311,7 @@ export async function createRenderer(canvas, options = {}) {
         ground: { ...ground.stats },
         effects: fx.stats ? fx.stats() : null,
         actors: actorsLayer.stats ? actorsLayer.stats() : null,
+        ghost: ghost.stats(),
         layersUpdateMs: upd.ms,
         models: { loaded: models.ids.length, errors: models.errors.length },
       };
@@ -308,6 +322,7 @@ export async function createRenderer(canvas, options = {}) {
       disposed = true;
       canvas.removeEventListener('webglcontextlost', onContextLost, false);
       canvas.removeEventListener('webglcontextrestored', onContextRestored, false);
+      ghost.dispose();
       actorsLayer.dispose();
       fx.dispose();
       buildings.dispose();
