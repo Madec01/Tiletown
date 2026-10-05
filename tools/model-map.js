@@ -15,9 +15,15 @@
 //   keepNodes  noms des nœuds à garder séparés (pivot conservé) pour une animation éventuelle
 //   parts      assemblage : liste de pièces { kit, source, at, yaw, scale, materials } ou de
 //              primitives { primitive: 'box' | 'cylinder' | 'cone', size | radius/height, at, color, topColor }
+//   details    pièces de caractère ajoutées APRÈS la mise à l'échelle (débord de toiture, cheminée,
+//              porche, lucarne…), repérées par `atRel` / `slice` dans la boîte englobante
+//   profile    surcharge du profil de rôles du kit pour ce modèle seulement (KIT_ROLE_PROFILES)
+//   seed       graine de l'attribution des teintes par rôle (par défaut : l'identifiant)
 //   orientation  note lisible sur l'orientation (rues : axe, bras)
 //   provisional  true si le modèle est un pis-aller à remplacer
 //   note       remarque libre, reportée dans le manifeste
+
+import { roleColor, hashSeed, FOLIAGE_COLORS } from '../src/data/palette.js';
 
 const SUBURBAN = 'city-kit-suburban';
 const COMMERCIAL = 'city-kit-commercial';
@@ -30,18 +36,45 @@ const FANTASY = 'fantasy-town-kit';
 const MODULAR = 'modular-buildings';
 
 /**
- * Couleurs imposées par kit pour les matériaux sans texture (nom de matériau source → rôle de palette).
- * Le Nature Kit a des teintes pastel (vert d'eau, pêche) : on les ramène aux rôles attendus.
+ * Couleurs imposées par kit pour les matériaux NOMMÉS (nom de matériau source → rôle de sous-palette,
+ * ou teinte exacte). Le Nature Kit a des teintes pastel (vert d'eau, pêche) : on les ramène aux rôles
+ * attendus. Une valeur qui est un RÔLE (`foliage`, `trunk`…) laisse l'import tirer dans la sous-palette
+ * du rôle ; une valeur qui est une teinte nommée (`sun`, `river`…) est imposée telle quelle.
  */
 export const KIT_MATERIALS = {
   [NATURE]: {
-    grass: 'grass', leafsGreen: 'grass', leafsDark: 'forestDark', leafsFall: 'roofOrange',
-    woodBark: 'wood', woodBarkDark: 'wood', wood: 'wallTan', woodDark: 'wood', woodBirch: 'wallCream', woodInner: 'wallBeige',
+    grass: 'grassLight', leafsGreen: 'foliage', leafsDark: 'foliage', leafsFall: 'roofOrange',
+    woodBark: 'trunk', woodBarkDark: 'trunk', wood: 'wallTan', woodDark: 'trunk', woodBirch: 'wallCream', woodInner: 'wallBeige',
     dirt: 'soil', dirtDark: 'soil', stone: 'rockLight', stoneDark: 'rock', water: 'river',
     colorRed: 'blossom', colorRedDark: 'roofRed', colorPurple: 'blossom', colorYellow: 'sun', colorWhite: 'wallCream',
     colorTan: 'wallBeige', corn: 'sun', _defaultMat: 'wallCream',
   },
   [FANTASY]: { Water: 'river' },
+};
+
+/**
+ * PROFIL DE RÔLES d'un kit : il guide `detectRole` (tools/import-models.js) quand la couleur seule ne
+ * suffit pas. Les toits des kits de ville de Kenney sont VERTS : dans ces kits, un aplat vert haut
+ * dans la boîte est une toiture, et un aplat vert au pied du modèle est la pelouse. Dans le Nature Kit,
+ * le même vert est un feuillage.
+ *
+ * Clés : `green` (rôle des verts, ou 'roof' pour la règle « haut = toit, bas = pelouse »),
+ * `light` (aplats clairs peu saturés), `mid` (aplats moyens), `dark` (aplats sombres),
+ * `warm` (bruns et ocres clairs), `bark` (bruns sombres), `glass` (bleus clairs saturés),
+ * `flat` (sommet plat et horizontal = toiture-terrasse ; absent = pas de règle).
+ * Une valeur peut être un rôle (teinte tirée dans la sous-palette) ou une teinte exacte.
+ */
+export const KIT_ROLE_PROFILES = {
+  [SUBURBAN]:   { green: 'roof', light: 'wall', mid: 'base', dark: 'trim', warm: 'trim', flat: 'roofFlat' },
+  [COMMERCIAL]: { green: 'roof', light: 'wall', mid: 'base', dark: 'trim', warm: 'accent', flat: 'roofFlat' },
+  [INDUSTRIAL]: { green: 'roof', light: 'wall', mid: 'metal', dark: 'trim', warm: 'accent', flat: 'roofFlat' },
+  [MODULAR]:    { green: 'roof', light: 'wall', mid: 'base', dark: 'trim', warm: 'trim', flat: 'roofFlat' },
+  [FANTASY]:    { green: 'foliage', light: 'wall', mid: 'base', dark: 'trim', warm: 'trunk', bark: 'trunk' },
+  [NATURE]:     { green: 'foliage', light: 'wallCream', mid: 'rock', dark: 'trunk', warm: 'trunk', bark: 'trunk' },
+  [ROADS]:      { green: 'grassLight', light: 'marking', mid: 'sidewalk', dark: 'asphalt', warm: 'soil', glass: 'marking' },
+  [TRAIN]:      { green: 'foliage', light: 'wall', mid: 'metal', dark: 'trim', warm: 'wood' },
+  [CARS]:       { green: 'accent', light: 'marking', mid: 'metal', dark: 'asphalt', warm: 'accent' },
+  tiletown:     {},
 };
 
 /** Largeur d'empreinte d'un bâtiment sur une case (bande de rue autour). */
@@ -129,22 +162,305 @@ const CURB_X = EDGE_W / 2 - CURB_W / 2; // 0,135
 function curbBox(size, at) { return { primitive: 'box', size, at, color: 'sidewalk' }; }
 function curbCorner(x, z) { return curbBox([CURB_W, CURB_H, CURB_W], [x, 0, z]); }
 
+// ─── Végétation : famille d'arbres à feuillage ARRONDI (primitives Tiletown, CC0) ───────────────
+// Les arbres des kits ont des houppiers à facettes très marquées. On les reconstruit en VOLUMES LISSES
+// et légèrement irréguliers (`blob` : ellipsoïde à normales analytiques et rayon bruité), empilés par
+// deux à quatre sur un tronc un peu penché. Trois tailles par famille (s, m, l) et des verts voisins
+// tirés dans FOLIAGE_COLORS : une forêt n'a jamais deux arbres identiques, et la silhouette reste douce.
+// Budget : ≤ 400 triangles par arbre (il y en aura beaucoup).
+
+/** Déplacement du sommet d'un tronc penché de [degX, degZ] : le houppier suit l'inclinaison. */
+function leanTop(height, degX, degZ) {
+  const tx = (degX * Math.PI) / 180, tz = (degZ * Math.PI) / 180;
+  const y1 = height * Math.cos(tx);
+  return [-y1 * Math.sin(tz), y1 * Math.cos(tz), height * Math.sin(tx)];
+}
+
+/** Inclinaison stable d'un arbre : un angle tiré de son identifiant, d'au plus `max` degrés. */
+function leanOf(id, max) {
+  const a = ((hashSeed(`${id}:lean`) % 360) * Math.PI) / 180;
+  return [Math.cos(a) * max, Math.sin(a) * max];
+}
+
+/** Trois verts VOISINS pour un même arbre : houppier, volumes latéraux (plus sombres), cime (plus claire). */
+function foliageShades(id, lo = 0, hi = FOLIAGE_COLORS.length - 1) {
+  const n = FOLIAGE_COLORS.length;
+  const base = lo + (hashSeed(`${id}:leaf`) % (hi - lo + 1));
+  return {
+    main: FOLIAGE_COLORS[base],
+    side: FOLIAGE_COLORS[Math.min(n - 1, base + 1)],
+    crown: FOLIAGE_COLORS[Math.max(0, base - 1)],
+  };
+}
+
+/** Un volume de feuillage : `at` est son PIED (le centre est à la hauteur d'un rayon). */
+function leaf(id, n, [cx, cy, cz], [rx, ry, rz], color, { segments = 8, rings = 5, jitter = 0.13 } = {}) {
+  return { primitive: 'blob', radii: [rx, ry, rz], at: [cx, cy - ry, cz], color, segments, rings, jitter, seed: hashSeed(`${id}:${n}`) % 100000 };
+}
+
+/** Tronc fuselé à normales lisses, légèrement penché. */
+function trunkPart(id, height, radius, tilt, { segments = 7, taper = 0.68, color = null } = {}) {
+  return { primitive: 'cylinder', radius, topRadius: radius * taper, height, segments, smooth: true, noBottom: true, at: [0, 0, 0], tilt, color: color || roleColor('trunk', `${id}:bark`) };
+}
+
+/**
+ * Feuillu à houppier rond ou ovale. `shape` : 'round' (large, trois à quatre volumes en bouquet) ou
+ * 'tall' (étroit, volumes empilés en fuseau).
+ */
+function broadleaf(id, { trunkH, trunkR, r, rings = 5, segments = 8, blobs = 3, shape = 'round', lean = 5 }) {
+  const tilt = leanOf(id, lean);
+  const [tx, ty, tz] = leanTop(trunkH, tilt[0], tilt[1]);
+  const c = foliageShades(id);
+  const parts = [trunkPart(id, trunkH, trunkR, tilt, { segments: segments - 1 })];
+  const a = ((hashSeed(`${id}:spin`) % 360) * Math.PI) / 180;
+  if (shape === 'tall') {
+    const ry = r * 1.35;
+    parts.push(leaf(id, 0, [tx, ty + ry * 0.95, tz], [r, ry, r], c.main, { segments, rings, jitter: 0.1 }));
+    parts.push(leaf(id, 1, [tx + Math.cos(a) * r * 0.28, ty + ry * 1.78, tz + Math.sin(a) * r * 0.28], [r * 0.74, ry * 0.58, r * 0.74], c.crown, { segments: segments - 1, rings: rings - 1, jitter: 0.12 }));
+    if (blobs >= 3) parts.push(leaf(id, 2, [tx - Math.cos(a) * r * 0.4, ty + ry * 0.5, tz - Math.sin(a) * r * 0.4], [r * 0.58, ry * 0.46, r * 0.58], c.side, { segments: segments - 1, rings: rings - 1, jitter: 0.15 }));
+  } else {
+    parts.push(leaf(id, 0, [tx, ty + r * 0.92, tz], [r, r * 0.95, r], c.main, { segments, rings, jitter: 0.12 }));
+    for (let i = 0; i < Math.max(0, blobs - 2); i++) {
+      const ang = a + (i * 2 * Math.PI) / Math.max(1, blobs - 2);
+      parts.push(leaf(id, 1 + i, [tx + Math.cos(ang) * r * 0.56, ty + r * 0.52, tz + Math.sin(ang) * r * 0.56], [r * 0.58, r * 0.56, r * 0.58], c.side, { segments: segments - 1, rings: rings - 1, jitter: 0.16 }));
+    }
+    parts.push(leaf(id, 9, [tx + Math.cos(a + 1.1) * r * 0.2, ty + r * 1.52, tz + Math.sin(a + 1.1) * r * 0.2], [r * 0.64, r * 0.6, r * 0.64], c.crown, { segments: segments - 1, rings: rings - 1, jitter: 0.13 }));
+  }
+  return parts;
+}
+
+/** Conifère « nuageux » : volumes aplatis de rayon décroissant, empilés sur un tronc court. */
+function conifer(id, { trunkH, trunkR, r, levels = 4, step, segments = 8, lean = 3 }) {
+  const tilt = leanOf(id, lean);
+  const [tx, ty, tz] = leanTop(trunkH, tilt[0], tilt[1]);
+  const c = foliageShades(id);
+  const parts = [trunkPart(id, trunkH, trunkR, tilt, { segments: segments - 2, taper: 0.6 })];
+  for (let i = 0; i < levels; i++) {
+    const k = 1 - (i / levels) * 0.78;
+    const ry = step * (1.05 - i * 0.06);
+    parts.push(leaf(id, i, [tx, ty + step * i + ry * 0.9, tz], [r * k, ry, r * k], i % 2 ? c.side : c.main, { segments, rings: 4, jitter: 0.1 }));
+  }
+  parts.push(leaf(id, 8, [tx, ty + step * levels + step * 0.5, tz], [r * 0.2, step * 0.72, r * 0.2], c.crown, { segments: segments - 2, rings: 4, jitter: 0.08 }));
+  return parts;
+}
+
+/** Arbuste : deux ou trois petits volumes au ras du sol. */
+function shrub(id, { r = 0.17, n = 3, flat = 0.72 } = {}) {
+  const c = foliageShades(id, 1, 3);
+  const a = ((hashSeed(`${id}:spin`) % 360) * Math.PI) / 180;
+  const parts = [leaf(id, 0, [0, r * flat, 0], [r, r * flat, r], c.main, { segments: 8, rings: 4, jitter: 0.16 })];
+  for (let i = 1; i < n; i++) {
+    const ang = a + (i * 2 * Math.PI) / (n - 1 || 1);
+    parts.push(leaf(id, i, [Math.cos(ang) * r * 0.62, r * flat * 0.72, Math.sin(ang) * r * 0.62], [r * 0.66, r * flat * 0.78, r * 0.66], i % 2 ? c.side : c.crown, { segments: 7, rings: 4, jitter: 0.18 }));
+  }
+  return parts;
+}
+
+/** Touffe d'herbe : quelques lames fines, inclinées, en deux verts. */
+function grassTuft(id, { n = 6, h = 0.13, r = 0.11 } = {}) {
+  const c = foliageShades(id, 0, 2);
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    // angles répartis en couronne (plus un peu de désordre) : la touffe ne penche pas d'un seul côté
+    const ang = (i / n) * Math.PI * 2 + ((hashSeed(`${id}:${i}`) % 60) - 30) * Math.PI / 180;
+    const d = 0.35 + ((hashSeed(`${id}:d${i}`) % 100) / 100) * 0.65;
+    const hh = h * (0.6 + d * 0.5);
+    parts.push({ primitive: 'cone', radius: 0.022, height: hh, segments: 5, noBottom: true, smooth: true,
+      at: [Math.cos(ang) * r * d, 0, Math.sin(ang) * r * d], tilt: [Math.cos(ang) * 16, Math.sin(ang) * 16], color: i % 2 ? c.main : c.side });
+  }
+  return parts;
+}
+
+/** Décale toutes les pièces d'un assemblage (pour poser un arbre Tiletown dans un parc, un jardin…). */
+function at(parts, [dx, dy, dz], scale = 1) {
+  return parts.map((part) => {
+    const p = { ...part, at: [(part.at?.[0] || 0) * scale + dx, (part.at?.[1] || 0) * scale + dy, (part.at?.[2] || 0) * scale + dz] };
+    if (scale !== 1) {
+      if (p.radii) p.radii = p.radii.map((v) => v * scale);
+      if (p.size) p.size = p.size.map((v) => v * scale);
+      if (p.radius) p.radius = p.radius * scale;
+      if (p.topRadius) p.topRadius = p.topRadius * scale;
+      if (p.height) p.height = p.height * scale;
+    }
+    return p;
+  });
+}
+
+const VEG = (parts, note) => ({ kit: 'tiletown', scale: 1, yaw: 0, footprint: [1, 1], parts, note });
+
+/** Tailles des trois gabarits d'arbre (petit, moyen, grand). */
+const BROADLEAF = {
+  s: { trunkH: 0.21, trunkR: 0.026, r: 0.175, segments: 8, rings: 5, blobs: 3 },
+  m: { trunkH: 0.30, trunkR: 0.034, r: 0.225, segments: 9, rings: 5, blobs: 4 },
+  l: { trunkH: 0.38, trunkR: 0.042, r: 0.255, segments: 9, rings: 6, blobs: 4 },
+};
+const NARROW = {
+  s: { trunkH: 0.24, trunkR: 0.022, r: 0.120, segments: 8, rings: 5, blobs: 3, shape: 'tall' },
+  m: { trunkH: 0.33, trunkR: 0.028, r: 0.148, segments: 8, rings: 6, blobs: 3, shape: 'tall' },
+  l: { trunkH: 0.42, trunkR: 0.034, r: 0.172, segments: 9, rings: 6, blobs: 3, shape: 'tall' },
+};
+const CONIFER = {
+  s: { trunkH: 0.10, trunkR: 0.022, r: 0.165, levels: 3, step: 0.125, segments: 8 },
+  m: { trunkH: 0.13, trunkR: 0.027, r: 0.195, levels: 4, step: 0.145, segments: 8 },
+  l: { trunkH: 0.16, trunkR: 0.032, r: 0.225, levels: 4, step: 0.185, segments: 9 },
+};
+
+// ─── Détails de caractère (primitives Tiletown, CC0) ────────────────────────────────────────────
+// « Une silhouette reconnaissable et une belle palette apportent davantage que beaucoup de fenêtres. »
+// Les modèles des kits sont des volumes nets : on leur ajoute, APRÈS mise à l'échelle, un débord de
+// toiture, une cheminée, un porche ou une lucarne. Toutes ces pièces sont BISEAUTÉES (`bevel`) : une
+// arête chanfreinée de quelques millimètres accroche la lumière et casse l'aspect « boîte ».
+// Repères : `atRel` est relatif à la boîte englobante (x, z ∈ [-1, 1] = bords, y ∈ [0, 1] = sol → faîte),
+// `at` ajoute un décalage en unités, `heightRel` donne une hauteur en fraction de celle du modèle.
+
+/** Chanfrein standard des pièces ajoutées (≈ 7 mm à l'échelle d'une case). */
+const BEVEL = 0.007;
+
+/** Cheminée : conduit biseauté et sa couronne, plantée dans le toit et dépassant du faîte. */
+function chimney([x, z], { y = 0.5, w = 0.055, heightRel = 0.55, tint = 'roofBrown', cap = 'baseStone', slice = [0.35, 0.75] } = {}) {
+  return [
+    { primitive: 'box', size: [w, 0, w], heightRel, atRel: [x, y, z], color: tint, bevel: BEVEL, slice },
+    { primitive: 'box', size: [w * 1.55, 0.016, w * 1.55], atRel: [x, y + heightRel, z], color: cap, bevel: 0.004, slice },
+  ];
+}
+
+/** Débord de toiture (ou bandeau de corniche) : dalle fine débordant de `pad` tout autour. */
+function eave(y, { pad = 0.022, h = 0.024, tint = 'roofBrown', w = 1, d = 1, dy = 0, slice = [0.86, 1] } = {}) {
+  return [{ primitive: 'box', sizeRel: [w, 0, d], height: h, pad, atRel: [0, y, 0], at: [0, dy, 0], color: tint, bevel: 0.005, slice }];
+}
+
+/** Porche : deux poteaux et un auvent devant la façade (+Z), à peine en saillie. */
+function porch({ y = 0, w = 0.3, out = 0.075, h = 0.2, post = 0.026, roof = 'roofBrown', pillar = 'marking', slice = [0.08, 0.5] } = {}) {
+  return [
+    { primitive: 'box', size: [post, h, post], atRel: [0, y, 1], at: [-w / 2, 0, out - post / 2], color: pillar, bevel: 0.005, slice },
+    { primitive: 'box', size: [post, h, post], atRel: [0, y, 1], at: [w / 2, 0, out - post / 2], color: pillar, bevel: 0.005, slice },
+    { primitive: 'box', size: [w + 0.08, 0.024, out + 0.05], atRel: [0, y, 1], at: [0, h, (out - 0.05) / 2], color: roof, bevel: 0.005, slice },
+  ];
+}
+
+/** Lucarne : petite boîte vitrée coiffée d'un chapeau, posée sur un pan de toit. */
+function dormer([x, z], { y = 0.62, w = 0.1, h = 0.075, d = 0.085, wall = 'wallCream', pane = 'glassDeep', roof = 'roofBrown', slice = [0.45, 0.8] } = {}) {
+  return [
+    { primitive: 'box', size: [w, h, d], atRel: [x, y, z], color: wall, bevel: 0.006, slice },
+    { primitive: 'box', size: [w * 0.52, h * 0.42, 0.014], atRel: [x, y, z], at: [0, h * 0.3, d / 2], color: pane, slice },
+    { primitive: 'box', size: [w + 0.028, 0.014, d + 0.022], atRel: [x, y, z], at: [0, h, 0], color: roof, bevel: 0.004, slice },
+  ];
+}
+
+/** Édicule technique sur une toiture-terrasse (cage d'escalier, machinerie) + garde-corps. */
+function roofBox([x, z], { y = 1, w = 0.17, h = 0.09, d = 0.15, tint = 'baseStone', top = 'roofSlateDark', slice = [0.86, 1] } = {}) {
+  return [
+    { primitive: 'box', size: [w, h, d], atRel: [x, y, z], color: tint, bevel: BEVEL, slice },
+    { primitive: 'box', size: [w + 0.02, 0.012, d + 0.02], atRel: [x, y, z], at: [0, h, 0], color: top, bevel: 0.004, slice },
+  ];
+}
+
 export const MODEL_MAP = {
   // ─── Habitat (Suburban, Commercial) ────────────────────────────────────────────────
-  'house-a': { kit: SUBURBAN, source: 'building-type-a.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
-  'house-b': { kit: SUBURBAN, source: 'building-type-r.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
-  'house-c': { kit: SUBURBAN, source: 'building-type-h.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1], note: 'toit plat à panneaux solaires' },
-  'building-small-a': { kit: COMMERCIAL, source: 'building-a.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
-  'building-small-b': { kit: COMMERCIAL, source: 'building-d.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
-  'building-tall-a': { kit: COMMERCIAL, source: 'building-f.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
-  'building-tall-b': { kit: COMMERCIAL, source: 'building-l.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
+  // Six silhouettes de maison, trois d'immeuble bas, trois d'immeuble haut : chacune avec ses propres
+  // teintes de toit et de façade (attribution par rôle, graine = identifiant) et ses détails.
+  'house-a': {
+    kit: SUBURBAN, source: 'building-type-a.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'maison en L avec garage ; cheminée et porche',
+    details: [...chimney([0.42, -0.3], { y: 0.5, heightRel: 0.6 }), ...porch({ w: 0.26, h: 0.19 })],
+  },
+  'house-b': {
+    kit: SUBURBAN, source: 'building-type-r.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'maison à étage et balcon ; cheminée et lucarne',
+    details: [...chimney([-0.5, 0.1], { y: 0.55, heightRel: 0.45 }), ...dormer([0.22, 0.3], { y: 0.66 })],
+  },
+  'house-c': {
+    kit: SUBURBAN, source: 'building-type-h.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'toit plat à panneaux solaires ; débord de toiture et édicule',
+    details: [...eave(1, { pad: 0.026, h: 0.022, dy: -0.024 }), ...roofBox([-0.4, -0.35], { h: 0.07, w: 0.14, d: 0.13 })],
+  },
+  'house-d': {
+    kit: SUBURBAN, source: 'building-type-s.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'maison compacte à pignon frontal ; cheminée et porche',
+    details: [...chimney([-0.38, -0.25], { y: 0.52, heightRel: 0.5 }), ...porch({ w: 0.24, h: 0.2, out: 0.07 })],
+  },
+  'house-e': {
+    kit: SUBURBAN, source: 'building-type-k.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'maison cubique à deux niveaux ; débord de toiture et lucarne de toit',
+    details: [...eave(1, { pad: 0.03, h: 0.026, dy: -0.026 }), ...roofBox([0.3, -0.3], { h: 0.06, w: 0.13, d: 0.12 })],
+  },
+  'house-f': {
+    kit: SUBURBAN, source: 'building-type-d.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'maison longue et basse ; deux lucarnes et une cheminée',
+    details: [...chimney([0.55, -0.2], { y: 0.5, heightRel: 0.5 }), ...dormer([-0.3, 0.26], { y: 0.6 }), ...dormer([0.14, 0.26], { y: 0.6 })],
+  },
+  'building-small-a': {
+    kit: COMMERCIAL, source: 'building-a.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'immeuble bas à toit-terrasse ; corniche et édicule',
+    details: [...eave(1, { pad: 0.02, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...roofBox([0.3, -0.3])],
+  },
+  'building-small-b': {
+    kit: COMMERCIAL, source: 'building-d.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'immeuble bas à tourelle ; corniche',
+    details: [...eave(0.74, { pad: 0.022, h: 0.02, tint: 'baseStone' })],
+  },
+  'building-small-c': {
+    kit: COMMERCIAL, source: 'building-b.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'immeuble bas à étages décalés ; corniche et édicule',
+    details: [...eave(1, { pad: 0.024, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...roofBox([-0.28, 0.3], { w: 0.14, d: 0.12, h: 0.08 })],
+  },
+  'building-tall-a': {
+    kit: COMMERCIAL, source: 'building-f.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'immeuble haut et étroit ; corniche, bandeau et édicule',
+    details: [...eave(1, { pad: 0.022, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...eave(0.18, { pad: 0.014, h: 0.016, tint: 'baseStone' }), ...roofBox([0.25, -0.25], { w: 0.14, d: 0.13, h: 0.08 })],
+  },
+  'building-tall-b': {
+    kit: COMMERCIAL, source: 'building-l.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'immeuble haut compact ; corniche et édicule',
+    details: [...eave(1, { pad: 0.022, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...roofBox([-0.25, 0.25], { w: 0.15, d: 0.13, h: 0.09 })],
+  },
+  'building-tall-c': {
+    kit: COMMERCIAL, source: 'building-skyscraper-c.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'tour élancée ; corniche et machinerie de toit',
+    details: [...eave(1, { pad: 0.018, h: 0.02, dy: -0.02, tint: 'baseStone' }), ...roofBox([0, 0], { w: 0.2, d: 0.18, h: 0.06 })],
+  },
 
   // ─── Activité (Commercial, Industrial) ─────────────────────────────────────────────
-  'shop-a': { kit: COMMERCIAL, source: 'building-g.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1], note: 'auvent orange en rez-de-chaussée' },
-  'shop-b': { kit: COMMERCIAL, source: 'building-k.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1], note: 'commerce large à auvents, bas' },
-  'office-a': { kit: COMMERCIAL, source: 'building-i.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1] },
-  'factory-a': { kit: INDUSTRIAL, source: 'building-l.glb', fit: 0.9, yaw: 0, footprint: [1, 1], note: 'deux cheminées' },
-  'factory-b': { kit: INDUSTRIAL, source: 'building-e.glb', fit: 0.9, yaw: 0, footprint: [1, 1], note: 'deux cheminées sur le toit' },
+  'shop-a': {
+    kit: COMMERCIAL, source: 'building-g.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'auvent orange en rez-de-chaussée ; corniche et édicule',
+    details: [...eave(1, { pad: 0.022, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...roofBox([0.26, -0.28], { w: 0.14, d: 0.12, h: 0.07 })],
+  },
+  'shop-b': {
+    kit: COMMERCIAL, source: 'building-k.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'commerce large à auvents, bas ; corniche',
+    details: [...eave(1, { pad: 0.024, h: 0.022, dy: -0.022, tint: 'baseStone' })],
+  },
+  'shop-c': {
+    kit: COMMERCIAL, source: 'building-c.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'commerce de quartier à auvent vert ; corniche et édicule',
+    details: [...eave(1, { pad: 0.024, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...roofBox([-0.3, 0.26], { w: 0.13, d: 0.12, h: 0.07 })],
+  },
+  'office-a': {
+    kit: COMMERCIAL, source: 'building-i.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'bureaux ; corniche, bandeau et machinerie de toit',
+    details: [...eave(1, { pad: 0.022, h: 0.022, dy: -0.022, tint: 'baseStone' }), ...roofBox([-0.26, -0.26], { w: 0.16, d: 0.14, h: 0.08 })],
+  },
+  'office-b': {
+    kit: COMMERCIAL, source: 'building-m.glb', fit: BUILDING_FIT, yaw: 0, footprint: [1, 1],
+    note: 'bureaux à terrasse plantée ; corniche et édicule',
+    details: [...eave(1, { pad: 0.02, h: 0.02, dy: -0.02, tint: 'baseStone' }), ...roofBox([0.28, 0.28], { w: 0.14, d: 0.13, h: 0.07 })],
+  },
+  'factory-a': {
+    kit: INDUSTRIAL, source: 'building-l.glb', fit: 0.9, yaw: 0, footprint: [1, 1],
+    note: 'deux cheminées ; édicule de toit',
+    details: [...roofBox([-0.35, 0.3], { y: 0.72, w: 0.16, d: 0.14, h: 0.07, tint: 'metalLight', top: 'metal' })],
+  },
+  'factory-b': {
+    kit: INDUSTRIAL, source: 'building-e.glb', fit: 0.9, yaw: 0, footprint: [1, 1],
+    note: 'deux cheminées sur le toit ; conduit supplémentaire',
+    details: [...chimney([0.5, 0.35], { y: 0.45, w: 0.05, heightRel: 0.35, tint: 'metal', cap: 'metalLight' })],
+  },
+  'factory-c': {
+    kit: INDUSTRIAL, source: 'building-j.glb', fit: 0.9, yaw: 0, footprint: [1, 1],
+    note: 'hangar à toit cintré (silhouette très différente) ; conduit et édicule',
+    details: [...chimney([-0.55, -0.3], { y: 0.5, w: 0.045, heightRel: 0.45, tint: 'metal', cap: 'metalLight' })],
+  },
 
   // ─── Services (assemblés : Modular Buildings, Fantasy Town, Train Kit) ─────────────
   'school': {
@@ -197,7 +513,7 @@ export const MODEL_MAP = {
     ],
   },
   'tram-stop': {
-    kit: TRAIN, scale: 1, yaw: 0, footprint: [1, 1],
+    kit: TRAIN, scale: 1, yaw: 0, footprint: [1, 1], profile: { light: 'marking', mid: 'metal' },
     orientation: 'voie le long de Z (nord–sud) à x = -0,15 ; quai à l’est (x > 0,2)',
     note: 'assemblage : rails du Train Kit, quai, abri (poteaux + toit), banc et lanterne du Fantasy Town',
     parts: [
@@ -225,7 +541,7 @@ export const MODEL_MAP = {
       { kit: INDUSTRIAL, source: 'building-k.glb', at: [-0.5, 0.03, -0.5], yaw: 0, scale: 0.75 },
     ],
   },
-  'wind-turbine': { kit: INDUSTRIAL, source: 'windmill.glb', scale: 0.6, yaw: 90, footprint: [1, 1], keepNodes: ['blades'], note: 'le nœud « blades » reste séparé (pivot au moyeu) pour l’animation' },
+  'wind-turbine': { kit: INDUSTRIAL, source: 'windmill.glb', scale: 0.6, yaw: 90, footprint: [1, 1], keepNodes: ['blades'], profile: { light: 'marking', mid: 'metalLight' }, note: 'mât et pales blancs (profil imposé) ; le nœud « blades » reste séparé (pivot au moyeu) pour l’animation' },
   'solar': {
     kit: INDUSTRIAL, fit: 0.9, yaw: 0, footprint: [1, 1],
     note: 'assemblage : deux rangées de panneaux',
@@ -255,7 +571,7 @@ export const MODEL_MAP = {
       { primitive: 'cone', radius: 0.26, height: 0.2, at: [0.35, 0.03, 0.42], color: 'wood', segments: 12 },
     ],
   },
-  'water-tower': { kit: INDUSTRIAL, source: 'water-tower.glb', scale: 0.7, yaw: 0, footprint: [1, 1] },
+  'water-tower': { kit: INDUSTRIAL, source: 'water-tower.glb', scale: 0.7, yaw: 0, footprint: [1, 1], profile: { light: 'marking', mid: 'metalLight' }, note: 'cuve et charpente claires (profil imposé)' },
 
   // ─── Nature ────────────────────────────────────────────────────────────────────────
   'park': {
@@ -264,19 +580,39 @@ export const MODEL_MAP = {
     parts: [
       { primitive: 'box', size: [0.96, 0.03, 0.96], at: [0, 0, 0], color: 'grassLight' },
       { kit: FANTASY, source: 'fountain-round.glb', at: [0, 0.03, 0.02], yaw: 0, scale: 0.26 },
-      { kit: NATURE, source: 'tree_default.glb', at: [-0.3, 0.03, -0.3], yaw: 0, scale: 0.42 },
-      { kit: NATURE, source: 'tree_oak.glb', at: [0.29, 0.03, -0.28], yaw: 0, scale: 0.48 },
+      ...at(broadleaf('park-tree-a', BROADLEAF.s), [-0.3, 0.03, -0.3], 0.95),
+      ...at(broadleaf('park-tree-b', BROADLEAF.m), [0.29, 0.03, -0.28], 0.8),
       { kit: FANTASY, source: 'stall-bench.glb', at: [0.28, 0.03, 0.3], yaw: 90, scale: 0.4 },
       { kit: NATURE, source: 'flower_redA.glb', at: [-0.34, 0.03, 0.3], yaw: 0, scale: 0.8 },
       { kit: NATURE, source: 'flower_yellowB.glb', at: [-0.24, 0.03, 0.38], yaw: 40, scale: 0.8 },
     ],
   },
-  'tree-a': { kit: NATURE, source: 'tree_default.glb', scale: 0.5, yaw: 0, footprint: [1, 1] },
-  'tree-b': { kit: NATURE, source: 'tree_oak.glb', scale: 0.6, yaw: 0, footprint: [1, 1] },
-  'tree-c': { kit: NATURE, source: 'tree_fat.glb', scale: 0.6, yaw: 0, footprint: [1, 1] },
-  'pine-a': { kit: NATURE, source: 'tree_pineDefaultA.glb', scale: 0.55, yaw: 0, footprint: [1, 1] },
-  'pine-b': { kit: NATURE, source: 'tree_pineTallA.glb', scale: 0.6, yaw: 0, footprint: [1, 1] },
-  'bush': { kit: NATURE, source: 'plant_bushDetailed.glb', scale: 0.8, yaw: 0, footprint: [1, 1] },
+  // Famille d'arbres (volumes arrondis Tiletown). Les identifiants historiques tree-a/b/c, pine-a/b
+  // et bush pointent vers ces nouvelles versions : rien ne casse côté jeu (src/data/tiles.js).
+  'tree-round-s': VEG(broadleaf('tree-round-s', BROADLEAF.s), 'feuillu rond, jeune'),
+  'tree-round-m': VEG(broadleaf('tree-round-m', BROADLEAF.m), 'feuillu rond, moyen'),
+  'tree-round-l': VEG(broadleaf('tree-round-l', BROADLEAF.l), 'feuillu rond, grand'),
+  'tree-tall-s': VEG(broadleaf('tree-tall-s', NARROW.s), 'feuillu en fuseau, jeune'),
+  'tree-tall-m': VEG(broadleaf('tree-tall-m', NARROW.m), 'feuillu en fuseau, moyen'),
+  'tree-tall-l': VEG(broadleaf('tree-tall-l', NARROW.l), 'feuillu en fuseau, grand'),
+  'pine-s': VEG(conifer('pine-s', CONIFER.s), 'conifère jeune'),
+  'pine-m': VEG(conifer('pine-m', CONIFER.m), 'conifère moyen'),
+  'pine-l': VEG(conifer('pine-l', CONIFER.l), 'conifère grand'),
+  'shrub-a': VEG(shrub('shrub-a', { r: 0.175, n: 3 }), 'arbuste rond'),
+  'shrub-b': VEG(shrub('shrub-b', { r: 0.145, n: 4, flat: 0.62 }), 'arbuste bas et large'),
+  'grass-tuft-a': VEG(grassTuft('grass-tuft-a', { n: 9, h: 0.19, r: 0.13 }), 'touffe d’herbe haute'),
+  'grass-tuft-b': VEG(grassTuft('grass-tuft-b', { n: 7, h: 0.13, r: 0.10 }), 'touffe d’herbe rase'),
+  'sapling': VEG([
+    ...broadleaf('sapling', { trunkH: 0.14, trunkR: 0.013, r: 0.085, segments: 7, rings: 4, blobs: 2, lean: 7 }),
+  ], 'jeune plant'),
+
+  // Identifiants historiques (utilisés par src/data/tiles.js) : mêmes recettes, graines différentes.
+  'tree-a': VEG(broadleaf('tree-a', BROADLEAF.m), 'feuillu rond moyen (= tree-round-m, autre graine)'),
+  'tree-b': VEG(broadleaf('tree-b', NARROW.m), 'feuillu en fuseau moyen (= tree-tall-m, autre graine)'),
+  'tree-c': VEG(broadleaf('tree-c', BROADLEAF.l), 'feuillu rond grand (= tree-round-l, autre graine)'),
+  'pine-a': VEG(conifer('pine-a', CONIFER.m), 'conifère moyen (= pine-m, autre graine)'),
+  'pine-b': VEG(conifer('pine-b', CONIFER.l), 'conifère grand (= pine-l, autre graine)'),
+  'bush': VEG(shrub('bush', { r: 0.19, n: 3 }), 'arbuste rond (= shrub-a, autre graine)'),
   'flowers': {
     kit: NATURE, scale: 1, yaw: 0, footprint: [1, 1],
     note: 'assemblage : touffe de fleurs rouges, jaunes, roses et d’herbe',

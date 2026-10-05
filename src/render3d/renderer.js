@@ -27,9 +27,14 @@ import { createGhost } from './ghost.js';
 import { createSpeciesMarkers } from './species.js';
 import { layerColors, layerInfo as layerLegend, normalizeLayerValues } from './layers.js';
 
-/** Direction du soleil (du centre de la carte vers la lumière) : ouest-sud-ouest, haut. */
-const SUN_DIRECTION = new THREE.Vector3(-0.62, 1.0, 0.42).normalize();
+/**
+ * Direction du soleil (du centre de la carte vers la lumière) : ouest-sud-ouest, ABAISSÉE à l'étape 5
+ * (§11.4) pour allonger un peu les ombres et modeler les collines au lieu de les aplatir.
+ */
+const SUN_DIRECTION = new THREE.Vector3(-0.66, 0.54, 0.40).normalize();
 const SUN_DISTANCE = 40;
+/** Cases dont le liseré de grille s'allume pendant la pose : le fantôme et sa couronne. */
+const GRID_HINT_RADIUS = 1;
 
 /**
  * Crée le rendu. options : { manifestUrl = 'assets/models/manifest.json', pixelRatioMax = 2,
@@ -75,13 +80,15 @@ export async function createRenderer(canvas, options = {}) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(background);
 
-  const hemi = new THREE.HemisphereLight(0xfff4e4, 0x9fcf8a, 1.4);
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
+  // Lumière d'étape 5 : soleil chaud et un peu rasant, ciel FROID au zénith et rebond VERT du sol —
+  // les zones à l'ombre virent légèrement au bleu, les zones au soleil restent dorées.
+  const hemi = new THREE.HemisphereLight(0xc3dcf5, 0xa9cc8e, 0.95);
+  const sun = new THREE.DirectionalLight(0xffe9bd, 2.75);
   sun.castShadow = shadows;
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.02;
-  sun.shadow.radius = 2;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.035;
+  sun.shadow.radius = 4.5;        // ombres nettement plus douces (PCF élargi)
   scene.add(hemi, sun, sun.target);
 
   // --- Caméra -------------------------------------------------------------------------------
@@ -323,7 +330,20 @@ export async function createRenderer(canvas, options = {}) {
      * Fantôme de pose (§9.2) : { x, y, tileId, ok: true | false | 'warn', path: [{ kind, x, y, value }], yaw (degrés),
      * level, variant, modelId } ; null le cache. Un seul objet mis à jour sans reconstruire le monde.
      */
-    setGhost(g) { ghost.set(g || null); dirty = true; },
+    setGhost(g) {
+      ghost.set(g || null);
+      // La grille ne s'affiche jamais en permanence : seulement autour du fantôme, le temps de viser.
+      if (g && Number.isInteger(g.x) && Number.isInteger(g.y) && typeof ground.setGridHint === 'function') {
+        const cells = [];
+        for (let dy = -GRID_HINT_RADIUS; dy <= GRID_HINT_RADIUS; dy++) {
+          for (let dx = -GRID_HINT_RADIUS; dx <= GRID_HINT_RADIUS; dx++) cells.push({ x: g.x + dx, y: g.y + dy });
+        }
+        ground.setGridHint(cells);
+      } else if (typeof ground.setGridHint === 'function') {
+        ground.setGridHint(null);
+      }
+      dirty = true;
+    },
     /** Cases marquées d'un cadre jaune (sélection, fiche) : [{ x, y }] ; null ou [] efface. */
     setHighlight(cells) { ghost.setHighlight(cells || null); dirty = true; },
     get needsRender() { return dirty || animating; },

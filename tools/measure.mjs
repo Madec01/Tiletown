@@ -188,7 +188,7 @@ async function main() {
   await fs.mkdir(OUT, { recursive: true });
   const hasMain = existsSync(path.join(ROOT, 'src', 'main.js')) && existsSync(path.join(ROOT, 'dev.html'));
   const fixture = 'tools/measure-fixture.html';
-  const mainPage = PAGE || (hasMain ? 'dev.html?stats=1' : `${fixture}?stats=1`);
+  const mainPage = PAGE || (hasMain ? 'dev.html?stats=1&mode=sandbox' : `${fixture}?stats=1`);
   const scenarios = [
     { name: 'Carte 412 × 915 (Pixel 7)', page: mainPage, width: 412, height: 915, dpr: 2.625, file: 'map-412.png' },
     { name: 'Carte 360 × 740 (petit Android)', page: mainPage, width: 360, height: 740, dpr: 2, file: 'map-360.png' },
@@ -198,7 +198,7 @@ async function main() {
   }
   if (hasMain && !PAGE) {
     // Étape 2 : vallée animée (acteurs, fumée, eau) sur la page réelle, boucle qui tourne 2 s.
-    scenarios.push({ name: 'Vallée animée (2 s de boucle)', page: 'dev.html?stats=1', width: 412, height: 915, dpr: 2.625, file: 'map-anim.png', animated: true });
+    scenarios.push({ name: 'Vallée animée (2 s de boucle)', page: 'dev.html?stats=1&mode=sandbox', width: 412, height: 915, dpr: 2.625, file: 'map-anim.png', animated: true });
   }
 
   const exe = findChromium();

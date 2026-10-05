@@ -15,6 +15,129 @@ Modifications, idées et bugs, du plus récent au plus ancien. À mettre à jour
 - Dépôt créé avec le cadre de travail hérité de Seve : `CLAUDE.md`, `.claude/REGLES.md`, hook `UserPromptSubmit`, `docs/MOBILE.md`.
 - Aucun code pour l'instant : le premier lot sera le prototype (grille, main de 3, pose, rues automatiques, jauges air et eau).
 
+## 2026-10-05 — Étape 5, chantier PLACEMENT : semis continu de la végétation, abords des rues
+
+(Priorités 2 et 4 du plan de beauté de l'utilisateur, `docs/ARCHITECTURE.md` §11.4. Chantier mené en
+parallèle de TERRAIN — `src/render3d/ground.js`, `renderer.js`, `camera.js` — et de MODÈLES —
+`src/render3d/models.js`, `src/data/palette.js`, `assets/models/`.)
+
+- **Fin des « trois emplacements types par case »** (`src/render3d/buildings.js`). La végétation
+  native n'est plus posée case par case : elle est SEMÉE en coordonnées monde sur une maille
+  régulière secouée (0,40 u pour la canopée, 0,40 à 0,48 u pour le sous-bois). Chaque point est
+  gardé selon :
+  - un **champ de couverture** `coverageAt` (interpolation bilinéaire de l'indicateur de terrain aux
+    centres de case) : 1 au cœur d'un massif, 0,5 au milieu d'une lisière, nul une demi-case au-delà
+    — d'où le **débordement borné à 0,5 u** sur les cases voisines libres et la **densité qui
+    décroît vers la lisière** ; un plancher (0,55 + 0,45 f) garde garnie une case de massif isolée ;
+  - un **bruit de valeur** basse fréquence qui ouvre des **clairières** (2 à 3 cases) et un second
+    qui mêle **feuillus et résineux par plaques** ;
+  - un filtre d'accueil : jamais sur une case bâtie, sur l'eau, sur un champ, ni à moins de 0,30 u
+    d'une rue.
+  Tailles mêlées (grand, moyen, jeune, baliveau — plus de grands au cœur, plus de jeunes en
+  lisière), rotation et échelle tirées par instance. Même traitement pour les **prairies** (fleurs et
+  touffes), les **zones humides** (roseaux) et les **collines** (rochers irréguliers, plus jamais au
+  centre des cases). Les lisières portent arbustes et herbes.
+- **Vent très discret** : les groupes « arbre » et « couvre-sol » emploient un clone du matériau à
+  couleurs de sommets dont le shader incline le haut du feuillage de ± 2° (deux sinus lents, phase
+  tirée de la position monde de l'instance). Coût CPU nul ; `renderer.js` n'ayant pas de rappel pour
+  cette couche, l'horloge est interne (`requestAnimationFrame`), et `buildings.update(dt)` prend la
+  main si un appelant l'utilise un jour.
+- **Trois lots de rendu** au lieu d'un : `solid` (bâtiments, rochers, ombres), `tree` (ombres +
+  vent), `cover` (vent léger, **sans ombre**). Trois `BatchedMesh`, cinq appels de dessin avec la
+  passe d'ombre.
+- **Identifiants de modèles par rôle** (`resolveRoles`) : les futurs `tree-round-s/m/l`,
+  `tree-tall-s/m/l`, `pine-s/m/l`, `shrub-a/b`, `grass-tuft-a/b`, `sapling`, `reed-a/b`, `bench`,
+  `fence`, `veggie-patch` sont employés **s'ils existent** (`models.has(id)`), avec repli sur les
+  modèles actuels et leur propre plage d'échelle.
+- **Abords des rues** (`src/render3d/roads.js`). Les bandes de rue s'arrêtent à une demi-largeur de
+  trottoir du sommet : une **pièce de nœud** referme chaque jonction (cul-de-sac, droit, virage, T,
+  carrefour, orientée au quart de tour). Les **coins de trottoir exposés sont arrondis** ; un
+  **liseré d'herbe** en quart de disque arrondit l'angle du trottoir là où deux rues se rejoignent ;
+  un **virage** (deux arêtes à 90°, sans troisième branche) devient un **arc** (quart de disque de
+  chaussée, anneau de trottoir).
+- **Moins de cadre autour des bâtiments** : chaussée 0,36 → 0,30 u, trottoir 0,50 → 0,40 u,
+  `BUILDING_SCALE` 0,82 → 0,64 ; chaussée, trottoir et parcelle rapprochés en valeur (mélanges en
+  espace sRGB, pas linéaire : l'écart sombre/clair devient une gradation).
+- **Parcelles, jardins et allées** : sous chaque îlot bâti, une parcelle claire (pelouse jusqu'au
+  bord de la chaussée pour un quartier, dallage ou gravier sinon) et une **allée d'entrée** vers la
+  rue de la façade (`entrySide`, partagé par les deux modules) ; autour du bâtiment, deux à trois
+  petits éléments tirés parmi haie, buisson, potager, fleurs selon la famille ; un **arbre de rue**
+  à un coin de treillis sur trois.
+- **Tests** (`tests/render-placements.test.js`, 13 cas) : déterminisme à graine égale, `valueNoise`
+  continu, `coverageAt` (cœur / lisière / au-delà), `resolveRoles` (nouveaux modèles ou repli),
+  débordement borné à 0,5 u, rien sur l'eau ni sur une case bâtie ni sur la chaussée, densité du
+  cœur > 1,5 × celle de la lisière, rochers sans emplacement type, parcelles et allées, pièces de
+  nœud (forme + quart de tour) à chaque sommet.
+- **Vérification** : `tools/placement-fixture.html` (scène de référence fixe : rivière courbe,
+  colline, deux bosquets qui se rejoignent, prairie, zone humide, trois maisons, pâté de ville) et
+  `tools/placement-shot.mjs` (Playwright + SwiftShader) qui recompose un arbre « avant » à partir du
+  dernier commit sans ce chantier et produit `tools/measure-out/placement-{avant,apres,foret,
+  lisiere,rue,maisons,carrefour,jardin}.png` + `placement-report.json`.
+- **Mesures** (scène de référence, 412 × 915) : avant 9 appels / 145 370 triangles / 158 instances →
+  après 19 appels / 138 994 triangles / 321 instances (109 arbres, 173 couvre-sol, 13 parcelles).
+  Carte de jeu réelle (`dev.html`, `tools/measure.mjs`) : 19 → 26 appels, 126 663 → 146 243
+  triangles (budget 250 000), 137 → 285 instances, 1,5 à 3 ms par image sous SwiftShader.
+- **Bug / limite** : sur la carte de charge (24 × 24, 500 îlots bâtis) les abords ajoutent ≈ 1 100
+  instances et le total passe de 1,18 M à 1,53 M triangles ; le critère §7 (150 000) était déjà
+  largement dépassé par les seuls bâtiments. Le repli `flowers` (380 triangles) employé pour les
+  touffes et les potagers en est la part principale : les modèles dédiés de MODÈLES
+  (`grass-tuft-*`, `shrub-*`, `veggie-patch`) le feront retomber.
+
+## 2026-10-05 — Étape 5, chantier MODÈLES : arbres arrondis, bâtiments à caractère, palette par rôle
+
+(Priorités 2 et 3 du plan de beauté de l'utilisateur, `docs/ARCHITECTURE.md` §11.4. Chantier mené en
+parallèle de TERRAIN — `src/render3d/ground.js`, `renderer.js`, `camera.js` — et de PLACEMENT —
+`src/render3d/buildings.js`, `roads.js`.)
+
+- **Palette par rôle** (`src/data/palette.js`). Les 24 teintes du jeu ne bougent pas (une variable CSS
+  chacune). Elles sont prolongées, pour les modèles 3D seulement, par 17 teintes (`MODEL_TINTS` :
+  terracotta, ardoise foncée, brun doux, tuile claire, pastels bleu/vert/rose/ocre, pierre et enduit
+  chauds, trois verts, deux écorces, deux vitrages) et par 12 sous-palettes (`ROOF_COLORS`,
+  `ROOF_FLAT_COLORS`, `WALL_COLORS`, `BASE_COLORS`, `FOLIAGE_COLORS`, `TRUNK_COLORS`, `TRIM_COLORS`,
+  `GLASS_COLORS`, `ROCK_COLORS`, `METAL_COLORS`, `GROUND_COLORS`, `ACCENT_COLORS`) avec
+  `roleColor(rôle, graine, rang)`.
+- **Import par rôle** (`tools/import-models.js`). `nearestPaletteHex` ne sert plus aux modèles
+  statiques : la couleur de chaque sommet est échantillonnée dans la texture-palette du kit, les aplats
+  sont regroupés en rampes (même rôle, même famille de teinte), le rôle est deviné (couleur + hauteur
+  dans la boîte englobante + orientation des faces + profil du kit), puis une teinte est tirée dans la
+  sous-palette du rôle avec l'identifiant du modèle comme graine. La façade est la rampe de plus grande
+  AIRE VISIBLE (les dessous ne comptent pas). Les accents gardent leur famille de teinte.
+  Les couleurs sont cuites en COLOR_0 : **plus aucune texture dans les GLB** (≈ 11 Ko gagnés par modèle).
+- **Arbres** : famille de 14 nouveaux modèles en primitives Tiletown (CC0) — `tree-round-s/m/l`,
+  `tree-tall-s/m/l`, `pine-s/m/l`, `shrub-a/b`, `grass-tuft-a/b`, `sapling` — en volumes lisses
+  (ellipsoïdes à normales analytiques, rayon bruité) sur troncs fuselés et penchés. `tree-a/b/c`,
+  `pine-a/b` et `bush` pointent vers ces recettes (autres graines) : rien ne casse côté jeu.
+- **Bâtiments** : 9 nouvelles variantes (`house-d/e/f`, `building-small-c`, `building-tall-c`,
+  `shop-c`, `office-b`, `factory-c`) de silhouettes nettement différentes, et des détails de caractère
+  ajoutés en primitives BISEAUTÉES après mise à l'échelle : débord de toiture, corniche, cheminée,
+  porche, lucarne, édicule de toit, repérés sur une tranche de hauteur du modèle (`slice`).
+- **Vérifications** : planche `tools/measure-out/models-sheet.png` (85 modèles, 0 problème) et planche
+  avant/après `tools/measure-out/models-avant-apres.png` (nouveau script `tools/preview-before-after.mjs`).
+  `assets/models/` passe de 1,88 à 1,95 Mo pour 22 modèles de plus (objectif < 2,5 Mo) ; les 85 modèles
+  se chargent par `src/render3d/models.js` sans aucun repli ni texture.
+- À faire / faible : les variantes ne sont pas encore référencées par `src/data/tiles.js` ni
+  `src/data/terrain.js` (à câbler avec le chantier PLACEMENT) ; les volumes des kits gardent leurs
+  facettes (seules les pièces ajoutées par Tiletown sont biseautées) ; `crop-wheat`, `crop-corn`,
+  `rock-a/b` et `flowers` restent des modèles de kit non retravaillés.
+
+## 2026-10-05 — Étape 5 livrée : carrière, tutoriel et refonte visuelle
+
+**Carrière et tutoriel.** La partie commence sur une vallée vierge avec la seule mairie. Cinq niveaux (vallée, rivière, bocage, coteau, grande vallée) avec objectifs et trois étoiles chacun, catalogue débloqué cumulatif, écran titre, carte des niveaux, bandeau d'objectifs, écran de fin, sauvegarde séparée de la carrière. Tutoriel de dix leçons guidées, jamais bloquantes, avec halo sur l'élément visé. Simulation du niveau 1 : 151 habitants, nature 82, aucun exode, deux étoiles.
+
+**Refonte visuelle, d'après le plan de l'utilisateur (§11.4).**
+1. *Terrain continu* : la terre n'est plus une grille de boîtes mais un maillage soudé tiré d'un champ de hauteur lissé. Collines en dômes cohérents sur plusieurs cases, berges en pente, couleurs fondues d'une case à l'autre, grain continu en coordonnées monde, ombres de contact, socle épaissi. La grille n'apparaît plus que localement pendant la pose (`setGridHint`).
+2. *Rivière sinueuse* : le rivage est la ligne de niveau d'un champ de présence d'eau, extraite en marching squares, avec arrondi des coudes et serpentement. Virage maximal ramené de 90° à 36°. Lit et berge sortent du même champ : plus de trou ni de débordement possible.
+3. *Arbres* : feuillages en ellipsoïdes lisses (deux à quatre volumes), troncs fuselés penchés, trois tailles par essence, 14 modèles nouveaux.
+4. *Bâtiments* : huit silhouettes nouvelles, toits ardoise, terracotta et brun, façades crème et pastel, cheminées, débords, porches, lucarnes en volumes biseautés.
+5. *Palette par rôle* : chaque aplat est classé (toiture, façade, menuiserie, vitrage, feuillage, tronc, roche, métal) et tiré dans sa sous-palette, au lieu de la teinte la plus proche.
+6. *Placement* : semis continu en coordonnées monde avec champ de couverture, débordement borné, clairières, plaques de feuillus et de résineux, lisières garnies d'arbustes, vent de ± 2°.
+7. *Abords* : chaussée et trottoir resserrés et adoucis, coins arrondis, virages en arc, parcelle sous chaque îlot, allée d'entrée, jardins, arbres de rue.
+8. *Lumière et eau* : soleil plus bas et plus chaud, ombres douces, bandes de courant trois fois plus faibles, haut-fond pâle le long des berges.
+
+**Vérifications** : 258 tests, les trois parcours automatisés au complet (20, 17 et 17 étapes), build à jour, 3,01 Mo hors ligne, 26 appels de dessin et 146 000 triangles sur la carte de jeu.
+
+**Limites** : la carte de charge 24 × 24 dépasse le budget de triangles (1,53 million) ; berge raide aux coudes concaves ; roseaux de bordure non posés ; `bus` toujours provisoire ; police de titre Baloo 2 absente du dépôt (Nunito utilisée).
+
 ## 2026-10-05 — Étape 5 lancée : carrière, tutoriel et beauté
 
 - Retours de l'utilisateur : « on démarre directement avec une ville, il faut une carrière avec tuto » et « le jeu n'est pas très beau ».

@@ -108,7 +108,11 @@ Familles : `habitat`, `activity`, `services`, `infrastructure`, `nature`. Les id
 }
 ```
 
-Chaque GLB normalisé : échelle appliquée, matériaux remplacés par des couleurs de la palette (sans texture), compressé meshopt, centré sur l'origine, posé sur y = 0.
+Chaque GLB normalisé : échelle appliquée, compressé meshopt, centré sur l'origine, posé sur y = 0, **sans aucune texture** — toutes les couleurs sont cuites dans l'attribut `COLOR_0` (un seul matériau blanc par modèle).
+
+Les couleurs sont attribuées **par rôle**, pas par rapprochement de teinte (`tools/import-models.js`) : chaque aplat de la texture-palette du kit est classé (toiture, toiture-terrasse, façade, soubassement, menuiserie, vitrage, végétation, tronc, roche, métal, sol, accent) d'après sa couleur d'origine, sa hauteur dans la boîte englobante, l'orientation moyenne de ses faces et le profil du kit (`KIT_ROLE_PROFILES`, `tools/model-map.js`, surchargeable par modèle avec `profile`), puis reçoit une teinte de la sous-palette de ce rôle (`src/data/palette.js`), tirée avec l'identifiant du modèle comme graine : deux variantes d'un même type ont des toits et des façades différents. Le manifeste garde la légende dans `models.<id>.roles` (`{ rôle: teinte }`), et `palette` liste les 41 teintes des modèles (24 du jeu + 17 réservées aux modèles).
+
+Un modèle peut aussi porter des **détails de caractère** (`details` dans `tools/model-map.js`) : débord de toiture, corniche, cheminée, porche, lucarne, édicule de toit, en primitives biseautées posées APRÈS la mise à l'échelle, repérées par `atRel` (fraction de la boîte englobante) et `slice` (tranche de hauteur dont on mesure l'emprise).
 
 ## 6. API du rendu (`src/render3d/renderer.js`)
 

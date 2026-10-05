@@ -9,7 +9,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-const url = process.argv[2] || `http://localhost:${port}/dev.html?stats=1&zoom=4`;
+const url = process.argv[2] || `http://localhost:${port}/dev.html?stats=1&zoom=4&mode=sandbox`;
 await page.goto(url);
 await page.waitForFunction(() => window.__tiletown && window.__tiletown.ready, null, { timeout: 60000 });
 await page.waitForTimeout(1500);

@@ -21,7 +21,7 @@ const flag = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args
 const OUT = path.resolve(ROOT, flag('--out', 'tools/measure-out'));
 const PORT = Number(flag('--port', '0'));
 const SEED = flag('--seed', '7');
-const PAGE = `dev.html?stats=1&seed=${SEED}&nosw`;
+const PAGE = `dev.html?stats=1&seed=${SEED}&nosw&mode=sandbox`;
 const MAX_CALLS = 60;
 
 const MIME = {

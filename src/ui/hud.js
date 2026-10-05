@@ -1,18 +1,20 @@
 // Barre du haut, barre d'onglets du catalogue et bandeau d'alertes (saison, année).
 //
-//   const hud = createHud({ hud, tabbar, action, alerts }, { onSpeed, onTab, onGauge, vibrate, speeds });
+//   const hud = createHud({ hud, tabbar, action, alerts, goals }, { onSpeed, onTab, onGauge, onMenu, vibrate, speeds });
 //   hud.setGauges({ population, happiness, nature, money, delta })   4 jauges ; delta = recettes − entretien ($/mois)
 //   hud.setDate(calendar(game))                                      « Printemps · mars · an 1 » ({ seasonLabel, monthLabel, year })
 //   hud.setSpeed(0 | 0.5 | 1 | 2 | 4)                                bouton pause / vitesse (⏸ ×½ ×1 ×2 ×4)
 //   hud.setActiveTab(id | null)                                      onglet allumé (feuille ouverte, outil actif)
+//   hud.setHint({ kind: 'tab' | 'gauge', id } | null)                halo animé du tutoriel (§11.3) sur un onglet,
+//                                                                    une jauge ou le bouton de vitesse ('speed')
 //   hud.showBanner({ title, text, kind, actionLabel, onAction, seeLabel, onSee })
 //                                                                    bandeau d'alerte, un à la fois (file d'attente) : bouton
 //                                                                    « Voir » (si `onSee`, docs/MOBILE.md) puis bouton OK
 //   hud.hideBanner()                                                 ferme le bandeau courant (et montre le suivant)
 //   hud.insets() → { top, bottom }                                   hauteur couverte par la barre du haut et, en bas, par les onglets + la barre d'action
 //
-// Disposition (docs/MOBILE.md, docs/GAME_DESIGN.md §9) : 4 jauges (Population, Bonheur, Nature, Argent) + date à
-// gauche, pause/vitesse à droite (48 px de large, toute la hauteur) ; en bas, onglets Habitat · Activité · Services ·
+// Disposition (docs/MOBILE.md, docs/GAME_DESIGN.md §9) : 4 jauges (Population, Bonheur, Nature, Argent), puis une
+// seconde ligne « bouton Menu (48 px) + date », pause/vitesse à droite (48 px de large) ; en bas, onglets Habitat · Activité · Services ·
 // Infrastructures · Nature · Démolir · Calques (≥ 56 px de haut, ≥ 48 px de large chacun). Les feuilles (catalogue,
 // fiches) vivent dans src/ui/sheets.js et src/ui/catalog.js ; la pose dans src/ui/placement.js.
 // Toute information de la barre se lit aussi au toucher : chaque jauge est un bouton (fiche plus tard).
@@ -71,7 +73,29 @@ export function dateParts(cal = {}) {
   return { season: seasonOf(m), month: MONTHS[m], year: `an ${cal.year ?? 1}` };
 }
 
-export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpeed, onTab, onGauge, vibrate, speeds = DEFAULT_SPEEDS } = {}) {
+/** Petit pictogramme « menu » (trois barres) en SVG : aucune ressource, aucun caractère exotique. */
+export function menuIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '22');
+  svg.setAttribute('height', '22');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('ico-menu');
+  for (const y of [7, 12, 17]) {
+    const line = document.createElementNS(ns, 'rect');
+    line.setAttribute('x', '3.5');
+    line.setAttribute('y', String(y - 1.1));
+    line.setAttribute('width', '17');
+    line.setAttribute('height', '2.2');
+    line.setAttribute('rx', '1.1');
+    line.setAttribute('fill', 'currentColor');
+    svg.append(line);
+  }
+  return svg;
+}
+
+export function createHud({ hud, tabbar, action = null, alerts = null, goals = null }, { onSpeed, onTab, onGauge, onMenu, vibrate, speeds = DEFAULT_SPEEDS } = {}) {
   const buzz = (n) => { try { vibrate?.(n); } catch { /* rien */ } };
 
   // ── Barre du haut ────────────────────────────────────────────────────────────
@@ -119,8 +143,14 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
     speedGlyph,
     speedLabel,
   );
+  // Bouton menu discret (seconde ligne, à gauche de la date) : revient à l'écran titre (§11.3).
+  const menuBtn = el(
+    'button.hud-menu',
+    { type: 'button', id: 'menu', 'aria-label': 'Menu du jeu', title: 'Menu', onclick: () => { buzz(8); onMenu?.(); } },
+    menuIcon(),
+  );
   const moneyDelta = el('span.gauge-delta', '±0 $/mois');
-  clear(hud).append(makeGauge('population', 'Population', 'Habitants'), makeGauge('happiness', 'Bonheur'), makeGauge('nature', 'Nature'), makeGauge('money', 'Argent'), dateNode, speedBtn);
+  clear(hud).append(makeGauge('population', 'Population', 'Habitants'), makeGauge('happiness', 'Bonheur'), makeGauge('nature', 'Nature'), makeGauge('money', 'Argent'), menuBtn, dateNode, speedBtn);
   gauges.money.node.append(moneyDelta);
 
   function setGauges(v = {}) {
@@ -184,6 +214,25 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
       b.classList.toggle('is-active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
+  }
+
+  // ── Surbrillance du tutoriel (halo doux sur un onglet, une jauge, le bouton de vitesse) ─────
+  let hint = null; // { kind, id }
+  /** Élément visé par une consigne du tutoriel : onglet, jauge, ou bouton de vitesse ('speed'). */
+  function hintNode(target) {
+    if (!target || !target.id) return null;
+    if (target.kind === 'tab') return [...tabbar.children].find((b) => b.dataset.id === target.id) || null;
+    if (target.kind !== 'gauge') return null;
+    if (target.id === 'speed') return speedBtn;
+    return gauges[target.id]?.node || null;
+  }
+  function setHint(target) {
+    const prev = hintNode(hint);
+    if (prev) prev.classList.remove('is-hinted');
+    hint = target && (target.kind === 'tab' || target.kind === 'gauge') && target.id ? { kind: target.kind, id: String(target.id) } : null;
+    const node = hintNode(hint);
+    if (node) node.classList.add('is-hinted');
+    return hint;
   }
 
   // ── Bandeau d'alertes (saison, année, écologie) : un à la fois, « Voir » puis OK ─────────────
@@ -255,6 +304,8 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
     setDate,
     setSpeed,
     setActiveTab,
+    setHint,
+    get hint() { return hint; },
     showBanner,
     hideBanner,
     get speed() {
@@ -263,7 +314,14 @@ export function createHud({ hud, tabbar, action = null, alerts = null }, { onSpe
     get bannerOpen() {
       return !!banner;
     },
-    /** Hauteurs couvertes par la barre du haut et, en bas, par les onglets et la barre d'action (px CSS). */
-    insets: () => ({ top: hud.offsetHeight, bottom: tabbar.offsetHeight + (action ? action.offsetHeight : 0) }),
+    /**
+     * Hauteurs couvertes par la barre du haut (bandeau d'objectifs compris) et, en bas, par les
+     * onglets et la barre d'action (px CSS). La bulle du tutoriel n'y entre pas : elle flotte
+     * au-dessus de la carte sans jamais la rogner.
+     */
+    insets: () => ({
+      top: hud.offsetHeight + (goals && !goals.hidden ? goals.offsetHeight : 0),
+      bottom: tabbar.offsetHeight + (action ? action.offsetHeight : 0),
+    }),
   };
 }
